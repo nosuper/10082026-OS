@@ -24,6 +24,10 @@ bench set-config -g redis_queue redis://redis:6379
 bench set-config -g redis_socketio redis://redis:6379
 sed -i '/redis/d' ./Procfile
 
+# The repo mount is owned by a different uid than the container user;
+# without this, git (and therefore bench get-app) refuses to read it.
+git config --global --add safe.directory '*'
+
 if [ ! -d "apps/auraos" ]; then
     bench get-app auraos /workspace/repo
 fi
