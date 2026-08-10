@@ -159,6 +159,8 @@ class TestJobConversion(FrappeTestCase):
     # -- the producer boundary carried onto the job --
 
     def test_producer_cannot_read_the_carried_commission(self):
+        from frappe.client import get, get_list
+
         deal = won_deal(commission_pct=7)
         job_name = create_job_from_deal(deal.name)["name"]
         self.assertEqual(
@@ -166,11 +168,20 @@ class TestJobConversion(FrappeTestCase):
         )
 
         frappe.set_user(PRODUCER)
-        self.assertIsNone(frappe.get_doc("Job", job_name).get("commission_pct"))
-        listed = frappe.get_list(
-            "Job", filters={"name": job_name}, fields=["name", "commission_pct"]
+        # Frappe masks unreadable permlevel fields to None/0 rather than
+        # dropping the key; the property that matters is that the stored
+        # value never comes through.
+        fetched = get("Job", name=job_name)
+        self.assertFalse(
+            fetched.get("commission_pct"),
+            "PERMISSION LEAK: producer read commission_pct via the document API",
         )
-        self.assertFalse(listed[0].get("commission_pct"))
+        rows = get_list("Job", filters={"name": job_name}, fields=["name", "commission_pct"])
+        self.assertTrue(rows)
+        self.assertTrue(
+            all(row.get("commission_pct") is None for row in rows),
+            "PERMISSION LEAK: producer read commission_pct via the list API",
+        )
 
     def test_no_founder_only_job_field_is_in_global_search(self):
         # Global search indexes whole fields; a permlevel-1 field that
