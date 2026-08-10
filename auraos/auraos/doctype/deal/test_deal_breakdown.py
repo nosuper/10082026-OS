@@ -121,6 +121,17 @@ class TestDealBreakdown(FrappeTestCase):
         frappe.db.set_single_value("AuraOS Settings", "margin_floor_pct", 0)
         super().tearDown()
 
+    def assertAgreesWithEngine(self, actual, expected):
+        """Quote-level money, compared to the engine within rounding dust.
+
+        Since T6 (issue #32) revenue is measured against the prices the
+        client is shown — each entry rounded to the đồng, then summed —
+        while the engine sums unrounded line budgets. With no package
+        override the two say the same thing, but they can differ by up
+        to a đồng per line. Per-line values below stay exact.
+        """
+        self.assertAlmostEqual(actual, expected, delta=len(LINES))
+
     # -- the seam: stored computed values agree with the engine --
 
     def test_stored_line_values_agree_with_engine(self):
@@ -136,12 +147,14 @@ class TestDealBreakdown(FrappeTestCase):
     def test_stored_quote_totals_agree_with_engine(self):
         deal = frappe.get_doc("Deal", make_breakdown_deal().name)
         result = engine_result(deal)
-        self.assertEqual(deal.quote_subtotal, round_vnd(result.subtotal))
-        self.assertEqual(deal.quote_mf_amount, round_vnd(result.management_fee))
-        self.assertEqual(deal.quote_vat_amount, round_vnd(result.vat))
-        self.assertEqual(deal.quote_total, round_vnd(result.total))
+        self.assertAgreesWithEngine(deal.quote_subtotal, round_vnd(result.subtotal))
+        self.assertAgreesWithEngine(
+            deal.quote_mf_amount, round_vnd(result.management_fee)
+        )
+        self.assertAgreesWithEngine(deal.quote_vat_amount, round_vnd(result.vat))
+        self.assertAgreesWithEngine(deal.quote_total, round_vnd(result.total))
         margin = result.revenue_ex_vat - result.total_profit_cost_basis
-        self.assertEqual(deal.quote_margin, round_vnd(margin))
+        self.assertAgreesWithEngine(deal.quote_margin, round_vnd(margin))
         self.assertAlmostEqual(
             deal.quote_margin_pct,
             float(margin / result.revenue_ex_vat * 100),
@@ -158,7 +171,7 @@ class TestDealBreakdown(FrappeTestCase):
         self.assertEqual(
             reloaded.cost_lines[1].quote_price, round_vnd(result.lines[1].budget)
         )
-        self.assertEqual(reloaded.quote_total, round_vnd(result.total))
+        self.assertAgreesWithEngine(reloaded.quote_total, round_vnd(result.total))
 
     def test_line_order_is_persisted(self):
         deal = make_breakdown_deal()
@@ -296,12 +309,16 @@ class TestDealBreakdown(FrappeTestCase):
         result = engine_result(deal)
         frappe.set_user(FOUNDER)
         block = deal_profit(deal.name)
-        self.assertEqual(block["total_commission"], round_vnd(result.total_commission))
-        self.assertEqual(block["profit_before_tax"], round_vnd(result.profit_before_tax))
-        self.assertEqual(block["tndn"], round_vnd(result.tndn))
-        self.assertEqual(block["net_profit"], round_vnd(result.net_profit))
-        self.assertEqual(block["vat_payable"], round_vnd(result.vat_payable))
-        self.assertEqual(
+        self.assertAgreesWithEngine(
+            block["total_commission"], round_vnd(result.total_commission)
+        )
+        self.assertAgreesWithEngine(
+            block["profit_before_tax"], round_vnd(result.profit_before_tax)
+        )
+        self.assertAgreesWithEngine(block["tndn"], round_vnd(result.tndn))
+        self.assertAgreesWithEngine(block["net_profit"], round_vnd(result.net_profit))
+        self.assertAgreesWithEngine(block["vat_payable"], round_vnd(result.vat_payable))
+        self.assertAgreesWithEngine(
             block["cm"],
             round_vnd(
                 result.revenue_ex_vat
@@ -315,12 +332,16 @@ class TestDealBreakdown(FrappeTestCase):
             "Deal", make_breakdown_deal(commission_pct=5).name
         )
         result = engine_result(deal)
-        self.assertEqual(deal.total_commission, round_vnd(result.total_commission))
-        self.assertEqual(deal.profit_before_tax, round_vnd(result.profit_before_tax))
-        self.assertEqual(deal.tndn, round_vnd(result.tndn))
-        self.assertEqual(deal.net_profit, round_vnd(result.net_profit))
-        self.assertEqual(deal.vat_payable, round_vnd(result.vat_payable))
-        self.assertEqual(
+        self.assertAgreesWithEngine(
+            deal.total_commission, round_vnd(result.total_commission)
+        )
+        self.assertAgreesWithEngine(
+            deal.profit_before_tax, round_vnd(result.profit_before_tax)
+        )
+        self.assertAgreesWithEngine(deal.tndn, round_vnd(result.tndn))
+        self.assertAgreesWithEngine(deal.net_profit, round_vnd(result.net_profit))
+        self.assertAgreesWithEngine(deal.vat_payable, round_vnd(result.vat_payable))
+        self.assertAgreesWithEngine(
             deal.cm,
             round_vnd(
                 result.revenue_ex_vat
@@ -342,10 +363,10 @@ class TestDealBreakdown(FrappeTestCase):
         reloaded = frappe.get_doc("Deal", deal.name)
         self.assertEqual(reloaded.commission_pct, 7)
         result = engine_result(reloaded)
-        self.assertEqual(
+        self.assertAgreesWithEngine(
             reloaded.total_commission, round_vnd(result.total_commission)
         )
-        self.assertEqual(reloaded.net_profit, round_vnd(result.net_profit))
+        self.assertAgreesWithEngine(reloaded.net_profit, round_vnd(result.net_profit))
 
     def test_producer_cannot_read_stored_profit_fields(self):
         deal = make_breakdown_deal(commission_pct=7)

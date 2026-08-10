@@ -40,6 +40,11 @@
   "quote_margin",
   "quote_margin_pct",
   "floor_breached",
+  "quote_delivery_section",
+  "quote_status",
+  "latest_quote",
+  "column_break_delivery",
+  "quote_sent_on",
   "profit_section",
   "total_commission",
   "cm",
@@ -263,6 +268,38 @@
    "fieldname": "floor_breached",
    "fieldtype": "Check",
    "label": "Below Margin Floor",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "quote_delivery_section",
+   "fieldtype": "Section Break",
+   "label": "Quote Delivery"
+  },
+  {
+   "default": "Not Sent",
+   "fieldname": "quote_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Quote Status",
+   "options": "Not Sent\nPublished\nSent\nConfirmed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "latest_quote",
+   "fieldtype": "Link",
+   "label": "Latest Quote",
+   "options": "Deal Quote",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_delivery",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quote_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Quote Sent On",
    "read_only": 1
   },
   {

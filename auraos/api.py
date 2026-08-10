@@ -2,17 +2,22 @@
 
 import frappe
 from frappe import _
+from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
     OPERATING_ROLES,
+    client_prices,
+    deal_chain,
     floor_breached,
     margin_floor_pct,
-    quote_margin_fraction,
     rate,
     to_engine_lines,
 )
+from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
+# Imported by name: `quote` is a parameter throughout this module.
+from auraos.lib.quote import quote_chain
 
 # The company's standing commission practice (spec #2, story 14); the
 # Deal field carries the same default.
@@ -123,7 +128,7 @@ def _is_founder():
     return "Founder" in frappe.get_roles()
 
 
-def _founder_block(result, commission_pct):
+def _founder_block(chain, result, commission_pct):
     """The profit chain, assembled only for Founder sessions.
 
     The same numbers are persisted on the deal as permlevel-1 fields
@@ -132,17 +137,13 @@ def _founder_block(result, commission_pct):
     """
     return {
         "commission_pct": float(commission_pct),
-        "total_commission": round_vnd(result.total_commission),
-        "cm": round_vnd(
-            result.revenue_ex_vat
-            - result.total_profit_cost_basis
-            - result.total_commission
-        ),
-        "profit_before_tax": round_vnd(result.profit_before_tax),
-        "tndn": round_vnd(result.tndn),
-        "net_profit": round_vnd(result.net_profit),
+        "total_commission": round_vnd(chain.total_commission),
+        "cm": round_vnd(chain.cm),
+        "profit_before_tax": round_vnd(chain.profit_before_tax),
+        "tndn": round_vnd(chain.tndn),
+        "net_profit": round_vnd(chain.net_profit),
         "total_input_vat": round_vnd(result.total_input_vat),
-        "vat_payable": round_vnd(result.vat_payable),
+        "vat_payable": round_vnd(chain.vat_payable),
         "margin_floor_pct": float(margin_floor_pct()),
     }
 
@@ -174,7 +175,30 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
         if row.get("package"):
             budgets.setdefault(row["package"], []).append(line.budget)
 
-    pct = quote_margin_fraction(result)
+    packages = [
+        {
+            "title": row.get("title"),
+            **_package_dict(
+                budgets.get(row.get("title"), []), row.get("price_override") or None
+            ),
+        }
+        for row in package_rows
+    ]
+    # The client's price, live: package prices as shown, plus any line
+    # standing on its own — the same rule the published quote uses.
+    priced_lines = [
+        {**row, "quote_price": round_vnd(line.budget)}
+        for row, line in zip(line_rows, result.lines)
+    ]
+    chain = quote_chain(
+        client_prices(packages, priced_lines),
+        cost_basis=result.total_profit_cost_basis,
+        input_vat=result.total_input_vat,
+        mf_rate=rate(quote_mf_pct),
+        vat_rate=rate(vat_pct),
+        commission_rate=rate(commission_pct),
+    )
+    pct = chain.margin_fraction
     out = {
         "lines": [
             {
@@ -186,26 +210,17 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
             }
             for line in result.lines
         ],
-        "packages": [
-            {
-                "title": row.get("title"),
-                **_package_dict(
-                    budgets.get(row.get("title"), []),
-                    row.get("price_override") or None,
-                ),
-            }
-            for row in package_rows
-        ],
-        "subtotal": round_vnd(result.subtotal),
-        "management_fee": round_vnd(result.management_fee),
-        "vat": round_vnd(result.vat),
-        "total": round_vnd(result.total),
-        "margin": round_vnd(result.revenue_ex_vat - result.total_profit_cost_basis),
+        "packages": packages,
+        "subtotal": round_vnd(chain.subtotal),
+        "management_fee": round_vnd(chain.mf_amount),
+        "vat": round_vnd(chain.vat_amount),
+        "total": round_vnd(chain.total),
+        "margin": round_vnd(chain.margin),
         "margin_pct": float(pct * 100) if pct is not None else None,
-        "floor_breached": bool(result.lines) and floor_breached(result),
+        "floor_breached": bool(result.lines) and floor_breached(pct),
     }
     if _is_founder():
-        out["founder"] = _founder_block(result, commission_pct)
+        out["founder"] = _founder_block(chain, result, commission_pct)
     return out
 
 
@@ -238,7 +253,165 @@ def deal_profit(deal):
         commission_rate=rate(doc.commission_pct),
     )
     result = pricing.compute_quote(to_engine_lines(doc.cost_lines), params)
-    return _founder_block(result, doc.commission_pct or 0)
+    return _founder_block(deal_chain(doc, result), result, doc.commission_pct or 0)
+
+
+# -- quote delivery (T6, issue #8) --
+
+
+def _quote_dict(quote, tracking=None):
+    """A quote version as the producer's screen needs it.
+
+    The client's view is a different, narrower projection — see
+    auraos.lib.quote.client_view.
+    """
+    tracking = tracking or {}
+    return {
+        "name": quote.name,
+        "version": quote.version,
+        "status": quote.status,
+        "total": quote.total,
+        "published_on": quote.published_on,
+        "sent_on": quote.sent_on,
+        "confirmed_on": quote.confirmed_on,
+        "url": deal_quote.page_url(quote.token),
+        "pdf_url": deal_quote.pdf_url(quote.token),
+        # Page opens and PDF downloads are counted apart: the page's own
+        # download button would otherwise score one visit as two opens.
+        "opens": tracking.get("Page", 0),
+        "downloads": tracking.get("PDF", 0),
+        "last_open": tracking.get("last_open"),
+    }
+
+
+@frappe.whitelist()
+def publish_quote(deal, notes=None):
+    """Freeze the deal's packages and totals as the next quote version."""
+    quote = deal_quote.publish(deal, notes)
+    return _quote_dict(quote)
+
+
+@frappe.whitelist()
+def deal_quotes(deal):
+    """Every published version of a deal, newest first, with open counts."""
+    _check_deal_permission(deal, "read")
+    quotes = frappe.get_all(
+        "Deal Quote",
+        filters={"deal": deal},
+        fields=[
+            "name", "version", "status", "total", "token",
+            "published_on", "sent_on", "confirmed_on",
+        ],
+        order_by="version desc",
+    )
+    tracking = {}
+    if quotes:
+        for row in frappe.get_all(
+            "Deal Quote Open",
+            filters={"quote": ["in", [q.name for q in quotes]]},
+            fields=["quote", "via", "count(name) as events", "max(opened_on) as last_open"],
+            group_by="quote, via",
+        ):
+            counts = tracking.setdefault(row.quote, {})
+            counts[row.via] = row.events
+            counts["last_open"] = max(
+                filter(None, [counts.get("last_open"), row.last_open]), default=None
+            )
+    return [_quote_dict(quote, tracking.get(quote.name)) for quote in quotes]
+
+
+@frappe.whitelist()
+def deal_quote_links():
+    """Current quote link per deal, for the board — {deal: {...}}.
+
+    The board asks for the whole (small) mapping in one call, the way it
+    already does for tags: a card wants the link to hand out, and the
+    list API cannot build a URL from a token it never fetches.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    permitted = frappe.get_list("Deal", pluck="name", limit_page_length=0)
+    links = {}
+    for row in frappe.get_all(
+        "Deal Quote",
+        filters={"deal": ["in", permitted]},
+        fields=["deal", "name", "version", "status", "token"],
+        order_by="version asc",
+    ):
+        # Ascending order, so the last write per deal is the newest.
+        links[row.deal] = {
+            "version": row.version,
+            "status": row.status,
+            "url": deal_quote.page_url(row.token),
+        }
+    return links
+
+
+@frappe.whitelist()
+def quote_opens(quote):
+    """Open events of one version, newest first (spec #2, story 22)."""
+    deal = frappe.db.get_value("Deal Quote", quote, "deal")
+    if not deal:
+        frappe.throw(_("Quote {0} not found").format(quote), frappe.DoesNotExistError)
+    _check_deal_permission(deal, "read")
+    return frappe.get_all(
+        "Deal Quote Open",
+        filters={"quote": quote},
+        fields=["opened_on", "via", "ip_address"],
+        order_by="opened_on desc",
+        # Follow-up timing is decided by the recent opens; the rest is
+        # history nobody scrolls to.
+        limit=50,
+    )
+
+
+def _quote_for_write(name):
+    quote = frappe.get_doc("Deal Quote", name)
+    _check_deal_permission(quote.deal, "write")
+    return quote
+
+
+@frappe.whitelist()
+def mark_quote_sent(quote):
+    doc = _quote_for_write(quote)
+    doc.mark_sent()
+    return _quote_dict(doc)
+
+
+@frappe.whitelist()
+def mark_quote_confirmed(quote):
+    doc = _quote_for_write(quote)
+    doc.mark_confirmed()
+    return _quote_dict(doc)
+
+
+@frappe.whitelist()
+def silent_quote_deals():
+    """Deals whose sent quote has gone unanswered past the nudge window."""
+    frappe.has_permission("Deal", "read", throw=True)
+    return {
+        "silence_days": deal_quote.silence_days(),
+        "deals": deal_quote.silent_deals(),
+    }
+
+
+@frappe.whitelist(allow_guest=True)
+def quote_pdf(token):
+    """The quote page as a PDF, for clients who want an attachment.
+
+    Guest-callable for the same reason the page is: the token is the
+    authorization. Rendered from the same template and context as the
+    page, so the two cannot say different things.
+    """
+    quote = deal_quote.resolve_token(token)
+    html = frappe.render_template(
+        "auraos/templates/includes/quote_body.html",
+        deal_quote.client_context(quote),
+    )
+    deal_quote.record_open(quote.name, via="PDF")
+
+    frappe.local.response.filename = f"{quote.name}.pdf"
+    frappe.local.response.filecontent = get_pdf(html)
+    frappe.local.response.type = "pdf"
 
 
 @frappe.whitelist()
@@ -254,3 +427,18 @@ def set_margin_floor(pct):
     settings.margin_floor_pct = float(pct or 0)
     settings.save()
     return float(settings.margin_floor_pct)
+
+
+@frappe.whitelist()
+def get_quote_silence_days():
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return deal_quote.silence_days()
+
+
+@frappe.whitelist()
+def set_quote_silence_days(days):
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.quote_silence_days = int(days or 0)
+    settings.save()
+    return int(settings.quote_silence_days)
