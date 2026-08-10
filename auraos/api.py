@@ -596,6 +596,18 @@ def save_job_milestones(job, milestones):
     for row in rows:
         if not (row.get("title") or "").strip():
             frappe.throw(_("A milestone needs a name"), frappe.ValidationError)
+        # Checked here rather than on the stored row: Frappe fills an
+        # empty Select with its first option, so by the time the job
+        # validates, a plan that never said when the money falls due is
+        # indistinguishable from one that chose Pre-production. Guessing
+        # when a client owes us is not the system's call to make.
+        if not row.get("trigger_stage"):
+            frappe.throw(
+                _("Milestone {0} needs the stage that makes it due").format(
+                    row.get("title")
+                ),
+                frappe.ValidationError,
+            )
         current = existing.get(row.get("name"))
         # Carrying the whole existing row keeps its identity, its status
         # and its stamps; only the three planning fields are taken from

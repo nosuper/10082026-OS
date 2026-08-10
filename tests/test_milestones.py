@@ -119,11 +119,22 @@ def test_an_unknown_status_is_rejected():
         status_index("đã quên")
 
 
-def test_moving_forward_stamps_the_step_it_passes():
-    stamps = stamps_for("Invoiced", current={}, now=NOW)
+def test_a_step_records_when_the_milestone_was_marked_at_it():
+    stamps = stamps_for("Requested", current={}, now=NOW)
     assert stamps["requested_on"] == NOW
-    assert stamps["invoiced_on"] == NOW
+    assert stamps["invoiced_on"] is None
     assert stamps["paid_on"] is None
+
+
+def test_a_step_that_was_skipped_is_never_stamped():
+    """A client who pays before the accountant issues anything leaves no
+    invoice — and "đã xuất HĐ" on a payment that was never invoiced is a
+    fiction, in exactly the record T9 has to read to find uncovered
+    spend."""
+    stamps = stamps_for(PAID, current={}, now=NOW)
+    assert stamps["paid_on"] == NOW
+    assert stamps["requested_on"] is None
+    assert stamps["invoiced_on"] is None
 
 
 def test_a_step_already_stamped_keeps_its_original_time():
@@ -132,6 +143,14 @@ def test_a_step_already_stamped_keeps_its_original_time():
     stamps = stamps_for("Paid", current={"requested_on": asked}, now=NOW)
     assert stamps["requested_on"] == asked
     assert stamps["paid_on"] == NOW
+
+
+def test_stepping_back_records_the_step_it_lands_on():
+    """The founder saying "actually it is only requested" is itself the
+    moment that step happened."""
+    stamps = stamps_for(REQUESTED, current={"paid_on": NOW}, now=NOW)
+    assert stamps["requested_on"] == NOW
+    assert stamps["paid_on"] is None
 
 
 def test_stepping_back_clears_the_steps_it_undoes():

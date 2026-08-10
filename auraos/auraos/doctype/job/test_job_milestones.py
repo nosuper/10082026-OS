@@ -178,6 +178,14 @@ class TestMilestonePlan(MilestoneTestCase):
         with self.assertRaises(frappe.ValidationError):
             save_job_milestones(job.name, [{"title": "  ", "pct": 50}])
 
+    def test_a_plan_that_does_not_say_when_the_money_falls_due_is_rejected(self):
+        """Frappe would quietly fill the blank stage with the first one
+        in the flow, which decides when a client owes us. That is the
+        founder's call, not a default's."""
+        job = make_job()
+        with self.assertRaises(frappe.ValidationError):
+            save_job_milestones(job.name, [{"title": "Đặt cọc", "pct": 50}])
+
     def test_a_trigger_stage_outside_the_production_flow_is_rejected(self):
         job = make_job()
         with self.assertRaises(frappe.ValidationError):
@@ -313,10 +321,21 @@ class TestCollectionFlow(MilestoneTestCase):
             self.assertEqual(row["status"], status)
 
     def test_each_step_records_when_it_happened(self):
+        set_milestone_status(self.job.name, self.milestone, "Requested")
         row = set_milestone_status(self.job.name, self.milestone, "Invoiced")
         self.assertTrue(row["requested_on"])
         self.assertTrue(row["invoiced_on"])
         self.assertFalse(row["paid_on"])
+
+    def test_a_client_who_pays_before_any_invoice_leaves_no_invoice_date(self):
+        """Deposits get transferred and invoiced later — recording a
+        "đã xuất HĐ" time nobody issued would put a fiction in the very
+        record T9 reads to find uncovered spend."""
+        row = set_milestone_status(self.job.name, self.milestone, "Paid")
+
+        self.assertTrue(row["paid_on"])
+        self.assertFalse(row["invoiced_on"])
+        self.assertFalse(row["requested_on"])
 
     def test_a_step_already_taken_keeps_its_original_time(self):
         asked = set_milestone_status(self.job.name, self.milestone, "Requested")

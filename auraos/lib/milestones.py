@@ -182,15 +182,26 @@ def days_overdue(due_on: datetime | None, now: datetime, terms_days: int | None)
 def stamps_for(status: str, current: Mapping[str, Any], now: datetime) -> dict:
     """The collection timestamps a milestone should hold at `status`.
 
-    Steps already behind the current status keep the time they were first
-    recorded; steps ahead of it are cleared, so walking a mis-click back
-    leaves no fiction in the record.
+    Each stamp records when the milestone was actually marked at that
+    step. The step it lands on is stamped now unless it already carries a
+    time; steps behind keep whatever they recorded, *including nothing* —
+    a client who pays before the accountant issues anything skipped the
+    invoice, and writing a "đã xuất HĐ" time onto a payment nobody
+    invoiced is a fiction in the record T9 has to read to find uncovered
+    spend. Steps ahead are cleared, so a mis-click walks back clean.
     """
     reached = status_index(status)
     return {
-        field: (current.get(field) or now) if reached >= status_index(step) else None
+        field: _stamp(reached - status_index(step), current.get(field), now)
         for step, field in STAMP_FIELDS.items()
     }
+
+
+def _stamp(distance: int, recorded: Any, now: datetime):
+    """One stamp, given how far the step sits behind the current status."""
+    if distance < 0:
+        return None
+    return recorded if distance else (recorded or now)
 
 
 # -- what the accountant is sent --

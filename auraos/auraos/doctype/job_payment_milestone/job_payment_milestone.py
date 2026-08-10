@@ -85,7 +85,10 @@ def validate_plan(rows, stages):
                 _("{0} is not a collection status").format(row.status),
                 frappe.ValidationError,
             )
-        if row.trigger_stage and row.trigger_stage not in stages:
+        # A blank trigger stage never reaches here: Frappe fills an empty
+        # Select with its first option. Which is why the API checks the
+        # caller's own payload — see auraos.api.save_job_milestones.
+        if row.trigger_stage not in stages:
             frappe.throw(
                 _("{0} is not a production stage").format(row.trigger_stage),
                 frappe.ValidationError,
