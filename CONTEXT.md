@@ -75,6 +75,28 @@ _Avoid_: extra, overage, out of scope
 The shared folder a job's material lives in, named after the job code.
 _Avoid_: path, directory, drive, storage
 
+## Money in
+
+**Payment milestone**:
+A named share of a job's quoted total the client owes, carrying its own percentage and the production stage that makes it due. Amounts are always derived from the quote, never typed in.
+_Avoid_: instalment, payment term, tranche, invoice
+
+**Trigger stage**:
+The production stage that makes a payment milestone due. Reaching it, or passing it, starts the payment clock.
+_Avoid_: due stage, milestone stage, deadline
+
+**Collection status**:
+Where a milestone stands with the client's money: Not requested (chưa yêu cầu) → Requested (đã yêu cầu KT) → Invoiced (đã xuất HĐ) → Paid (đã thanh toán). Movable in both directions, like every status in this app.
+_Avoid_: payment status, invoice state, dunning stage
+
+**Payment terms**:
+The single global number of days a due milestone may stay uncollected before it nudges. 0 disables the nudge, as with the margin floor.
+_Avoid_: grace period, credit terms, net days
+
+**Invoice request**:
+The Vietnamese text handed to the external accountant on Zalo asking them to issue an invoice — client tax details and the amount split out of its VAT. Generating it changes nothing; marking the milestone Requested is a separate act.
+_Avoid_: invoice, billing request, hoá đơn (unqualified)
+
 ## Environments
 
 **Preview stack**:

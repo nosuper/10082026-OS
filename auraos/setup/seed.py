@@ -78,6 +78,14 @@ REVISION_NOTES = [
     "Sửa màu tối hơn ở cảnh cuối",
 ]
 
+# How the seeded job gets paid: keyed by title so the seed can tell its
+# own plan from the standard two-milestone one a conversion creates.
+MILESTONES = {
+    "Đặt cọc": {"title": "Đặt cọc", "pct": 30, "trigger_stage": "Pre-production"},
+    "Sau quay": {"title": "Sau quay", "pct": 40, "trigger_stage": "Post-production"},
+    "Nghiệm thu": {"title": "Nghiệm thu", "pct": 30, "trigger_stage": "Client sign-off"},
+}
+
 PACKAGES = [
     {"title": "Human resources", "description": "Director, DOP and crew for three shoot days"},
     {"title": "Equipment", "description": "Camera, lighting, grip and unit catering"},
@@ -112,6 +120,9 @@ def ensure_company():
             "doctype": "Party Company",
             "company_name": COMPANY,
             "tax_code": "0312345678",
+            # The invoice-request text reads these off the client record;
+            # without an address the walkthrough sees a half message.
+            "address": "12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM",
         }
     ).insert(ignore_permissions=True).name
 
@@ -265,7 +276,46 @@ def back_to_feedback(job_name):
     job.save(ignore_permissions=True)
 
 
+def seed_t10_payment_milestones(deal_name):
+    """T10: a three-stage collection with one payment gone quiet.
+
+    A converted job starts with both milestones unrequested and the
+    deposit only just due, so a fresh stack would show no nudge at all —
+    the hole the T6 walkthrough fell into with the silence badge. This
+    walks one job through the flow: the deposit collected, the shoot
+    payment invoiced three weeks ago and still unpaid, the final not due
+    until the client signs off.
+    """
+    won = frappe.db.exists("Deal", {"title": WON_DEAL})
+    job_name = frappe.db.exists("Job", {"deal": won}) if won else None
+    if not job_name:
+        return
+
+    job = frappe.get_doc("Job", job_name)
+    if [row.title for row in job.payment_milestones] == list(MILESTONES):
+        return
+
+    job.set(
+        "payment_milestones",
+        [dict(row) for row in MILESTONES.values()],
+    )
+    job.payment_milestones[0].status = "Paid"
+    job.payment_milestones[1].status = "Invoiced"
+    job.save(ignore_permissions=True)
+
+    # Aged past any sane payment terms, so the board's nudge is visible
+    # the moment the stack boots.
+    frappe.db.set_value(
+        "Job Payment Milestone",
+        job.payment_milestones[1].name,
+        "due_on",
+        frappe.utils.add_to_date(frappe.utils.now_datetime(), days=-21),
+        update_modified=False,
+    )
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T7 job in production": seed_t7_job_in_production,
+    "T10 payment milestones": seed_t10_payment_milestones,
 }
