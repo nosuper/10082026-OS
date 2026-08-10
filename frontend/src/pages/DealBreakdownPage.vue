@@ -70,19 +70,13 @@
                 />
               </td>
               <td class="px-1 py-1">
-                <select
+                <input
                   v-model="line.package"
+                  list="package-titles"
                   class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
-                >
-                  <option value="">—</option>
-                  <option
-                    v-for="p in state.packages"
-                    :key="p.title"
-                    :value="p.title"
-                  >
-                    {{ p.title }}
-                  </option>
-                </select>
+                  placeholder="No package"
+                  @change="ensurePackage(line.package)"
+                />
               </td>
               <td class="px-1 py-1">
                 <input
@@ -192,6 +186,10 @@
           </tbody>
         </table>
       </div>
+
+      <datalist id="package-titles">
+        <option v-for="p in state.packages" :key="p.title" :value="p.title" />
+      </datalist>
 
       <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <!-- Packages -->
@@ -381,25 +379,14 @@
                 <dd class="tabular-nums">{{ vnd(live.founder.vat_payable) }}</dd>
               </div>
             </dl>
-            <div class="mt-4 border-t pt-3">
-              <label class="text-xs text-gray-600">
-                Global margin floor % (0 = off)
-                <span class="flex items-center gap-2">
-                  <input
-                    v-model.number="floorPct"
-                    type="number"
-                    min="0"
-                    class="mt-1 w-20 rounded border-gray-200 px-2 py-1 text-right text-sm"
-                  />
-                  <Button
-                    class="mt-1"
-                    :loading="floorSaver.loading"
-                    @click="saveFloor"
-                  >
-                    Set floor
-                  </Button>
-                </span>
-              </label>
+            <div class="mt-4 flex items-center justify-between border-t pt-3 text-xs text-gray-600">
+              <span>
+                Margin floor:
+                {{ live.founder.margin_floor_pct || "off" }}{{ live.founder.margin_floor_pct ? "%" : "" }}
+              </span>
+              <router-link to="/settings" class="text-blue-700 hover:underline">
+                Edit in Settings →
+              </router-link>
             </div>
           </div>
         </div>
@@ -415,9 +402,9 @@ import { reactive, ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 
-// Must match the Deal Cost Line tax_type options (and the engine's
-// TaxType labels).
-const TAX_TYPES = ["Công ty", "Cty 10%", "Cá nhân", "Không hoá đơn"]
+// Must match the Deal Cost Line tax_type options. Internal work carries
+// no invoice — Không hoá đơn.
+const TAX_TYPES = ["Công ty", "Cá nhân", "Không hoá đơn"]
 
 const route = useRoute()
 const name = route.params.name
@@ -434,7 +421,6 @@ const state = reactive({
 let serverDoc = null
 const error = ref("")
 const saving = ref(false)
-const floorPct = ref(0)
 
 const LINE_FIELDS = [
   "description",
@@ -484,9 +470,8 @@ const compute = createResource({
   onError(err) {
     error.value = err.messages?.join("\n") || err.message
   },
-  onSuccess(data) {
+  onSuccess() {
     error.value = ""
-    if (data.founder) floorPct.value = data.founder.margin_floor_pct
   },
 })
 
@@ -548,6 +533,21 @@ function addPackage() {
   state.packages.push({ title: "", description: "", price_override: null })
 }
 
+// Typing a new name in a line's package cell creates the package on the
+// spot (T5 walkthrough request) — otherwise the save would reject an
+// unknown package reference.
+function ensurePackage(title) {
+  const trimmed = (title || "").trim()
+  if (!trimmed) return
+  if (!state.packages.some((p) => p.title === trimmed)) {
+    state.packages.push({
+      title: trimmed,
+      description: "",
+      price_override: null,
+    })
+  }
+}
+
 function removePackage(i) {
   const [removed] = state.packages.splice(i, 1)
   // Lines pointing at the removed package become ungrouped instead of
@@ -597,19 +597,4 @@ function save() {
   saveResource.submit({ doc })
 }
 
-// -- founder: margin floor --
-
-const floorSaver = createResource({
-  url: "auraos.api.set_margin_floor",
-  onSuccess() {
-    recompute()
-  },
-  onError(err) {
-    error.value = err.messages?.join("\n") || err.message
-  },
-})
-
-function saveFloor() {
-  floorSaver.submit({ pct: floorPct.value || 0 })
-}
 </script>

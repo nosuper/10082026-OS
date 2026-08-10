@@ -19,6 +19,11 @@ const routes = [
     name: "Contacts",
     component: () => import("./pages/ContactsPage.vue"),
   },
+  {
+    path: "/settings",
+    name: "Settings",
+    component: () => import("./pages/SettingsPage.vue"),
+  },
 ]
 
 // Frappe serves the SPA at /aura (website_route_rules in hooks.py).

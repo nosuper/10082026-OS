@@ -28,8 +28,9 @@ from auraos.tests.utils import make_test_user
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
 
-# One line per tax type, with vendor MF and markup in play — the same
-# shapes the parity test exercises against the xlsx.
+# One line per offered tax type (Cty 10% exists in the engine for xlsx
+# parity but is not offered on deals — T5 walkthrough decision), with
+# vendor MF and markup in play.
 LINES = [
     {
         "description": "Đạo diễn",
@@ -55,7 +56,7 @@ LINES = [
         "qty1": 1,
         "qty2": 1,
         "unit_price": 12_000_000,
-        "tax_type": "Cty 10%",
+        "tax_type": "Công ty",
         "markup_pct": 15,
     },
     {

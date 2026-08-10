@@ -70,11 +70,12 @@
   },
   {
    "default": "Công ty",
+   "description": "T5 walkthrough: the company only charges 8% VAT, so Cty 10% is not offered here though the engine still knows it (the xlsx stays the math authority). Internal work carries no invoice - use Không hoá đơn.",
    "fieldname": "tax_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Tax Type",
-   "options": "Công ty\nCty 10%\nCá nhân\nKhông hoá đơn",
+   "options": "Công ty\nCá nhân\nKhông hoá đơn",
    "reqd": 1
   },
   {
