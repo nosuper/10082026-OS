@@ -1,0 +1,7 @@
+# Shell scripts must stay LF — they run inside Linux containers.
+*.sh text eol=lf
+# Keep the rest of the tree LF in the repo, native in the worktree.
+* text=auto
+*.xlsx binary
+*.png binary
+*.jpg binary
