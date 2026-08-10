@@ -310,6 +310,62 @@ class TestDealBreakdown(FrappeTestCase):
             ),
         )
 
+    def test_founder_chain_is_stored_and_agrees_with_engine(self):
+        deal = frappe.get_doc(
+            "Deal", make_breakdown_deal(commission_pct=5).name
+        )
+        result = engine_result(deal)
+        self.assertEqual(deal.total_commission, round_vnd(result.total_commission))
+        self.assertEqual(deal.profit_before_tax, round_vnd(result.profit_before_tax))
+        self.assertEqual(deal.tndn, round_vnd(result.tndn))
+        self.assertEqual(deal.net_profit, round_vnd(result.net_profit))
+        self.assertEqual(deal.vat_payable, round_vnd(result.vat_payable))
+        self.assertEqual(
+            deal.cm,
+            round_vnd(
+                result.revenue_ex_vat
+                - result.total_profit_cost_basis
+                - result.total_commission
+            ),
+        )
+
+    def test_producer_save_refreshes_stored_founder_chain(self):
+        # The dashboard numbers must track every edit, including edits a
+        # producer makes — while the commission itself stays theirs to
+        # neither see nor change.
+        deal = make_breakdown_deal(commission_pct=7)
+        frappe.set_user(PRODUCER)
+        copy = frappe.get_doc("Deal", deal.name)
+        copy.cost_lines[0].markup_pct = 40
+        copy.save()
+        frappe.set_user("Administrator")
+        reloaded = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(reloaded.commission_pct, 7)
+        result = engine_result(reloaded)
+        self.assertEqual(
+            reloaded.total_commission, round_vnd(result.total_commission)
+        )
+        self.assertEqual(reloaded.net_profit, round_vnd(result.net_profit))
+
+    def test_producer_cannot_read_stored_profit_fields(self):
+        deal = make_breakdown_deal(commission_pct=7)
+        from frappe.client import get
+
+        frappe.set_user(PRODUCER)
+        fetched = get("Deal", name=deal.name)
+        for field in (
+            "total_commission",
+            "cm",
+            "profit_before_tax",
+            "tndn",
+            "net_profit",
+            "vat_payable",
+        ):
+            self.assertFalse(
+                fetched.get(field),
+                f"PERMISSION LEAK: producer read {field} via the document API",
+            )
+
     def test_deal_profit_denied_to_producer(self):
         deal = make_breakdown_deal()
         frappe.set_user(PRODUCER)

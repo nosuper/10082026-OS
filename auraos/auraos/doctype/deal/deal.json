@@ -32,6 +32,14 @@
   "quote_margin",
   "quote_margin_pct",
   "floor_breached",
+  "profit_section",
+  "total_commission",
+  "cm",
+  "profit_before_tax",
+  "column_break_profit",
+  "tndn",
+  "net_profit",
+  "vat_payable",
   "lost_section",
   "lost_reason",
   "column_break_lost",
@@ -201,6 +209,60 @@
    "fieldname": "floor_breached",
    "fieldtype": "Check",
    "label": "Below Margin Floor",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "profit_section",
+   "fieldtype": "Section Break",
+   "label": "Profit (Founder)",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "total_commission",
+   "fieldtype": "Currency",
+   "label": "Commission (CMF)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "cm",
+   "fieldtype": "Currency",
+   "label": "CM (After Commission)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "profit_before_tax",
+   "fieldtype": "Currency",
+   "label": "Lợi Nhuận Trước Thuế",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_profit",
+   "fieldtype": "Column Break",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "tndn",
+   "fieldtype": "Currency",
+   "label": "TNDN (20%)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "net_profit",
+   "fieldtype": "Currency",
+   "label": "Net Profit",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "vat_payable",
+   "fieldtype": "Currency",
+   "label": "VAT Phải Nộp",
+   "permlevel": 1,
    "read_only": 1
   },
   {

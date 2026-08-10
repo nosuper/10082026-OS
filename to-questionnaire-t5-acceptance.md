@@ -106,7 +106,7 @@ _Why this matters: the automated battery covers the API paths; your eyes cover t
 
 ### Founder numbers are never stored — CMF/CM/profit are recomputed on demand and exist only on the breakdown page. This means Desk list views and exports can never show them (a leak-proofing choice), but also that you can't e.g. sort deals by profit in the Desk. Keep?
 
-> "Don't really understand what that mean." **Kept as is** (explained in chat: profit numbers exist only on the breakdown page, never in Desk lists/exports — the leak-proofing choice). Revisit if Desk-side profit views are ever wanted.
+> "Don't really understand what that mean." After the explanation the founder decided: "So it should be store some where to build dashboard later." **Fix applied:** the profit chain (CMF, CM, lợi nhuận trước thuế, TNDN, net profit, VAT phải nộp) is now persisted on the deal as founder-only (permlevel 1) fields, refreshed on every save — including producer saves — and regression-tested against the same leak paths as commission. Dashboards (T12) can read them directly.
 
 ### Floor 0 means "off": until you set a real floor, even a loss-making quote raises no warning — and you cannot express a literal 0% floor meaning "warn on any loss". Keep, or should 0 warn on negative margin?
 

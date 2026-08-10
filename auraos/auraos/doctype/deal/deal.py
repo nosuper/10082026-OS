@@ -127,12 +127,11 @@ class Deal(Document):
                 )
 
     def compute_breakdown(self):
-        """Store the engine's outputs alongside the inputs (the T5 seam).
+        """Store the engine's producer-visible outputs (the T5 seam).
 
-        Only producer-visible numbers are ever persisted; the founder-only
-        chain (commission, CM, profit block) is computed on demand by
-        auraos.api.deal_profit so it cannot leak through the list API or
-        global search.
+        The founder-only chain is persisted separately by
+        store_founder_chain (permlevel-1 fields, written post-save) —
+        see that method for why it cannot happen here.
         """
         if not self.cost_lines:
             self.quote_subtotal = 0
@@ -186,6 +185,51 @@ class Deal(Document):
             package.default_price = round_vnd(priced.default)
             package.price = round_vnd(priced.price)
             package.variance = round_vnd(priced.variance)
+
+    def on_update(self):
+        self.store_founder_chain()
+
+    def store_founder_chain(self):
+        """Persist the founder-only profit chain (for future dashboards).
+
+        Written with db_set after the save, not in validate: a producer's
+        save must refresh these numbers too, but Frappe resets any
+        permlevel-1 value a producer session touches back to its stale
+        database copy during validation (validate_higher_perm_levels), so
+        controller-computed values set there would be thrown away. By
+        on_update the reset has already run — self.commission_pct holds
+        the database truth — and db_set writes regardless of the session's
+        field-level permissions. Reads stay founder-only via permlevel 1.
+        """
+        if not self.cost_lines:
+            values = {
+                "total_commission": 0,
+                "cm": 0,
+                "profit_before_tax": 0,
+                "tndn": 0,
+                "net_profit": 0,
+                "vat_payable": 0,
+            }
+        else:
+            params = pricing.DealParams(
+                quote_mf_rate=rate(self.quote_mf_pct),
+                vat_rate=rate(self.vat_pct),
+                commission_rate=rate(self.commission_pct),
+            )
+            result = pricing.compute_quote(to_engine_lines(self.cost_lines), params)
+            values = {
+                "total_commission": round_vnd(result.total_commission),
+                "cm": round_vnd(
+                    result.revenue_ex_vat
+                    - result.total_profit_cost_basis
+                    - result.total_commission
+                ),
+                "profit_before_tax": round_vnd(result.profit_before_tax),
+                "tndn": round_vnd(result.tndn),
+                "net_profit": round_vnd(result.net_profit),
+                "vat_payable": round_vnd(result.vat_payable),
+            }
+        self.db_set(values, update_modified=False)
 
     def before_save(self):
         # After validation, so a rejected transition is never logged.

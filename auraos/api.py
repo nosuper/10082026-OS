@@ -48,7 +48,12 @@ def _is_founder():
 
 
 def _founder_block(result, commission_pct):
-    """The profit chain — assembled only for Founder sessions, never stored."""
+    """The profit chain, assembled only for Founder sessions.
+
+    The same numbers are persisted on the deal as permlevel-1 fields
+    (Deal.store_founder_chain) for dashboards; this block exists for
+    live editing, where nothing is saved yet.
+    """
     return {
         "commission_pct": float(commission_pct),
         "total_commission": round_vnd(result.total_commission),
@@ -142,8 +147,9 @@ def _package_dict(member_budgets, override):
 def deal_profit(deal):
     """The founder-only profit chain for a saved deal, computed on demand.
 
-    Never persisted: a producer can hold the Deal document in full and
-    still see nothing of commission, CM, or the profit block.
+    A producer can hold the Deal document in full and still see nothing
+    of commission, CM, or the profit block — the stored copies sit at
+    permlevel 1 and this endpoint refuses non-founders outright.
     """
     if not _is_founder():
         frappe.throw(_("Only the Founder may see the profit chain"), frappe.PermissionError)
