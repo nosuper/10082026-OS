@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises"
 
 const existingDeal = "Playwright Existing Deal"
 const company = "Playwright Client"
+const producerName = "Playwright Producer"
+const persistedBudget = "12.500.000"
 const producerTest = test.extend({
   storageState: ".playwright-auth/producer.json",
 })
@@ -90,6 +92,7 @@ producerTest("blank table row creates a deal with normal defaults and no card di
   const created = await dealRow(page, title)
   await expect(created).toContainText(company)
   await expect(created).toContainText("Brief Received")
+  await expect(created).toContainText(producerName)
 })
 
 test("inline edits persist and invalid budgets show an error without saving", async ({ page }) => {
@@ -101,11 +104,11 @@ test("inline edits persist and invalid budgets show an error without saving", as
   await budgetCell.click()
   await budgetCell.locator('input[type="number"]').fill("12500000")
   await budgetCell.locator('input[type="number"]').blur()
-  await expect(budgetCell).toContainText("12")
+  await expect(budgetCell).toHaveText(persistedBudget)
 
   await page.reload()
   row = await dealRow(page)
-  await expect(row.locator("td").nth(4)).toContainText("12")
+  await expect(row.locator("td").nth(4)).toHaveText(persistedBudget)
   await row.locator("td").nth(4).click()
   await row.locator('input[type="number"]').fill("-1")
   await row.locator('input[type="number"]').blur()
@@ -113,8 +116,7 @@ test("inline edits persist and invalid budgets show an error without saving", as
 
   await page.reload()
   row = await dealRow(page)
-  await expect(row.locator("td").nth(4)).toContainText("12")
-  await expect(row.locator("td").nth(4)).not.toContainText("-1")
+  await expect(row.locator("td").nth(4)).toHaveText(persistedBudget)
 })
 
 test("deal titles open the card while editable cells stay inline", async ({ page }) => {

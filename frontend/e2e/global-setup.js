@@ -25,6 +25,12 @@ async function logIn(baseURL, credentials, stateFile) {
   }
 }
 
+function requiredEnvironment(name) {
+  const value = process.env[name]
+  if (!value) throw new Error(`${name} is required for the disposable E2E site`)
+  return value
+}
+
 export default async function globalSetup(config) {
   const baseURL = config.projects[0].use.baseURL
   await mkdir(authDirectory, { recursive: true })
@@ -40,8 +46,8 @@ export default async function globalSetup(config) {
   await logIn(
     baseURL,
     {
-      user: process.env.E2E_PRODUCER_USER || "playwright-producer@example.test",
-      password: process.env.E2E_PRODUCER_PASSWORD || "playwright-only",
+      user: requiredEnvironment("E2E_PRODUCER_USER"),
+      password: requiredEnvironment("E2E_PRODUCER_PASSWORD"),
     },
     path.join(authDirectory, "producer.json")
   )

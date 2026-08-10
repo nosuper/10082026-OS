@@ -25,4 +25,5 @@ frontend/*.log
 frontend/.playwright-auth/
 frontend/playwright-report/
 frontend/test-results/
+.e2e-npm-cache/
 ~$*

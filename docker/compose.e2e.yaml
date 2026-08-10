@@ -1,16 +1,23 @@
+x-e2e-producer: &e2e-producer
+  E2E_PRODUCER_USER: playwright-producer@example.test
+  E2E_PRODUCER_PASSWORD: playwright-only
+
 services:
+  frappe:
+    environment: *e2e-producer
+
   playwright:
     image: mcr.microsoft.com/playwright:v1.55.0-noble
     working_dir: /workspace/repo/frontend
     environment:
+      <<: *e2e-producer
       E2E_BASE_URL: http://frappe:8000
       E2E_ADMIN_USER: Administrator
       E2E_ADMIN_PASSWORD: admin
-      E2E_PRODUCER_USER: playwright-producer@example.test
-      E2E_PRODUCER_PASSWORD: playwright-only
     volumes:
       - ..:/workspace/repo
       - playwright-node-modules:/workspace/repo/frontend/node_modules
+      - ../.e2e-npm-cache:/root/.npm
     depends_on:
       - frappe
 

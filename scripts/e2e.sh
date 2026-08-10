@@ -44,8 +44,6 @@ fi
 printf '%s\n' \
   'namespace = {}; exec(compile(open("/workspace/repo/frontend/e2e/seed.py", "rb").read(), "seed.py", "exec"), namespace); namespace["run"]()' \
   | "${COMPOSE[@]}" exec --no-TTY \
-  --env E2E_PRODUCER_USER=playwright-producer@example.test \
-  --env E2E_PRODUCER_PASSWORD=playwright-only \
   frappe bash -lc \
   'cd /home/frappe/frappe-bench && bench --site dev.localhost console'
 

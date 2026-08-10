@@ -5,10 +5,8 @@ import os
 import frappe
 
 
-PRODUCER = os.environ.get(
-    "E2E_PRODUCER_USER", "playwright-producer@example.test"
-)
-PRODUCER_PASSWORD = os.environ.get("E2E_PRODUCER_PASSWORD", "playwright-only")
+PRODUCER = os.environ["E2E_PRODUCER_USER"]
+PRODUCER_PASSWORD = os.environ["E2E_PRODUCER_PASSWORD"]
 COMPANY = "Playwright Client"
 DEAL = "Playwright Existing Deal"
 
