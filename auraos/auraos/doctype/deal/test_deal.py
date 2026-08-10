@@ -293,3 +293,151 @@ class TestDeal(FrappeTestCase):
         frappe.set_user(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):
             operating_users()
+
+
+class TestDealDetailsFields(FrappeTestCase):
+    """T3.2 (issue #21): budget, source, tags, project type."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
+        make_test_user(OUTSIDER)
+        # The seeds normally arrive via migrate; run them here so the
+        # tests do not depend on the site's migration history.
+        from auraos.setup.install import create_deal_vocabularies
+
+        create_deal_vocabularies()
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def make_tag(self, tag_name):
+        if not frappe.db.exists("Deal Tag", tag_name):
+            frappe.get_doc(
+                {"doctype": "Deal Tag", "tag_name": tag_name}
+            ).insert(ignore_permissions=True)
+        return tag_name
+
+    # -- seeded vocabularies (founder answers on issue #21) --
+
+    def test_founder_confirmed_sources_are_seeded(self):
+        for source in ("Website", "Referral", "Zalo", "Expo"):
+            self.assertTrue(frappe.db.exists("Deal Source", source))
+
+    def test_project_types_are_seeded(self):
+        for project_type in ("TVC", "Social Video", "Event", "Documentary"):
+            self.assertTrue(frappe.db.exists("Project Type", project_type))
+
+    # -- persistence --
+
+    def test_details_fields_persist(self):
+        deal = make_deal(
+            estimated_budget=250_000_000,
+            source="Zalo",
+            project_type="TVC",
+            deal_tags=[
+                {"deal_tag": self.make_tag("Tết")},
+                {"deal_tag": self.make_tag("gấp")},
+            ],
+        )
+        reloaded = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(reloaded.estimated_budget, 250_000_000)
+        self.assertEqual(reloaded.source, "Zalo")
+        self.assertEqual(reloaded.project_type, "TVC")
+        self.assertEqual(
+            [row.deal_tag for row in reloaded.deal_tags], ["Tết", "gấp"]
+        )
+
+    def test_details_fields_are_optional(self):
+        deal = make_deal(title="Bare deal")
+        self.assertFalse(deal.source)
+        self.assertFalse(deal.project_type)
+        self.assertFalse(deal.deal_tags)
+
+    # -- vocabulary enforcement --
+
+    def test_unknown_source_is_rejected(self):
+        with self.assertRaises(frappe.LinkValidationError):
+            make_deal(source="Carrier pigeon")
+
+    def test_unknown_project_type_is_rejected(self):
+        with self.assertRaises(frappe.LinkValidationError):
+            make_deal(project_type="Feature film")
+
+    def test_unknown_tag_is_rejected(self):
+        with self.assertRaises(frappe.LinkValidationError):
+            make_deal(deal_tags=[{"deal_tag": "never created"}])
+
+    def test_negative_budget_is_rejected(self):
+        with self.assertRaises(frappe.ValidationError):
+            make_deal(estimated_budget=-1)
+
+    # -- who may grow which vocabulary --
+
+    def test_founder_can_expand_sources(self):
+        # Founder decision on issue #21: the source list must stay
+        # expandable — a new expo or channel is a Desk entry, not code.
+        frappe.set_user(FOUNDER)
+        source = frappe.get_doc(
+            {"doctype": "Deal Source", "source_name": "TikTok"}
+        ).insert()
+        self.assertTrue(frappe.db.exists("Deal Source", source.name))
+
+    def test_producer_cannot_expand_sources(self):
+        frappe.set_user(PRODUCER)
+        with self.assertRaises(frappe.PermissionError):
+            frappe.get_doc(
+                {"doctype": "Deal Source", "source_name": "Cold call"}
+            ).insert()
+
+    def test_both_operating_roles_can_create_tags(self):
+        for user, tag in ((FOUNDER, "phim ngắn"), (PRODUCER, "khách quen")):
+            frappe.set_user(user)
+            frappe.get_doc(
+                {"doctype": "Deal Tag", "tag_name": tag}
+            ).insert()
+            self.assertTrue(frappe.db.exists("Deal Tag", tag))
+
+    # -- visibility (founder: budget is fine for the producer) --
+
+    def test_producer_sees_budget_source_tags_project_type(self):
+        deal = make_deal(
+            title="Producer visibility probe",
+            estimated_budget=80_000_000,
+            source="Referral",
+            project_type="Event",
+            deal_tags=[{"deal_tag": self.make_tag("visibility")}],
+        )
+        frappe.set_user(PRODUCER)
+        seen = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(seen.estimated_budget, 80_000_000)
+        self.assertEqual(seen.source, "Referral")
+        self.assertEqual(seen.project_type, "Event")
+        self.assertEqual([row.deal_tag for row in seen.deal_tags], ["visibility"])
+
+    def test_deal_tags_map_covers_tagged_deals(self):
+        from auraos.api import deal_tags_map
+
+        deal = make_deal(
+            title="Tag map probe",
+            deal_tags=[
+                {"deal_tag": self.make_tag("bản đồ")},
+                {"deal_tag": self.make_tag("Tết")},
+            ],
+        )
+        frappe.set_user(PRODUCER)
+        tag_map = deal_tags_map()
+        self.assertEqual(tag_map.get(deal.name), ["bản đồ", "Tết"])
+
+    def test_deal_tags_map_denied_without_app_role(self):
+        from auraos.api import deal_tags_map
+
+        frappe.set_user(OUTSIDER)
+        with self.assertRaises(frappe.PermissionError):
+            deal_tags_map()

@@ -11,6 +11,14 @@ app_license = "unlicensed"
 after_install = "auraos.setup.install.after_install"
 after_migrate = "auraos.setup.install.after_migrate"
 
+doc_events = {
+    "File": {
+        "before_insert": (
+            "auraos.auraos.doctype.deal.deal.check_attachment_permission"
+        ),
+    },
+}
+
 # Doctypes that appear in global search. A doctype absent from this
 # hook is invisible in search for everyone; sensitive doctypes are
 # listed here deliberately so the permission proof exercises the
