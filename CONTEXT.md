@@ -18,11 +18,11 @@ A client-facing group of cost lines carrying its own description and price — w
 _Avoid_: bundle, group, section, item
 
 **Quote preview**:
-A mutable client-facing view of a deal at its tokenised URL, refreshed from the breakdown while only authenticated internal users have seen it. It becomes a quote version when marked Sent or first opened by a guest.
+A mutable client-facing view at a tokenised URL that automatically follows each successful save of a deal's client-facing source data while only authenticated internal users have seen it. It becomes a quote version when marked Sent or first opened by a guest.
 _Avoid_: draft version, editable version, live quote
 
 **Quote version**:
-A quote preview frozen into an immutable snapshot of the deal's packages and totals when handed to a client or first opened by a guest. Re-pricing after that produces a new preview at a new tokenised URL.
+A quote preview frozen into an immutable snapshot of everything the client could see, identically on the web page and PDF, when handed to a client or first opened by a guest. Re-pricing after that produces a new preview at a new tokenised URL.
 _Avoid_: quote (unqualified), proposal, estimate
 
 **Publish**:
