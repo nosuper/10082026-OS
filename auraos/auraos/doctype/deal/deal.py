@@ -10,6 +10,22 @@ from auraos.lib.money import round_vnd, to_decimal
 OPERATING_ROLES = {"Founder", "Producer"}
 
 
+def check_attachment_permission(doc, method=None):
+    """doc_events hook on File: attaching to a Deal requires write
+    permission on that deal.
+
+    Core File permissions let any System User create files, so without
+    this gate a role-less user could hang attachments on deals they
+    cannot even read.
+    """
+    if doc.flags.ignore_permissions:
+        return
+    if doc.attached_to_doctype == "Deal":
+        frappe.has_permission(
+            "Deal", "write", doc=doc.attached_to_name, throw=True
+        )
+
+
 def rate(pct):
     """A Percent field value (10 = 10%) as the engine's fractional rate."""
     return to_decimal(pct or 0) / 100

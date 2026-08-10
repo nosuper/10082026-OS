@@ -15,6 +15,14 @@
   "contact",
   "brief_section",
   "brief",
+  "details_section",
+  "estimated_budget",
+  "source",
+  "column_break_details",
+  "project_type",
+  "deal_tags",
+  "links_section",
+  "deal_links",
   "breakdown_section",
   "cost_lines",
   "packages",
@@ -111,6 +119,52 @@
    "fieldtype": "Text",
    "in_global_search": 1,
    "label": "Brief"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "estimated_budget",
+   "fieldtype": "Currency",
+   "label": "Estimated Client Budget (VND)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "Deal Source"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "project_type",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Project Type",
+   "options": "Project Type"
+  },
+  {
+   "fieldname": "deal_tags",
+   "fieldtype": "Table MultiSelect",
+   "label": "Tags",
+   "options": "Deal Tag Item"
+  },
+  {
+   "fieldname": "links_section",
+   "fieldtype": "Section Break",
+   "label": "Links"
+  },
+  {
+   "fieldname": "deal_links",
+   "fieldtype": "Table",
+   "label": "Links",
+   "options": "Deal Link"
   },
   {
    "collapsible": 1,

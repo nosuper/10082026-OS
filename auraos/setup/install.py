@@ -10,10 +10,17 @@ ROLES = ("Founder", "Producer")
 # growing it is a founder Desk chore, not a code change.
 PARTY_ROLES = ("Client", "Vendor", "Freelancer")
 
+# Founder-confirmed starting vocabularies (issue #21). Both are
+# founder-expandable doctypes, not frozen Selects — the founder asked
+# for the source list to keep growing.
+DEAL_SOURCES = ("Website", "Referral", "Zalo", "Expo")
+PROJECT_TYPES = ("TVC", "Social Video", "Event", "Documentary")
+
 
 def after_install():
     create_roles()
     create_party_roles()
+    create_deal_vocabularies()
 
 
 def after_migrate():
@@ -21,6 +28,7 @@ def after_migrate():
     # seed existed; every seeding function here is idempotent.
     create_roles()
     create_party_roles()
+    create_deal_vocabularies()
 
 
 def create_roles():
@@ -31,9 +39,18 @@ def create_roles():
             ).insert(ignore_permissions=True)
 
 
+def _seed(doctype, fieldname, values):
+    for value in values:
+        if not frappe.db.exists(doctype, value):
+            frappe.get_doc({"doctype": doctype, fieldname: value}).insert(
+                ignore_permissions=True
+            )
+
+
 def create_party_roles():
-    for role_name in PARTY_ROLES:
-        if not frappe.db.exists("Party Role", role_name):
-            frappe.get_doc(
-                {"doctype": "Party Role", "role_name": role_name}
-            ).insert(ignore_permissions=True)
+    _seed("Party Role", "role_name", PARTY_ROLES)
+
+
+def create_deal_vocabularies():
+    _seed("Deal Source", "source_name", DEAL_SOURCES)
+    _seed("Project Type", "type_name", PROJECT_TYPES)
