@@ -74,6 +74,14 @@
               >
                 ₫ Breakdown
               </button>
+              <button
+                v-if="deal.stage === 'Won'"
+                class="rounded px-1.5 py-0.5 text-xs text-green-700 hover:bg-green-50"
+                :title="jobFor(deal) ? 'Open the job' : 'Create the job'"
+                @click.stop="openOrCreateJob(deal)"
+              >
+                {{ jobFor(deal) ? "Job →" : "+ Job" }}
+              </button>
             </div>
           </div>
         </div>
@@ -175,6 +183,30 @@
       :deal-title="pendingLost?.title || ''"
       @confirm="markLost"
     />
+
+    <Dialog
+      v-model="jobOfferOpen"
+      :options="{ title: `“${pendingJob?.title || ''}” is won` }"
+    >
+      <template #body-content>
+        <p class="text-sm text-gray-700">
+          Create the job now? It carries the breakdown, packages and links
+          across, so nothing is re-entered.
+        </p>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button @click="jobOfferOpen = false">Not yet</Button>
+          <Button
+            variant="solid"
+            :loading="createJob.loading"
+            @click="confirmJobCreation"
+          >
+            Create job
+          </Button>
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -183,6 +215,7 @@ import { ref, computed } from "vue"
 import { useRouter } from "vue-router"
 import {
   Button,
+  Dialog,
   ErrorMessage,
   createResource,
   createListResource,
@@ -323,16 +356,26 @@ const dragged = ref(null)
 const moveError = ref("")
 const lostDialogOpen = ref(false)
 const pendingLost = ref(null)
+// The move a pending set_value is carrying out, so its success handler
+// knows what just happened.
+const lastMove = ref(null)
 
 const setStage = createResource({
   url: "frappe.client.set_value",
   onSuccess() {
     moveError.value = ""
     deals.reload()
+    // Winning a deal is where the job gets created (T7); ask right here
+    // rather than leaving it to be remembered later.
+    if (lastMove.value?.stage === "Won" && !jobFor(lastMove.value.deal)) {
+      offerJob(lastMove.value.deal)
+    }
+    lastMove.value = null
   },
   onError(err) {
     moveError.value = frappeErrorMessage(err)
     deals.reload()
+    lastMove.value = null
   },
 })
 
@@ -346,6 +389,7 @@ function onDrop(stage) {
     lostDialogOpen.value = true
     return
   }
+  lastMove.value = { deal, stage }
   setStage.submit({
     doctype: "Deal",
     name: deal.name,
@@ -378,14 +422,61 @@ function openEdit(deal) {
   dialogOpen.value = true
 }
 
-function onSaved() {
+function onSaved(deal) {
   deals.reload()
   dealTags.reload()
+  if (deal?.stage === "Won" && !jobFor(deal)) offerJob(deal)
 }
 
 const router = useRouter()
 
 function openBreakdown(deal) {
   router.push(`/deals/${deal.name}/breakdown`)
+}
+
+// -- won deal → job (T7) --
+
+// {deal: job}; a won deal either offers conversion or opens its job.
+const jobsByDeal = createResource({
+  url: "auraos.api.jobs_by_deal",
+  auto: true,
+})
+
+function jobFor(deal) {
+  return jobsByDeal.data?.[deal.name]
+}
+
+const jobOfferOpen = ref(false)
+const pendingJob = ref(null)
+
+function offerJob(deal) {
+  pendingJob.value = deal
+  jobOfferOpen.value = true
+}
+
+const createJob = createResource({
+  url: "auraos.api.create_job_from_deal",
+  onSuccess(job) {
+    jobOfferOpen.value = false
+    pendingJob.value = null
+    jobsByDeal.reload()
+    router.push(`/jobs/${job.name}`)
+  },
+  onError(err) {
+    jobOfferOpen.value = false
+    pendingJob.value = null
+    moveError.value = frappeErrorMessage(err)
+    jobsByDeal.reload()
+  },
+})
+
+function confirmJobCreation() {
+  createJob.submit({ deal: pendingJob.value.name })
+}
+
+function openOrCreateJob(deal) {
+  const existing = jobFor(deal)
+  if (existing) router.push(`/jobs/${existing}`)
+  else offerJob(deal)
 }
 </script>

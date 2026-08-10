@@ -557,10 +557,12 @@ watch(
   }
 )
 
-function onSaveSuccess() {
+function onSaveSuccess(doc) {
   saving.value = false
   emit("update:modelValue", false)
-  emit("saved")
+  // The saved deal travels with the event: the board offers job
+  // creation when a deal lands on Won (T7).
+  emit("saved", doc)
 }
 
 function onSaveError(err) {

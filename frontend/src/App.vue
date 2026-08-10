@@ -43,6 +43,7 @@ createResource({
 
 const nav = computed(() => [
   { label: "Deals", route: "/deals" },
+  { label: "Jobs", route: "/jobs" },
   { label: "Contacts", route: "/contacts" },
   ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
 ])

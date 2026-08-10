@@ -29,6 +29,7 @@ global_search_doctypes = {
         {"doctype": "Party Company"},
         {"doctype": "Party Contact"},
         {"doctype": "Deal"},
+        {"doctype": "Job"},
     ]
 }
 

@@ -11,6 +11,7 @@ from auraos.auraos.doctype.deal.deal import (
     rate,
     to_engine_lines,
 )
+from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
 
@@ -239,6 +240,61 @@ def deal_profit(deal):
     )
     result = pricing.compute_quote(to_engine_lines(doc.cost_lines), params)
     return _founder_block(result, doc.commission_pct or 0)
+
+
+@frappe.whitelist()
+def create_job_from_deal(deal):
+    """Turn a won deal into a job, carrying breakdown, packages and links."""
+    _check_deal_permission(deal, "read")
+    job = create_from_deal(deal)
+    return {"name": job.name, "title": job.title, "stage": job.stage}
+
+
+@frappe.whitelist()
+def jobs_by_deal():
+    """{deal_name: job_name} for the deals this user may list.
+
+    The board uses it to tell a won deal that still needs converting
+    from one that already has a job.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    rows = frappe.get_list(
+        "Job",
+        filters={"deal": ["is", "set"]},
+        fields=["name", "deal"],
+        limit_page_length=0,
+    )
+    return {row.deal: row.name for row in rows}
+
+
+@frappe.whitelist()
+def log_job_revision(job, note):
+    """Record a client revision round on a job.
+
+    The round number and the chargeable flag come back computed — the
+    job derives both from row order (Job.number_revisions).
+    """
+    frappe.has_permission("Job", "write", doc=job, throw=True)
+    if not (note or "").strip():
+        frappe.throw(_("A revision needs a note"), frappe.ValidationError)
+    doc = frappe.get_doc("Job", job)
+    doc.append(
+        "revisions",
+        {
+            "note": note,
+            "requested_on": frappe.utils.now_datetime(),
+            "logged_by": frappe.session.user,
+        },
+    )
+    doc.save()
+    latest = doc.revisions[-1]
+    return {
+        "name": doc.name,
+        "revision_rounds": doc.revision_rounds,
+        "change_order_due": bool(doc.change_order_due),
+        "round": latest.round,
+        "chargeable": bool(latest.chargeable),
+    }
 
 
 @frappe.whitelist()
