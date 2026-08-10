@@ -1,7 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router"
 
 const routes = [
-  { path: "/", redirect: "/contacts" },
+  // The board is the landing page: deal state at a glance is the
+  // headline pain of the project.
+  { path: "/", redirect: "/deals" },
+  {
+    path: "/deals",
+    name: "Deals",
+    component: () => import("./pages/DealsPage.vue"),
+  },
   {
     path: "/contacts",
     name: "Contacts",

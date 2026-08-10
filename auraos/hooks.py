@@ -20,6 +20,7 @@ global_search_doctypes = {
         {"doctype": "Founder Spike Note"},
         {"doctype": "Party Company"},
         {"doctype": "Party Contact"},
+        {"doctype": "Deal"},
     ]
 }
 
