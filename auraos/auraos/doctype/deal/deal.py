@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from auraos.lib import pricing
+from auraos.lib import pricing, quote
 from auraos.lib.money import round_vnd, to_decimal
 
 # Only the two operating roles may own a deal; ownership is the
@@ -55,19 +55,43 @@ def to_engine_lines(rows):
     return lines
 
 
-def quote_margin_fraction(result):
-    """Quote margin as a fraction of revenue; None when there is none."""
-    margin = result.revenue_ex_vat - result.total_profit_cost_basis
-    if not result.revenue_ex_vat:
-        return None
-    return margin / result.revenue_ex_vat
+def client_prices(packages, lines):
+    """The prices the client is shown, as plain numbers.
+
+    Revenue is measured against these — not the engine's line total —
+    because a rounded-up package is what the client actually pays
+    (issue #32). Rows may be child docs or plain dicts.
+    """
+    return [
+        entry["price"]
+        for entry in quote.client_entries(
+            [as_dict(package) for package in packages],
+            [as_dict(line) for line in lines],
+        )
+    ]
+
+
+def as_dict(row):
+    return row if isinstance(row, dict) else row.as_dict()
+
+
+def deal_chain(doc, result):
+    """The client-facing chain for a deal, given its engine result."""
+    return quote.quote_chain(
+        client_prices(doc.packages, doc.cost_lines),
+        cost_basis=result.total_profit_cost_basis,
+        input_vat=result.total_input_vat,
+        mf_rate=rate(doc.quote_mf_pct),
+        vat_rate=rate(doc.vat_pct),
+        commission_rate=rate(doc.commission_pct),
+    )
 
 
 def margin_floor_pct():
     return frappe.db.get_single_value("AuraOS Settings", "margin_floor_pct") or 0
 
 
-def floor_breached(result):
+def floor_breached(margin_fraction):
     """Whether the quote's margin falls below the global floor.
 
     A floor of 0 means "not set yet" and never warns; read via the db
@@ -77,7 +101,7 @@ def floor_breached(result):
     floor = margin_floor_pct()
     if not floor:
         return False
-    return pricing.is_floor_breached(quote_margin_fraction(result), rate(floor))
+    return pricing.is_floor_breached(margin_fraction, rate(floor))
 
 
 def append_stage_change(doc):
@@ -201,17 +225,8 @@ class Deal(Document):
             row.quote_price = round_vnd(line.budget)
             row.margin = round_vnd(line.margin)
 
-        self.quote_subtotal = round_vnd(result.subtotal)
-        self.quote_mf_amount = round_vnd(result.management_fee)
-        self.quote_vat_amount = round_vnd(result.vat)
-        self.quote_total = round_vnd(result.total)
-        self.quote_margin = round_vnd(
-            result.revenue_ex_vat - result.total_profit_cost_basis
-        )
-        fraction = quote_margin_fraction(result)
-        self.quote_margin_pct = float(fraction * 100) if fraction is not None else 0
-        self.floor_breached = 1 if floor_breached(result) else 0
-
+        # Packages first: the quote totals are measured against their
+        # prices, so they have to exist before the totals are computed.
         budgets = {}
         for row, line in zip(self.cost_lines, result.lines):
             if row.package:
@@ -223,6 +238,19 @@ class Deal(Document):
             package.default_price = round_vnd(priced.default)
             package.price = round_vnd(priced.price)
             package.variance = round_vnd(priced.variance)
+
+        chain = deal_chain(self, result)
+        self.quote_subtotal = round_vnd(chain.subtotal)
+        self.quote_mf_amount = round_vnd(chain.mf_amount)
+        self.quote_vat_amount = round_vnd(chain.vat_amount)
+        self.quote_total = round_vnd(chain.total)
+        self.quote_margin = round_vnd(chain.margin)
+        self.quote_margin_pct = (
+            float(chain.margin_fraction * 100)
+            if chain.margin_fraction is not None
+            else 0
+        )
+        self.floor_breached = 1 if floor_breached(chain.margin_fraction) else 0
 
     def on_update(self):
         self.store_founder_chain()
@@ -255,17 +283,16 @@ class Deal(Document):
                 commission_rate=rate(self.commission_pct),
             )
             result = pricing.compute_quote(to_engine_lines(self.cost_lines), params)
+            # Same client-facing revenue the producer sees on the quote,
+            # so commission and tax are taken on what we actually charge.
+            chain = deal_chain(self, result)
             values = {
-                "total_commission": round_vnd(result.total_commission),
-                "cm": round_vnd(
-                    result.revenue_ex_vat
-                    - result.total_profit_cost_basis
-                    - result.total_commission
-                ),
-                "profit_before_tax": round_vnd(result.profit_before_tax),
-                "tndn": round_vnd(result.tndn),
-                "net_profit": round_vnd(result.net_profit),
-                "vat_payable": round_vnd(result.vat_payable),
+                "total_commission": round_vnd(chain.total_commission),
+                "cm": round_vnd(chain.cm),
+                "profit_before_tax": round_vnd(chain.profit_before_tax),
+                "tndn": round_vnd(chain.tndn),
+                "net_profit": round_vnd(chain.net_profit),
+                "vat_payable": round_vnd(chain.vat_payable),
             }
         self.db_set(values, update_modified=False)
 

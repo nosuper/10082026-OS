@@ -67,6 +67,24 @@
               >
                 {{ deal.lost_reason }}
               </span>
+              <span
+                v-if="silentDeals[deal.name]"
+                class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} — no reply after ${silence.data?.silence_days} days`"
+              >
+                ⏰ Silent
+              </span>
+              <a
+                v-if="quoteLinks[deal.name]"
+                :href="quoteLinks[deal.name].url"
+                target="_blank"
+                rel="noopener"
+                class="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
+                :title="`Open the client's quote page (v${quoteLinks[deal.name].version})`"
+                @click.stop
+              >
+                🔗 v{{ quoteLinks[deal.name].version }}
+              </a>
               <button
                 class="ml-auto rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
                 title="Breakdown & Quote"
@@ -143,6 +161,15 @@
             </td>
             <td class="whitespace-nowrap px-3 py-2 text-gray-700">
               {{ deal.project_type }}
+            </td>
+            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
+              {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
+              <span
+                v-if="silentDeals[deal.name]"
+                class="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+              >
+                ⏰ Silent
+              </span>
             </td>
             <td class="px-3 py-2">
               <span
@@ -223,6 +250,7 @@ import {
 import DealFormDialog from "../components/DealFormDialog.vue"
 import LostReasonDialog from "../components/LostReasonDialog.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
+import { vnd } from "../utils/money"
 
 // The agreed pipeline, in board order (spec issue #2, story 3).
 const STAGES = [
@@ -247,12 +275,35 @@ const deals = createListResource({
     "estimated_budget",
     "source",
     "project_type",
+    "quote_status",
+    "quote_sent_on",
     "modified",
   ],
   orderBy: "modified desc",
   pageLength: 500,
   auto: true,
 })
+
+// Quotes that have gone unanswered past the company's silence window
+// (spec #2, story 6) — the deal-killer the board is meant to surface.
+const silence = createResource({
+  url: "auraos.api.silent_quote_deals",
+  auto: true,
+})
+
+const silentDeals = computed(() => {
+  const map = {}
+  for (const deal of silence.data?.deals || []) map[deal.name] = deal
+  return map
+})
+
+// The link to hand a client, straight off the card (T6 walkthrough).
+const quoteLinkMap = createResource({
+  url: "auraos.api.deal_quote_links",
+  auto: true,
+})
+
+const quoteLinks = computed(() => quoteLinkMap.data || {})
 
 const companies = createListResource({
   doctype: "Party Company",
@@ -293,6 +344,7 @@ const COLUMNS = [
   { key: "estimated_budget", label: "Budget (VND)" },
   { key: "source", label: "Source" },
   { key: "project_type", label: "Project Type" },
+  { key: "quote_status", label: "Quote" },
   { key: "tags", label: "Tags" },
   { key: "modified", label: "Updated" },
 ]
@@ -339,7 +391,7 @@ const sortedDeals = computed(() => {
 })
 
 function formatBudget(value) {
-  return value ? Number(value).toLocaleString("vi-VN") : ""
+  return value ? vnd(value) : ""
 }
 
 const dealsByStage = computed(() => {

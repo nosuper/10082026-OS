@@ -1,0 +1,22 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_content %}
+<div style="padding: 2rem 1rem;">
+  {% if not_found %}
+  <div style="max-width: 34rem; margin: 3rem auto; text-align: center;">
+    <h1 style="font-size: 1.5rem; margin-bottom: .75rem;">Quote not found</h1>
+    <p style="color: #6b7280;">
+      This link is no longer valid — it may have been replaced by a newer
+      version of the quote. Please ask your contact for a current link.
+    </p>
+  </div>
+  {% else %}
+  <div style="max-width: 46rem; margin: 0 auto 1rem; text-align: right;">
+    <a href="{{ pdf_url }}" class="btn btn-default btn-sm">Download PDF</a>
+  </div>
+  {% include "auraos/templates/includes/quote_body.html" %}
+  {% endif %}
+</div>
+{% endblock %}
