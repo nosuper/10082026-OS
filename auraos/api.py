@@ -24,6 +24,32 @@ from auraos.lib.quote import quote_chain
 # Deal field carries the same default.
 DEFAULT_COMMISSION_PCT = 5
 
+# The table is deliberately a narrow editing surface. Quote delivery,
+# breakdown values and audit fields still belong to their dedicated flows.
+DEAL_TABLE_EDITABLE_FIELDS = {
+    "title",
+    "company",
+    "stage",
+    "deal_owner",
+    "estimated_budget",
+    "source",
+    "project_type",
+    "deal_tags",
+}
+DEAL_TABLE_FIELDS = [
+    "name",
+    "title",
+    "company",
+    "stage",
+    "deal_owner",
+    "estimated_budget",
+    "source",
+    "project_type",
+    "quote_status",
+    "quote_sent_on",
+    "modified",
+]
+
 
 @frappe.whitelist()
 def operating_users():
@@ -47,6 +73,62 @@ def operating_users():
         fields=["name", "full_name"],
         order_by="full_name asc",
     )
+
+
+def _deal_table_values(values):
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("Deal table values must be an object"), frappe.ValidationError)
+    values = dict(values)
+    unknown = set(values) - DEAL_TABLE_EDITABLE_FIELDS
+    if unknown:
+        frappe.throw(
+            _("Fields cannot be edited in the deals table: {0}").format(
+                ", ".join(sorted(unknown))
+            ),
+            frappe.ValidationError,
+        )
+    return values
+
+
+def _apply_deal_table_values(doc, values):
+    values = _deal_table_values(values)
+    tags = values.pop("deal_tags", None)
+    doc.update(values)
+    if tags is not None:
+        doc.set(
+            "deal_tags",
+            [
+                {"deal_tag": tag if isinstance(tag, str) else tag.get("deal_tag")}
+                for tag in tags
+            ],
+        )
+
+
+def _deal_table_row(doc):
+    row = {field: doc.get(field) for field in DEAL_TABLE_FIELDS}
+    row["tags"] = [tag.deal_tag for tag in doc.deal_tags]
+    return row
+
+
+@frappe.whitelist()
+def update_deal_table_row(deal, values):
+    """Save editable table cells through the full Deal validation path."""
+    doc = frappe.get_doc("Deal", deal)
+    doc.check_permission("write")
+    _apply_deal_table_values(doc, values)
+    doc.save()
+    return _deal_table_row(doc)
+
+
+@frappe.whitelist()
+def create_deal_table_row(values):
+    """Create a Deal from the blank table row through normal defaults."""
+    frappe.has_permission("Deal", "create", throw=True)
+    doc = frappe.new_doc("Deal")
+    _apply_deal_table_values(doc, values)
+    doc.insert()
+    return _deal_table_row(doc)
 
 
 def _check_deal_permission(deal, ptype):
