@@ -10,9 +10,19 @@ const routes = [
     component: () => import("./pages/DealsPage.vue"),
   },
   {
+    path: "/deals/:name/breakdown",
+    name: "DealBreakdown",
+    component: () => import("./pages/DealBreakdownPage.vue"),
+  },
+  {
     path: "/contacts",
     name: "Contacts",
     component: () => import("./pages/ContactsPage.vue"),
+  },
+  {
+    path: "/settings",
+    name: "Settings",
+    component: () => import("./pages/SettingsPage.vue"),
   },
 ]
 

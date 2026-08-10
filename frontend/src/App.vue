@@ -26,12 +26,26 @@
 </template>
 
 <script setup>
+import { computed, ref } from "vue"
 import { Button, createResource } from "frappe-ui"
 
-const nav = [
+// Settings only appears for sessions that can actually read it (the
+// founder); probing the floor endpoint doubles as the role check.
+const isFounder = ref(false)
+createResource({
+  url: "auraos.api.get_margin_floor",
+  auto: true,
+  onSuccess() {
+    isFounder.value = true
+  },
+  onError() {},
+})
+
+const nav = computed(() => [
   { label: "Deals", route: "/deals" },
   { label: "Contacts", route: "/contacts" },
-]
+  ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
+])
 
 // Log out via the API, then land on a login page that returns here —
 // otherwise re-login strands the user in the Desk.

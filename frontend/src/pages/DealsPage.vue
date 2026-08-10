@@ -67,6 +67,13 @@
               >
                 {{ deal.lost_reason }}
               </span>
+              <button
+                class="ml-auto rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
+                title="Breakdown & Quote"
+                @click.stop="openBreakdown(deal)"
+              >
+                ₫ Breakdown
+              </button>
             </div>
           </div>
         </div>
@@ -173,6 +180,7 @@
 
 <script setup>
 import { ref, computed } from "vue"
+import { useRouter } from "vue-router"
 import {
   Button,
   ErrorMessage,
@@ -373,5 +381,11 @@ function openEdit(deal) {
 function onSaved() {
   deals.reload()
   dealTags.reload()
+}
+
+const router = useRouter()
+
+function openBreakdown(deal) {
+  router.push(`/deals/${deal.name}/breakdown`)
 }
 </script>

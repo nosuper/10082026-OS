@@ -23,6 +23,31 @@
   "deal_tags",
   "links_section",
   "deal_links",
+  "breakdown_section",
+  "cost_lines",
+  "packages",
+  "params_section",
+  "quote_mf_pct",
+  "vat_pct",
+  "column_break_params",
+  "commission_pct",
+  "quote_section",
+  "quote_subtotal",
+  "quote_mf_amount",
+  "quote_vat_amount",
+  "column_break_quote",
+  "quote_total",
+  "quote_margin",
+  "quote_margin_pct",
+  "floor_breached",
+  "profit_section",
+  "total_commission",
+  "cm",
+  "profit_before_tax",
+  "column_break_profit",
+  "tndn",
+  "net_profit",
+  "vat_payable",
   "lost_section",
   "lost_reason",
   "column_break_lost",
@@ -142,6 +167,159 @@
    "options": "Deal Link"
   },
   {
+   "collapsible": 1,
+   "fieldname": "breakdown_section",
+   "fieldtype": "Section Break",
+   "label": "Breakdown & Quote"
+  },
+  {
+   "fieldname": "cost_lines",
+   "fieldtype": "Table",
+   "label": "Cost Lines",
+   "options": "Deal Cost Line"
+  },
+  {
+   "fieldname": "packages",
+   "fieldtype": "Table",
+   "label": "Packages",
+   "options": "Deal Package"
+  },
+  {
+   "fieldname": "params_section",
+   "fieldtype": "Section Break",
+   "label": "Quote Parameters"
+  },
+  {
+   "default": "10",
+   "fieldname": "quote_mf_pct",
+   "fieldtype": "Percent",
+   "label": "Quote MF %"
+  },
+  {
+   "default": "8",
+   "fieldname": "vat_pct",
+   "fieldtype": "Percent",
+   "label": "VAT %"
+  },
+  {
+   "fieldname": "column_break_params",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5",
+   "fieldname": "commission_pct",
+   "fieldtype": "Percent",
+   "label": "Commission %",
+   "permlevel": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "quote_section",
+   "fieldtype": "Section Break",
+   "label": "Quote Totals"
+  },
+  {
+   "fieldname": "quote_subtotal",
+   "fieldtype": "Currency",
+   "label": "Quote Subtotal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_mf_amount",
+   "fieldtype": "Currency",
+   "label": "Management Fee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_vat_amount",
+   "fieldtype": "Currency",
+   "label": "VAT",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_quote",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quote_total",
+   "fieldtype": "Currency",
+   "label": "Quote Total",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_margin",
+   "fieldtype": "Currency",
+   "label": "Margin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_margin_pct",
+   "fieldtype": "Percent",
+   "label": "Margin %",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "floor_breached",
+   "fieldtype": "Check",
+   "label": "Below Margin Floor",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "profit_section",
+   "fieldtype": "Section Break",
+   "label": "Profit (Founder)",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "total_commission",
+   "fieldtype": "Currency",
+   "label": "Commission (CMF)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "cm",
+   "fieldtype": "Currency",
+   "label": "CM (After Commission)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "profit_before_tax",
+   "fieldtype": "Currency",
+   "label": "Lợi Nhuận Trước Thuế",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_profit",
+   "fieldtype": "Column Break",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "tndn",
+   "fieldtype": "Currency",
+   "label": "TNDN (20%)",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "net_profit",
+   "fieldtype": "Currency",
+   "label": "Net Profit",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "vat_payable",
+   "fieldtype": "Currency",
+   "label": "VAT Phải Nộp",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.stage == 'Lost'",
    "fieldname": "lost_section",
    "fieldtype": "Section Break",
@@ -220,6 +398,18 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Founder",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
    "write": 1
   }
  ],
