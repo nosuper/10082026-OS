@@ -28,7 +28,8 @@
             label="Company"
             :options="companyOptions"
             v-model="companySelection"
-            placeholder="No company"
+            placeholder="Select company"
+            required
           />
           <FormControl
             type="autocomplete"
@@ -44,6 +45,29 @@
           v-model="form.brief"
           :rows="5"
         />
+
+        <div v-if="stageHistory.length">
+          <div class="mb-2 border-t pt-3 text-xs font-medium text-gray-700">
+            Stage History
+          </div>
+          <div class="space-y-1">
+            <div
+              v-for="entry in stageHistory"
+              :key="entry.name"
+              class="flex gap-2 text-xs text-gray-600"
+            >
+              <span class="w-36 shrink-0 tabular-nums">
+                {{ entry.changed_on?.slice(0, 16) }}
+              </span>
+              <span>
+                {{ entry.from_stage ? `${entry.from_stage} → ` : "" }}
+                <span class="font-medium text-gray-800">{{ entry.to_stage }}</span>
+                <span class="text-gray-400"> — {{ entry.changed_by }}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
         <ErrorMessage :message="saveError" />
       </div>
     </template>
@@ -87,6 +111,7 @@ const saveError = ref("")
 // The server copy of an existing doc; edits are overlaid on save so
 // name/modified/stage_history survive the round trip.
 let serverDoc = null
+const stageHistory = ref([])
 
 const ownerOptions = computed(() => [
   { label: "", value: "" },
@@ -117,21 +142,33 @@ const contacts = createListResource({
   pageLength: 500,
 })
 
-// Contacts of the chosen company first; unattached contacts still
-// selectable so a person can be linked before their company exists.
+// Only people of the selected company (T3 walkthrough decision);
+// no company chosen yet → all contacts.
 const contactOptions = computed(() => {
   const company = companySelection.value?.value
   const all = contacts.data || []
-  const ranked = company
-    ? [...all.filter((c) => c.company === company), ...all.filter((c) => c.company !== company)]
-    : all
-  return ranked.map((c) => ({ label: c.full_name, value: c.name }))
+  return (company ? all.filter((c) => c.company === company) : all).map(
+    (c) => ({ label: c.full_name, value: c.name })
+  )
+})
+
+// Switching company invalidates a contact from the previous one.
+// Judge from the loaded contact record itself — while the list is
+// still fetching we must not wipe a valid saved contact.
+watch(companySelection, (selected) => {
+  const contact = (contacts.data || []).find(
+    (c) => c.name === contactSelection.value?.value
+  )
+  if (contact && selected?.value && contact.company !== selected.value) {
+    contactSelection.value = null
+  }
 })
 
 const fetchDoc = createResource({
   url: "frappe.client.get",
   onSuccess(doc) {
     serverDoc = doc
+    stageHistory.value = doc.stage_history || []
     form.value = { ...doc }
     companySelection.value = doc.company
       ? { label: labelFor(companies, doc.company, "company_name"), value: doc.company }
@@ -157,6 +194,7 @@ watch(
     if (!open) return
     saveError.value = ""
     serverDoc = null
+    stageHistory.value = []
     form.value = {}
     companySelection.value = null
     contactSelection.value = null

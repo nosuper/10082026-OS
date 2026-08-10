@@ -27,7 +27,17 @@ STAGES = [
 LOST_REASONS = ["Price", "Timing", "Silence", "Competitor", "Scope"]
 
 
+def make_company(company_name="Chungify Media"):
+    existing = frappe.db.exists("Party Company", {"company_name": company_name})
+    if existing:
+        return frappe.get_doc("Party Company", existing)
+    return frappe.get_doc(
+        {"doctype": "Party Company", "company_name": company_name}
+    ).insert()
+
+
 def make_deal(**overrides):
+    overrides.setdefault("company", make_company().name)
     doc = frappe.get_doc(
         {
             "doctype": "Deal",
@@ -63,14 +73,23 @@ class TestDeal(FrappeTestCase):
                 {"doctype": "Deal", "deal_owner": FOUNDER}
             ).insert()
 
+    def test_deal_requires_company(self):
+        # T3 walkthrough decision: every deal names its client company.
+        with self.assertRaises(frappe.MandatoryError):
+            frappe.get_doc(
+                {
+                    "doctype": "Deal",
+                    "title": "No client",
+                    "deal_owner": FOUNDER,
+                }
+            ).insert()
+
     def test_new_deal_starts_at_brief_received(self):
         deal = make_deal()
         self.assertEqual(deal.stage, "Brief Received")
 
     def test_deal_links_company_contact_and_brief(self):
-        company = frappe.get_doc(
-            {"doctype": "Party Company", "company_name": "Chungify Media"}
-        ).insert()
+        company = make_company()
         contact = frappe.get_doc(
             {
                 "doctype": "Party Contact",
@@ -192,13 +211,22 @@ class TestDeal(FrappeTestCase):
             (frappe.MandatoryError, frappe.ValidationError)
         ):
             frappe.get_doc(
-                {"doctype": "Deal", "title": "Ownerless"}
+                {
+                    "doctype": "Deal",
+                    "title": "Ownerless",
+                    "company": make_company().name,
+                }
             ).insert()
 
     def test_owner_defaults_to_creating_operating_user(self):
+        company = make_company()
         frappe.set_user(PRODUCER)
         deal = frappe.get_doc(
-            {"doctype": "Deal", "title": "Producer's deal"}
+            {
+                "doctype": "Deal",
+                "title": "Producer's deal",
+                "company": company.name,
+            }
         )
         deal.insert()
         self.assertEqual(deal.deal_owner, PRODUCER)

@@ -62,7 +62,8 @@
    "in_global_search": 1,
    "in_list_view": 1,
    "label": "Company",
-   "options": "Party Company"
+   "options": "Party Company",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_client",
