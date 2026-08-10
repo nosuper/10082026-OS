@@ -35,6 +35,32 @@ _Avoid_: reminder, follow-up, alert
 The single global margin percentage below which any quote warns, without revealing where the number comes from.
 _Avoid_: minimum margin, threshold, floor price
 
+## Production
+
+**Job**:
+A won deal in production, carrying that deal's breakdown, packages and client unchanged. One deal becomes at most one job, and the numbers it carries are a snapshot — pricing is still edited on the deal.
+_Avoid_: project, production, gig, booking
+
+**Production stage**:
+Where a job sits in the fixed flow from Pre-production to Done. Both operating roles may move a job to any stage, forwards or back, and every move is logged.
+_Avoid_: status, phase, step
+
+**Revision round**:
+One request for changes from the client, logged against a job with its note, author and time. Rounds are numbered from their order, never typed in.
+_Avoid_: revision (unqualified), amend, edit, feedback round
+
+**Redo**:
+The round-trip a revision round sets off: a job the client has already been shown goes back to the stage where the work is redone, without anyone dragging the card.
+_Avoid_: rework, reopen, bounce back
+
+**Change order**:
+A revision round past the included ones — chargeable, and flagged as such wherever the job appears.
+_Avoid_: extra, overage, out of scope
+
+**Files location**:
+The shared folder a job's material lives in, named after the job code.
+_Avoid_: path, directory, drive, storage
+
 ## Environments
 
 **Preview stack**:

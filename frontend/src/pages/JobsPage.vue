@@ -46,7 +46,7 @@
               <span
                 v-if="job.change_order_due"
                 class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-                title="Revisions past the free rounds — chargeable"
+                title="Revision rounds past the included ones — chargeable"
               >
                 ⚠ Change order · {{ job.revision_rounds }} rounds
               </span>

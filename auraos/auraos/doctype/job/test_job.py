@@ -29,7 +29,7 @@ from auraos.auraos.doctype.deal.test_deal import (
 )
 from auraos.auraos.doctype.deal.test_deal_breakdown import make_breakdown_deal
 from auraos.auraos.doctype.job.job import (
-    FREE_REVISION_ROUNDS,
+    INCLUDED_REVISION_ROUNDS,
     REDO_STAGE,
     STAGES,
 )
@@ -329,17 +329,17 @@ class TestJobRevisions(FrappeTestCase):
         self.assertFalse(self.job.change_order_due)
 
     def test_free_rounds_are_not_chargeable(self):
-        for round_number in range(1, FREE_REVISION_ROUNDS + 1):
+        for round_number in range(1, INCLUDED_REVISION_ROUNDS + 1):
             job = log_job_revision(self.job.name, f"Sửa lần {round_number}")
             self.assertEqual(job["revision_rounds"], round_number)
             self.assertFalse(job["change_order_due"])
 
     def test_round_three_is_flagged_as_a_chargeable_change_order(self):
-        for i in range(FREE_REVISION_ROUNDS):
+        for i in range(INCLUDED_REVISION_ROUNDS):
             log_job_revision(self.job.name, f"Sửa lần {i + 1}")
         job = log_job_revision(self.job.name, "Khách đổi ý lần nữa")
 
-        self.assertEqual(job["revision_rounds"], FREE_REVISION_ROUNDS + 1)
+        self.assertEqual(job["revision_rounds"], INCLUDED_REVISION_ROUNDS + 1)
         self.assertTrue(job["change_order_due"])
 
         rows = frappe.get_doc("Job", self.job.name).revisions
@@ -425,20 +425,20 @@ class TestJobRevisions(FrappeTestCase):
             )
 
     def test_the_reopened_job_still_counts_the_round(self):
-        for i in range(FREE_REVISION_ROUNDS + 1):
+        for i in range(INCLUDED_REVISION_ROUNDS + 1):
             job = frappe.get_doc("Job", self.job.name)
             job.stage = "Feedback"
             job.save()
             result = log_job_revision(self.job.name, f"Sửa lần {i + 1}")
 
-        self.assertEqual(result["revision_rounds"], FREE_REVISION_ROUNDS + 1)
+        self.assertEqual(result["revision_rounds"], INCLUDED_REVISION_ROUNDS + 1)
         self.assertTrue(result["change_order_due"])
         self.assertEqual(result["stage"], REDO_STAGE)
 
     def test_the_counter_survives_hand_edited_rows(self):
         """The rounds and the flag are derived, never trusted from input."""
         job = frappe.get_doc("Job", self.job.name)
-        for i in range(FREE_REVISION_ROUNDS + 1):
+        for i in range(INCLUDED_REVISION_ROUNDS + 1):
             job.append(
                 "revisions",
                 {"round": 99, "chargeable": 0, "note": f"lần {i + 1}"},
@@ -448,8 +448,8 @@ class TestJobRevisions(FrappeTestCase):
         reloaded = frappe.get_doc("Job", job.name)
         self.assertEqual(
             [row.round for row in reloaded.revisions],
-            list(range(1, FREE_REVISION_ROUNDS + 2)),
+            list(range(1, INCLUDED_REVISION_ROUNDS + 2)),
         )
         self.assertTrue(reloaded.revisions[-1].chargeable)
         self.assertTrue(reloaded.change_order_due)
-        self.assertEqual(reloaded.revision_rounds, FREE_REVISION_ROUNDS + 1)
+        self.assertEqual(reloaded.revision_rounds, INCLUDED_REVISION_ROUNDS + 1)

@@ -33,7 +33,7 @@ STAGES = [
 
 # Revision rounds the client gets included; the next one is a chargeable
 # change order (spec #2, story 28).
-FREE_REVISION_ROUNDS = 2
+INCLUDED_REVISION_ROUNDS = 2
 
 # Where a revision request puts the job: the client has asked for
 # changes, so the work reopens where changes are made (issue #9, raised
@@ -153,10 +153,10 @@ class Job(Document):
         """
         for index, row in enumerate(self.revisions, start=1):
             row.round = index
-            row.chargeable = 1 if index > FREE_REVISION_ROUNDS else 0
+            row.chargeable = 1 if index > INCLUDED_REVISION_ROUNDS else 0
         self.revision_rounds = len(self.revisions)
         self.change_order_due = (
-            1 if self.revision_rounds > FREE_REVISION_ROUNDS else 0
+            1 if self.revision_rounds > INCLUDED_REVISION_ROUNDS else 0
         )
 
     def before_save(self):

@@ -60,7 +60,7 @@
               </span>
               <span v-else class="text-xs text-gray-500">
                 {{ doc.revision_rounds || 0 }} of
-                {{ FREE_REVISION_ROUNDS }} included rounds used
+                {{ INCLUDED_REVISION_ROUNDS }} included rounds used
               </span>
             </div>
 
@@ -118,8 +118,8 @@
               {{ reopenNotice }}
             </p>
             <p v-if="nextIsChargeable" class="mt-1 text-xs text-amber-700">
-              The next round is past the included revisions — it will be
-              flagged as a chargeable change order.
+              The next round is past the included ones — it will be flagged
+              as a chargeable change order.
             </p>
             <p v-if="reopensOnLog" class="mt-1 text-xs text-gray-500">
               Logging a revision sends this job back to {{ REDO_STAGE }}.
@@ -245,7 +245,7 @@ import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
-import { STAGES, FREE_REVISION_ROUNDS, REDO_STAGE } from "../data/jobStages"
+import { STAGES, INCLUDED_REVISION_ROUNDS, REDO_STAGE } from "../data/jobStages"
 
 const route = useRoute()
 const name = route.params.name
@@ -289,7 +289,7 @@ watch(
 const companyName = computed(() => company.data?.company_name)
 
 const nextIsChargeable = computed(
-  () => (doc.value?.revision_rounds || 0) >= FREE_REVISION_ROUNDS
+  () => (doc.value?.revision_rounds || 0) >= INCLUDED_REVISION_ROUNDS
 )
 
 // Mirrors redo_stage_for on the server: a job the client has already

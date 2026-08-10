@@ -12,8 +12,8 @@ export const STAGES = [
 ]
 
 // Rounds included before a revision becomes a change order — mirrors
-// FREE_REVISION_ROUNDS on the server, which is the authority.
-export const FREE_REVISION_ROUNDS = 2
+// INCLUDED_REVISION_ROUNDS on the server, which is the authority.
+export const INCLUDED_REVISION_ROUNDS = 2
 
 // Where logging a revision sends a job that has already been shown to
 // the client — mirrors REDO_STAGE on the server.
