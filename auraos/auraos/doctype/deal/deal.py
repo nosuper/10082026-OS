@@ -39,7 +39,7 @@ def to_engine_lines(rows):
     return lines
 
 
-def quote_margin_pct(result):
+def quote_margin_fraction(result):
     """Quote margin as a fraction of revenue; None when there is none."""
     margin = result.revenue_ex_vat - result.total_profit_cost_basis
     if not result.revenue_ex_vat:
@@ -61,7 +61,7 @@ def floor_breached(result):
     floor = margin_floor_pct()
     if not floor:
         return False
-    return pricing.is_floor_breached(quote_margin_pct(result), rate(floor))
+    return pricing.is_floor_breached(quote_margin_fraction(result), rate(floor))
 
 
 def holds_operating_role(user):
@@ -171,8 +171,8 @@ class Deal(Document):
         self.quote_margin = round_vnd(
             result.revenue_ex_vat - result.total_profit_cost_basis
         )
-        pct = quote_margin_pct(result)
-        self.quote_margin_pct = float(pct * 100) if pct is not None else 0
+        fraction = quote_margin_fraction(result)
+        self.quote_margin_pct = float(fraction * 100) if fraction is not None else 0
         self.floor_breached = 1 if floor_breached(result) else 0
 
         budgets = {}

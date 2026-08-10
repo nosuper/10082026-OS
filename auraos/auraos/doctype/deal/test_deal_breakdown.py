@@ -352,6 +352,31 @@ class TestDealBreakdown(FrappeTestCase):
         ]
         self.assertEqual(leaked, [])
 
+    def test_commission_never_reaches_the_search_index(self):
+        # Behavioral counterpart to the meta assertion, in the spike-note
+        # pattern: index a deal with a distinctive title and an unusual
+        # commission, then check what the search content actually holds.
+        from frappe.utils import global_search
+
+        marker = "hoahongbimat8823"
+        make_breakdown_deal(title=f"Deal {marker}", commission_pct=41.77)
+        global_search.sync_global_search()
+
+        frappe.set_user(PRODUCER)
+        results = [
+            r for r in global_search.search(marker) if r.get("doctype") == "Deal"
+        ]
+        self.assertTrue(
+            results,
+            "positive control failed: the deal should be findable by title",
+        )
+        for row in results:
+            self.assertNotIn(
+                "41.77",
+                row.get("content") or "",
+                "PERMISSION LEAK: commission value found in global search content",
+            )
+
     def test_producer_save_cannot_change_commission(self):
         deal = make_breakdown_deal(commission_pct=7)
         frappe.set_user(PRODUCER)

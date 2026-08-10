@@ -7,12 +7,16 @@ from auraos.auraos.doctype.deal.deal import (
     OPERATING_ROLES,
     floor_breached,
     margin_floor_pct,
-    quote_margin_pct,
+    quote_margin_fraction,
     rate,
     to_engine_lines,
 )
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
+
+# The company's standing commission practice (spec #2, story 14); the
+# Deal field carries the same default.
+DEFAULT_COMMISSION_PCT = 5
 
 
 @frappe.whitelist()
@@ -75,7 +79,7 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     package_rows = frappe.parse_json(packages) if packages else []
 
     if not _is_founder() or commission_pct is None:
-        commission_pct = 5
+        commission_pct = DEFAULT_COMMISSION_PCT
 
     params = pricing.DealParams(
         quote_mf_rate=rate(quote_mf_pct),
@@ -89,7 +93,7 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
         if row.get("package"):
             budgets.setdefault(row["package"], []).append(line.budget)
 
-    pct = quote_margin_pct(result)
+    pct = quote_margin_fraction(result)
     out = {
         "lines": [
             {
