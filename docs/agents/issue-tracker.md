@@ -13,7 +13,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
-The repo lives at `github.com/nosuper/10082026-OS` (private); `gh` commands work from any clone. On this Windows machine `gh` is not on PATH — invoke it as `& "C:\Program Files\GitHub CLI\gh.exe"`.
+The repo lives at `github.com/nosuper/10082026-OS` (private); `gh` commands work from any clone. Development runs on the Proxmox box (see `docs/adr/0001-development-moves-onto-the-proxmox-box.md`), where `gh` is installed from the official apt repo and on PATH — invoke it as `gh`.
 
 ## Pull requests as a triage surface
 
