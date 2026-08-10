@@ -134,6 +134,11 @@
       </span>
     </div>
 
+    <!-- Beside the buttons, not at the foot of the panel: with the
+         invoice request open, a message down there is off the bottom of
+         what the founder is looking at. -->
+    <ErrorMessage class="mt-2" :message="error" />
+
     <!-- The invoice request: copied by the button above, shown here so
          the founder can read what they are about to paste. -->
     <div v-if="invoiceText" class="mt-3 rounded-md border bg-gray-50 p-3">
@@ -160,8 +165,6 @@
         <em>Requested</em> once you have actually sent it.
       </p>
     </div>
-
-    <ErrorMessage class="mt-2" :message="error" />
   </div>
 </template>
 
