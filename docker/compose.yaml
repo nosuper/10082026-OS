@@ -39,10 +39,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    # Ports are per-stack so several previews can run at once;
+    # scripts/preview.sh derives them from the ticket name and the
+    # defaults keep a bare `docker compose up` working as before.
     ports:
-      - "8000:8000" # bench web
-      - "9000:9000" # socketio
-      - "8080:8080" # vite dev server (npm run dev in frontend/)
+      - "${AURA_WEB_PORT:-8000}:8000" # bench web
+      - "${AURA_SOCKET_PORT:-9000}:9000" # socketio
+      - "${AURA_VITE_PORT:-8080}:8080" # vite dev server (npm run dev in frontend/)
     volumes:
       - ..:/workspace/repo
       # Mounted at the home dir, not the bench dir: bench init refuses
