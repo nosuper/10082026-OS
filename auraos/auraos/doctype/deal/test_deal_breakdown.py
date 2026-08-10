@@ -356,7 +356,14 @@ class TestDealBreakdown(FrappeTestCase):
         # Behavioral counterpart to the meta assertion, in the spike-note
         # pattern: index a deal with a distinctive title and an unusual
         # commission, then check what the search content actually holds.
+        from frappe.desk.doctype.global_search_settings.global_search_settings import (
+            update_global_search_doctypes,
+        )
         from frappe.utils import global_search
+
+        # Register hook-declared doctypes in Global Search Settings —
+        # normally done by migrate, which CI's fresh site never runs.
+        update_global_search_doctypes()
 
         marker = "hoahongbimat8823"
         make_breakdown_deal(title=f"Deal {marker}", commission_pct=41.77)
