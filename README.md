@@ -80,8 +80,8 @@ the site volumes and browser authentication state when it finishes. Downloaded
 npm packages are retained in `.e2e-npm-cache/` to speed up repeat runs. A failed
 run leaves screenshots, traces and the HTML report under `frontend/test-results/`
 and `frontend/playwright-report/`. Password entry and authentication state files
-are not recorded in or uploaded with those artifacts; any session identifiers in
-the network trace belong to the destroyed disposable site and cannot be reused.
+are not recorded in or uploaded with those artifacts. Traces keep the action
+timeline but disable network/DOM snapshots so session headers are not captured.
 
 CI (`.github/workflows/ci.yml`) runs all three harnesses plus the frontend
 build on every push.

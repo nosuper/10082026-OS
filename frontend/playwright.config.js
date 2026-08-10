@@ -16,7 +16,9 @@ export default defineConfig({
   use: {
     baseURL,
     storageState: ".playwright-auth/administrator.json",
-    trace: "retain-on-failure",
+    // Keep action timelines and screenshots without recording authenticated
+    // request headers in network/DOM snapshots uploaded by CI.
+    trace: { mode: "retain-on-failure", snapshots: false },
     screenshot: "only-on-failure",
     video: "off",
   },
