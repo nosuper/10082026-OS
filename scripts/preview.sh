@@ -106,14 +106,14 @@ up() {
 
     if [ ! -d "$wt" ]; then
         mkdir -p "$WORKTREES"
-        git -C "$REPO" fetch --all --quiet
-        # Track an existing branch where there is one; otherwise start
-        # the ticket's branch from origin/main.
-        if git -C "$REPO" rev-parse --verify --quiet "origin/$branch" >/dev/null; then
-            git -C "$REPO" worktree add "$wt" "$branch" --guess-remote
-        else
-            git -C "$REPO" worktree add -b "$branch" "$wt" origin/main
-        fi
+        # A full clone, not a git worktree: `bench get-app` inside the
+        # container runs `git clone /workspace/repo`, and a linked
+        # worktree's .git is a *file* pointing at the parent repo's
+        # object store — which isn't mounted in there, so the clone
+        # fails. A standalone clone carries its own objects.
+        local url; url="$(git -C "$REPO" remote get-url origin)"
+        git clone --quiet --branch "$branch" "$url" "$wt" \
+            || die "no branch $branch on origin — push it first"
     fi
 
     echo "booting $ticket on :$(( 8000 + n )) (first boot takes a few minutes)"
@@ -141,14 +141,23 @@ up() {
 # only thing that knows what data makes it visible, so it ships its seed
 # in the same commit. Branches without one simply start empty.
 seed() {
-    local ticket=${1:-}
+    local ticket=${1:-} out
     [ -n "$ticket" ] || die "usage: $0 seed <ticket>"
-    if compose "$ticket" exec -T frappe bash -lc \
-        "cd /home/frappe/frappe-bench && bench --site $SITE execute auraos.setup.seed.run" \
-        >/dev/null 2>&1; then
+    # Piped into `console`, not `bench execute`: execute evals the dotted
+    # path against its own module globals, where `auraos` is not a name.
+    out="$(compose "$ticket" exec -T frappe bash -lc \
+        "cd /home/frappe/frappe-bench && echo 'from auraos.setup.seed import run; run()' \
+         | bench --site $SITE console" 2>&1 || true)"
+
+    if grep -q "seed complete" <<<"$out"; then
         echo "seeded"
+    elif grep -qE "No module named .auraos.setup.seed|ModuleNotFoundError" <<<"$out"; then
+        echo "no seed on this branch — starting empty"
     else
-        echo "no seed on this branch (auraos/setup/seed.py absent) — starting empty"
+        # Never swallow a real failure into "no seed": an empty preview
+        # you cannot explain is worse than a loud error.
+        echo "seed FAILED:"
+        printf '%s\n' "$out" | tail -15
     fi
 }
 
@@ -157,7 +166,7 @@ down() {
     [ -n "$ticket" ] || die "usage: $0 down <ticket>"
     compose "$ticket" down -v --remove-orphans >/dev/null 2>&1 || true
     rm -f "$(stamp_file "$ticket")"
-    git -C "$REPO" worktree remove --force "$(worktree "$ticket")" 2>/dev/null || true
+    rm -rf "$(worktree "$ticket")"
     echo "$ticket is gone"
 }
 
