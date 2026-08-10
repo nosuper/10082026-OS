@@ -14,15 +14,18 @@
       </span>
     </div>
 
-    <table v-if="rows.length" class="w-full text-sm">
+    <!-- Fixed columns: the collection control carries the longest text
+         on the row ("Not requested — chưa yêu cầu") and an auto layout
+         gave the width to the amounts, clipping it mid-word. -->
+    <table v-if="rows.length" class="w-full table-fixed text-sm">
       <thead class="text-left text-xs text-gray-600">
         <tr>
-          <th class="py-1 font-medium">Milestone</th>
-          <th class="py-1 font-medium">% of quote</th>
-          <th class="py-1 font-medium">Trigger stage</th>
-          <th class="py-1 text-right font-medium">Amount (VND)</th>
+          <th class="w-1/6 py-1 font-medium">Milestone</th>
+          <th class="w-16 py-1 font-medium">% of quote</th>
+          <th class="w-1/6 py-1 font-medium">Trigger stage</th>
+          <th class="w-1/6 py-1 text-right font-medium">Amount (VND)</th>
           <th class="py-1 font-medium">Collection</th>
-          <th></th>
+          <th class="w-28"></th>
         </tr>
       </thead>
       <tbody>
@@ -60,11 +63,14 @@
           </td>
           <td class="py-1 pr-2 text-right tabular-nums text-gray-800">
             {{ vnd(row.amount) }}
-            <div v-if="row.overdue" class="text-xs text-red-700">
+            <div v-if="row.overdue" class="whitespace-nowrap text-xs text-red-700">
               {{ row.days_overdue }} day{{ row.days_overdue === 1 ? "" : "s" }}
               overdue
             </div>
-            <div v-else-if="row.due_on" class="text-xs text-gray-500">
+            <div
+              v-else-if="row.due_on"
+              class="whitespace-nowrap text-xs text-gray-500"
+            >
               due since {{ row.due_on.slice(0, 10) }}
             </div>
             <div v-else class="text-xs text-gray-400">not due yet</div>
