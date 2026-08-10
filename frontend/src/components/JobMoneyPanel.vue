@@ -10,7 +10,7 @@
           {{ vnd(money.data?.advanced_total || 0) }} advanced
         </span>
         <router-link
-          :to="`/jobs/${name}/spend`"
+          :to="`/jobs/${name}/expense`"
           class="ml-auto text-sm font-medium text-blue-700 hover:underline"
         >
           Log expense on phone →
@@ -23,7 +23,7 @@
             <th class="py-1 font-medium">Holding</th>
             <th class="py-1 text-right font-medium">Advanced</th>
             <th class="py-1 text-right font-medium">Spent</th>
-            <th class="py-1 text-right font-medium">Balance</th>
+            <th class="py-1 text-right font-medium">Float</th>
             <th class="py-1 pl-3 font-medium">Settle</th>
           </tr>
         </thead>
@@ -37,10 +37,10 @@
               {{ vnd(held.spent) }}
             </td>
             <td class="py-1.5 pr-2 text-right font-medium tabular-nums">
-              {{ vnd(Math.abs(held.outstanding)) }}
+              {{ vnd(Math.abs(held.amount)) }}
             </td>
             <td class="py-1.5 pl-3">
-              <span v-if="held.direction === 'Even'" class="text-xs text-gray-400">
+              <span v-if="held.direction === EVEN" class="text-xs text-gray-400">
                 Settled
               </span>
               <template v-else-if="confirming === held.holder">
@@ -149,7 +149,7 @@
             <td class="py-1 pr-2 whitespace-nowrap text-gray-500">
               {{ row.paid_by }}
               <span
-                v-if="row.paid_from === 'Company'"
+                v-if="row.paid_from === FROM_COMPANY"
                 class="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600"
                 title="Paid by the company directly — settles no float"
               >
@@ -174,7 +174,11 @@
           class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
         >
           <option value="">Uncategorised</option>
-          <option v-for="title in categories" :key="title" :value="title">
+          <option
+            v-for="title in categories.data || []"
+            :key="title"
+            :value="title"
+          >
             {{ title }}
           </option>
         </select>
@@ -195,14 +199,16 @@
         <select
           v-model="expenseForm.paid_from"
           class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
-          title="Advance = out of the float that person holds"
+          :class="expenseForm.paid_from ? '' : 'border-amber-400'"
+          title="Whose money was it? An advance settles with the person holding it; the company's settles with nobody."
         >
-          <option value="Advance">from advance</option>
-          <option value="Company">company paid</option>
+          <option value="">whose money?</option>
+          <option :value="FROM_ADVANCE">from advance</option>
+          <option :value="FROM_COMPANY">company paid</option>
         </select>
         <Button
           variant="solid"
-          :disabled="!parseVnd(expenseForm.amount)"
+          :disabled="!parseVnd(expenseForm.amount) || !expenseForm.paid_from"
           :loading="expense.loading"
           @click="logExpense"
         >
@@ -261,6 +267,7 @@ import { computed, reactive, ref } from "vue"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { parseVnd, vnd } from "../utils/money"
+import { EVEN, FROM_ADVANCE, FROM_COMPANY, RETURN } from "../data/money"
 
 const props = defineProps({ name: { type: String, required: true } })
 
@@ -281,18 +288,20 @@ const users = createResource({ url: "auraos.api.operating_users", auto: true })
 
 const floats = computed(() => money.data?.floats || [])
 const expenses = computed(() => money.data?.expenses || [])
-// The quote's own entries, straight off the actual-vs-quoted rows —
-// minus the bucket that only exists once something lands outside them.
-const categories = computed(() =>
-  (money.data?.categories || [])
-    .map((row) => row.title)
-    .filter((title) => title !== "Uncategorised")
-)
+
+// The one endpoint that answers what an expense may be categorised as,
+// shared with the phone screen — the actual-vs-quoted rows carry the
+// same titles, but also the row for anything that landed outside them.
+const categories = createResource({
+  url: "auraos.api.job_expense_categories",
+  makeParams: () => ({ job: props.name }),
+  auto: true,
+})
 
 function settleWording(held) {
-  return held.direction === "Return"
-    ? `${held.holder} returns ${vnd(held.outstanding)}`
-    : `Pay ${held.holder} ${vnd(-held.outstanding)}`
+  return held.direction === RETURN
+    ? `${held.holder} returns ${vnd(held.amount)}`
+    : `Pay ${held.holder} ${vnd(-held.amount)}`
 }
 
 function reload() {
@@ -329,12 +338,15 @@ function recordAdvance() {
 
 // -- expenses --
 
+// paid_from is deliberately unset: it is the one field that decides who
+// owes whom afterwards, and a founder logging a company transfer with
+// somebody else's default would open a float in his own name.
 const expenseForm = reactive({
   amount: "",
   category: "",
   description: "",
   paid_by: "",
-  paid_from: "Advance",
+  paid_from: "",
 })
 
 const expense = createResource({
@@ -365,7 +377,7 @@ const settle = createResource({
   onSuccess(result) {
     confirming.value = null
     settled.value =
-      result.direction === "Return"
+      result.direction === RETURN
         ? `${result.recipient} returned ${vnd(result.amount)} — float closed.`
         : `Paid ${result.recipient} ${vnd(-result.amount)} — float closed.`
     reload()

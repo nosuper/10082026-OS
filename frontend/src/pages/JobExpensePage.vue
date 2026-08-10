@@ -16,7 +16,7 @@
       {{ floatWording }}
     </p>
     <p v-else class="mt-0.5 text-sm text-gray-500">
-      No advance on this job yet — logged spend comes back to you.
+      No advance on this job yet — what you log comes back to you.
     </p>
 
     <label class="mt-4 block text-xs font-medium text-gray-600">Amount</label>
@@ -168,13 +168,13 @@ const currentUser = decodeURIComponent(
 
 const floatWording = computed(() => {
   if (!held.value) return ""
-  return held.value.outstanding >= 0
-    ? `${vnd(held.value.outstanding)} ₫ left of your advance`
-    : `${vnd(-held.value.outstanding)} ₫ of your own money, so far`
+  return held.value.amount >= 0
+    ? `${vnd(held.value.amount)} ₫ left of your advance`
+    : `${vnd(-held.value.amount)} ₫ of your own money, so far`
 })
 
 const floatClass = computed(() =>
-  held.value?.outstanding >= 0 ? "text-gray-600" : "text-amber-700"
+  held.value?.amount >= 0 ? "text-gray-600" : "text-amber-700"
 )
 
 const expense = createResource({

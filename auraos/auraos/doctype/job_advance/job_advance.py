@@ -26,8 +26,8 @@ class JobAdvance(Document):
         """Only the two operating roles can hold a float.
 
         A float is money the company is still owed; pointing one at a
-        user who does not work here would leave a balance nobody is
-        ever going to settle.
+        user who does not work here would open a float nobody is ever
+        going to settle.
         """
         if not holds_operating_role(self.recipient):
             frappe.throw(

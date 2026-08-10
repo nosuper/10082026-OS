@@ -27,9 +27,9 @@ const routes = [
   {
     // The phone screen: one thing, big enough to hit while holding a
     // receipt in the other hand.
-    path: "/jobs/:name/spend",
-    name: "JobSpend",
-    component: () => import("./pages/JobSpendPage.vue"),
+    path: "/jobs/:name/expense",
+    name: "JobExpense",
+    component: () => import("./pages/JobExpensePage.vue"),
   },
   {
     path: "/contacts",

@@ -524,7 +524,7 @@ def _float_dict(held):
         "advanced": round_vnd(held.advanced),
         "spent": round_vnd(held.spent),
         "settled": round_vnd(held.settled),
-        "outstanding": round_vnd(held.outstanding),
+        "amount": round_vnd(held.amount),
         "direction": held.direction,
     }
 
@@ -542,6 +542,7 @@ def job_money(job):
     advances, expenses, settlements = _money_rows(job)
 
     categories = settlement.category_actuals(doc.packages, doc.cost_lines, expenses)
+    sums = settlement.totals(advances, expenses, categories)
     return {
         "advances": advances,
         "expenses": expenses,
@@ -559,9 +560,9 @@ def job_money(job):
             }
             for row in categories
         ],
-        "advanced_total": round_vnd(sum(row.amount or 0 for row in advances)),
-        "spent_total": round_vnd(sum(row.amount or 0 for row in expenses)),
-        "quoted_total": round_vnd(sum(row.quoted for row in categories)),
+        "advanced_total": round_vnd(sums.advanced),
+        "spent_total": round_vnd(sums.spent),
+        "quoted_total": round_vnd(sums.quoted),
         # What this session may do with money, asked of the permissions
         # themselves rather than of the role — the screen hides what the
         # server would refuse anyway.
@@ -678,31 +679,20 @@ def _attach_photo(expense, file_url):
 
 
 def _holder_float(job, holder):
-    """One person's float on a job, or an empty one if they hold none."""
-    advances, expenses, settlements = _money_rows(job)
-    for held in settlement.floats(advances, expenses, settlements):
-        if held.holder == holder:
-            return _float_dict(held)
-    return {
-        "holder": holder,
-        "advanced": 0,
-        "spent": 0,
-        "settled": 0,
-        "outstanding": 0,
-        "direction": settlement.EVEN,
-    }
+    """One person's float on a job, as the screens want to read it."""
+    return _float_dict(settlement.float_for(holder, *_money_rows(job)))
 
 
 @frappe.whitelist()
 def settle_job(job, holder, note=None):
     """Close one person's float: the one click of story 34.
 
-    The settlement is the transfer, recorded — so the running balance
-    goes to zero and a job that carries on spending starts a fresh one.
+    The settlement is the transfer, recorded — so the float goes to zero
+    and a job that carries on paying for things opens a fresh one.
     """
     _check_job_permission(job, "write")
-    balance = _holder_float(job, holder)
-    if not balance["outstanding"]:
+    held = _holder_float(job, holder)
+    if not held["amount"]:
         frappe.throw(
             _("{0}'s float on {1} is already even").format(holder, job),
             frappe.ValidationError,
@@ -712,9 +702,9 @@ def settle_job(job, holder, note=None):
             "doctype": "Job Settlement",
             "job": job,
             "recipient": holder,
-            "amount": balance["outstanding"],
-            "advanced": balance["advanced"],
-            "spent": balance["spent"],
+            "amount": held["amount"],
+            "advanced": held["advanced"],
+            "spent": held["spent"],
             "note": note,
         }
     ).insert()

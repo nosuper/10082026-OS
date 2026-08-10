@@ -94,7 +94,7 @@ class TestJobAdvances(MoneyTestCase):
 
         held = float_of(self.job, PRODUCER)
         self.assertEqual(held["advanced"], 20_000_000)
-        self.assertEqual(held["outstanding"], 20_000_000)
+        self.assertEqual(held["amount"], 20_000_000)
         self.assertEqual(held["direction"], RETURN)
 
     def test_advances_to_the_same_person_add_up(self):
@@ -108,7 +108,7 @@ class TestJobAdvances(MoneyTestCase):
             record_job_advance(self.job, PRODUCER, 0)
 
     def test_an_advance_only_goes_to_someone_who_works_here(self):
-        """A float pointed at an outsider is a balance nobody settles."""
+        """A float pointed at an outsider is one nobody ever settles."""
         with self.assertRaises(frappe.ValidationError):
             record_job_advance(self.job, OUTSIDER, 1_000_000)
 
@@ -126,7 +126,7 @@ class TestJobAdvances(MoneyTestCase):
         record_job_advance(self.job, PRODUCER, 20_000_000)
 
         frappe.set_user(PRODUCER)
-        self.assertEqual(float_of(self.job, PRODUCER)["outstanding"], 20_000_000)
+        self.assertEqual(float_of(self.job, PRODUCER)["amount"], 20_000_000)
 
     def test_an_outsider_reads_no_money_at_all(self):
         frappe.set_user(OUTSIDER)
@@ -153,7 +153,7 @@ class TestQuickExpenseEntry(MoneyTestCase):
         frappe.set_user(PRODUCER)
         logged = log_job_expense(self.job, 12_000_000, category="Thiết bị")
 
-        self.assertEqual(logged["float"]["outstanding"], 8_000_000)
+        self.assertEqual(logged["float"]["amount"], 8_000_000)
         self.assertEqual(logged["float"]["direction"], RETURN)
 
     def test_an_expense_needs_an_amount(self):
@@ -248,9 +248,9 @@ class TestExpensePhotos(MoneyTestCase):
 
 
 class TestDirectPayments(MoneyTestCase):
-    def test_a_direct_payment_is_job_spend_that_settles_no_float(self):
+    def test_a_direct_payment_is_money_out_that_settles_no_float(self):
         """Story 33: the founder's own vendor payments belong in the
-        job's money-out, but they are not Linh's to hand back."""
+        job's money out, but they are not Linh's to hand back."""
         record_job_advance(self.job, PRODUCER, 20_000_000)
         frappe.set_user(PRODUCER)
         log_job_expense(self.job, 5_000_000, category="Nhân sự")
@@ -260,7 +260,7 @@ class TestDirectPayments(MoneyTestCase):
                         paid_from="Company")
 
         self.assertEqual(job_money(self.job)["spent_total"], 53_000_000)
-        self.assertEqual(float_of(self.job, PRODUCER)["outstanding"], 15_000_000)
+        self.assertEqual(float_of(self.job, PRODUCER)["amount"], 15_000_000)
         self.assertIsNone(float_of(self.job, FOUNDER))
 
     def test_a_direct_payment_still_counts_against_its_package(self):
@@ -280,6 +280,17 @@ class TestCategoriesMirrorTheQuote(MoneyTestCase):
         self.assertIn(job.cost_lines[0].description, [row.description for row in job.cost_lines])
         self.assertNotIn(job.cost_lines[0].description, job_expense_categories(self.job))
 
+    def test_the_categories_cannot_drift_away_from_the_expenses_on_them(self):
+        """Renaming a package would silently reclassify every expense
+        already logged against it. T7 froze the carried snapshot, which
+        is what stops that — pinned here because this ticket is what
+        made it matter."""
+        job = frappe.get_doc("Job", self.job)
+        job.packages[0].title = "Crew"
+
+        with self.assertRaises(frappe.ValidationError):
+            job.save()
+
     def test_every_category_appears_before_anything_is_spent(self):
         """An untouched package is the interesting one during a shoot."""
         rows = job_money(self.job)["categories"]
@@ -288,12 +299,20 @@ class TestCategoriesMirrorTheQuote(MoneyTestCase):
         self.assertTrue(all(row["actual"] == 0 for row in rows))
         self.assertTrue(all(row["quoted"] > 0 for row in rows))
 
-    def test_a_packages_budget_is_the_cash_its_lines_were_expected_to_need(self):
+    def test_a_packages_quoted_cost_is_what_its_lines_will_hand_over(self):
+        """Cost after the vendor management fee plus VAT on an invoice —
+        not the profit cost basis, which for the freelancer line is
+        grossed up by PIT nobody pays on a shoot."""
         job = frappe.get_doc("Job", self.job)
         members = [row for row in job.cost_lines if row.package == "Nhân sự"]
-        expected = sum(row.cost_basis + row.input_vat for row in members)
+        expected = sum(
+            row.subtotal * (1 + (row.vendor_mf_pct or 0) / 100) + row.input_vat
+            for row in members
+        )
 
-        self.assertEqual(category(self.job, "Nhân sự")["quoted"], round(expected))
+        quoted = category(self.job, "Nhân sự")["quoted"]
+        self.assertEqual(quoted, round(expected))
+        self.assertLess(quoted, sum(row.cost_basis for row in members))
 
     def test_spending_shows_up_against_the_package_it_was_quoted_in(self):
         log_job_expense(self.job, 4_000_000, category="Nhân sự")
@@ -337,7 +356,7 @@ class TestSettlement(MoneyTestCase):
         settle_job(self.job, PRODUCER)
 
         held = float_of(self.job, PRODUCER)
-        self.assertEqual(held["outstanding"], 0)
+        self.assertEqual(held["amount"], 0)
         self.assertEqual(held["direction"], EVEN)
         self.assertEqual(held["settled"], 2_500_000)
 
@@ -375,7 +394,7 @@ class TestSettlement(MoneyTestCase):
         log_job_expense(self.job, 1_000_000, category="Thiết bị")
 
         held = float_of(self.job, PRODUCER)
-        self.assertEqual(held["outstanding"], 5_000_000)
+        self.assertEqual(held["amount"], 5_000_000)
         self.assertEqual(held["direction"], RETURN)
 
     def test_settling_is_the_founders_move(self):
@@ -415,4 +434,4 @@ class TestSettlement(MoneyTestCase):
         settle_job(self.job, PRODUCER)
 
         self.assertEqual(float_of(self.job, PRODUCER)["direction"], EVEN)
-        self.assertEqual(float_of(self.job, FOUNDER)["outstanding"], -3_000_000)
+        self.assertEqual(float_of(self.job, FOUNDER)["amount"], -3_000_000)

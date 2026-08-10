@@ -28,7 +28,9 @@ from auraos.lib.settlement import (
     UNCATEGORISED,
     categories,
     category_actuals,
+    float_for,
     floats,
+    totals,
 )
 
 LINH = "linh@aura.local"
@@ -65,7 +67,7 @@ def test_an_advance_alone_is_cash_the_holder_still_owes_back():
     assert held.holder == LINH
     assert held.advanced == D(20_000_000)
     assert held.spent == D(0)
-    assert held.outstanding == D(20_000_000)
+    assert held.amount == D(20_000_000)
     assert held.direction == RETURN
 
 
@@ -76,14 +78,14 @@ def test_expenses_paid_from_the_float_eat_into_it():
     )
 
     assert held.spent == D(17_500_000)
-    assert held.outstanding == D(2_500_000)
+    assert held.amount == D(2_500_000)
     assert held.direction == RETURN
 
 
 def test_spending_the_float_exactly_settles_to_even():
     (held,) = floats([advance(20_000_000)], [expense(20_000_000)])
 
-    assert held.outstanding == D(0)
+    assert held.amount == D(0)
     assert held.direction == EVEN
 
 
@@ -91,7 +93,7 @@ def test_overspending_the_float_turns_the_debt_around():
     """Linh covered the difference herself — the company owes her."""
     (held,) = floats([advance(20_000_000)], [expense(23_000_000)])
 
-    assert held.outstanding == D(-3_000_000)
+    assert held.amount == D(-3_000_000)
     assert held.direction == TOP_UP
 
 
@@ -115,7 +117,7 @@ def test_money_the_company_paid_directly_settles_nothing():
         ],
     )
     assert held.spent == D(5_000_000)
-    assert held.outstanding == D(15_000_000)
+    assert held.amount == D(15_000_000)
 
 
 def test_each_holder_settles_their_own_float():
@@ -124,37 +126,37 @@ def test_each_holder_settles_their_own_float():
         [expense(17_500_000), expense(9_000_000, paid_by=CHUNG)],
     )
 
-    assert [(row.holder, row.outstanding, row.direction) for row in held] == [
+    assert [(row.holder, row.amount, row.direction) for row in held] == [
         (CHUNG, D(-3_000_000), TOP_UP),
         (LINH, D(2_500_000), RETURN),
     ]
 
 
-def test_settling_clears_the_balance():
+def test_settling_closes_the_float():
     args = ([advance(20_000_000)], [expense(17_500_000)])
-    assert floats(*args)[0].outstanding == D(2_500_000)
+    assert floats(*args)[0].amount == D(2_500_000)
 
     (held,) = floats(*args, [settlement(2_500_000)])
     assert held.settled == D(2_500_000)
-    assert held.outstanding == D(0)
+    assert held.amount == D(0)
     assert held.direction == EVEN
 
 
 def test_a_top_up_is_settled_by_paying_the_holder():
     (held,) = floats([], [expense(800_000)], [settlement(-800_000)])
 
-    assert held.outstanding == D(0)
+    assert held.amount == D(0)
     assert held.direction == EVEN
 
 
-def test_an_advance_after_a_settlement_starts_the_balance_again():
+def test_an_advance_after_a_settlement_opens_a_fresh_float():
     held = floats(
         [advance(20_000_000), advance(4_000_000)],
         [expense(17_500_000)],
         [settlement(2_500_000)],
     )
 
-    assert held[0].outstanding == D(4_000_000)
+    assert held[0].amount == D(4_000_000)
     assert held[0].direction == RETURN
 
 
@@ -162,7 +164,7 @@ def test_amounts_written_as_text_still_add_up():
     """Frappe hands currency over as strings often enough to pin it."""
     (held,) = floats([advance("20000000")], [expense("17500000.00")])
 
-    assert held.outstanding == D("2500000.00")
+    assert held.amount == D("2500000.00")
 
 
 # -- categories mirror what the client was quoted --
@@ -172,13 +174,18 @@ PACKAGES = [
     {"title": "Equipment"},
 ]
 
+# As the engine leaves them on a saved breakdown. Đạo diễn is a
+# freelancer (Cá nhân): the company hands over the 15.000.000 he quoted
+# and remits his PIT separately, so his cost basis — 16.666.667, net
+# ÷ 0.9 — is deliberately *not* what a shoot pays out.
 COST_LINES = [
     {"description": "Đạo diễn", "package": "Human resources",
-     "cost_basis": 16_666_667, "input_vat": 0},
+     "subtotal": 15_000_000, "cost_basis": 16_666_667, "input_vat": 0},
     {"description": "Thuê thiết bị", "package": "Equipment",
+     "subtotal": 24_000_000, "vendor_mf_pct": 5,
      "cost_basis": 25_200_000, "input_vat": 2_016_000},
     {"description": "Flycam", "package": None,
-     "cost_basis": 6_000_000, "input_vat": 480_000},
+     "subtotal": 6_000_000, "cost_basis": 6_000_000, "input_vat": 480_000},
 ]
 
 
@@ -203,16 +210,26 @@ def test_two_lines_quoted_alone_under_one_name_are_one_category():
 
 
 def test_quoted_cost_is_the_cash_the_package_was_expected_to_need():
-    """Cost basis plus its input VAT — what actually leaves the bank,
-    not the price the client pays for it."""
+    """What somebody hands over — cost after the vendor management fee,
+    plus VAT on an invoice — not the price the client pays for it."""
     rows = {row.title: row for row in category_actuals(PACKAGES, COST_LINES, [])}
 
-    assert rows["Human resources"].quoted == D(16_666_667)
-    assert rows["Equipment"].quoted == D(27_216_000)
+    assert rows["Human resources"].quoted == D(15_000_000)
+    assert rows["Equipment"].quoted == D(24_000_000) * D("1.05") + D(2_016_000)
     assert rows["Flycam"].quoted == D(6_480_000)
 
 
-def test_with_nothing_spent_yet_every_package_is_under_by_its_budget():
+def test_a_freelancers_pit_is_not_money_the_shoot_pays_out():
+    """The company remits it later through its accountant, and nobody
+    logs it against the job — counting it would leave every crew-heavy
+    package reading under budget for good."""
+    (row,) = category_actuals([], COST_LINES[:1], [])
+
+    assert row.quoted == D(15_000_000)
+    assert row.quoted < D(COST_LINES[0]["cost_basis"])
+
+
+def test_with_nothing_spent_yet_every_package_is_under_by_its_quoted_cost():
     rows = category_actuals(PACKAGES, COST_LINES, [])
 
     assert all(row.actual == D(0) for row in rows)
@@ -237,7 +254,7 @@ def test_expenses_land_on_their_category_whoever_paid_them():
     assert rows["Human resources"].actual == D(0)
 
 
-def test_spending_over_the_package_budget_shows_as_a_positive_variance():
+def test_spending_over_the_quoted_cost_shows_as_a_positive_variance():
     rows = {
         row.title: row
         for row in category_actuals(
@@ -245,10 +262,11 @@ def test_spending_over_the_package_budget_shows_as_a_positive_variance():
         )
     }
 
-    assert rows["Equipment"].variance == D(30_000_000) - D(27_216_000)
+    assert rows["Equipment"].variance == D(30_000_000) - rows["Equipment"].quoted
+    assert rows["Equipment"].variance > 0
 
 
-def test_uncategorised_spend_is_shown_rather_than_lost():
+def test_an_expense_outside_every_category_is_shown_rather_than_lost():
     rows = category_actuals(
         PACKAGES, COST_LINES, [expense(500_000), expense(200_000, category="Phạt")]
     )
@@ -264,3 +282,39 @@ def test_there_is_no_uncategorised_row_when_everything_is_categorised():
     )
 
     assert [row.title for row in rows] == ["Human resources", "Equipment", "Flycam"]
+
+
+# -- the helpers the API is an adapter over --
+
+
+def test_a_float_is_readable_for_one_person_by_name():
+    held = float_for(LINH, [advance(20_000_000)], [expense(17_500_000)])
+
+    assert held.holder == LINH
+    assert held.amount == D(2_500_000)
+
+
+def test_someone_holding_nothing_still_gets_an_answer():
+    """The phone asks after every expense; "nothing of ours" is a
+    perfectly good reply."""
+    held = float_for(CHUNG, [advance(20_000_000)], [expense(1_000_000)])
+
+    assert held.holder == CHUNG
+    assert held.advanced == D(0)
+    assert held.amount == D(0)
+    assert held.direction == EVEN
+
+
+def test_the_job_totals_are_handed_out_paid_out_and_expected():
+    rows = category_actuals(PACKAGES, COST_LINES, [expense(5_000_000, category="Equipment")])
+    summary = totals(
+        [advance(20_000_000), advance(6_000_000, recipient=CHUNG)],
+        [expense(5_000_000, category="Equipment"),
+         expense(1_000_000, paid_from=FROM_COMPANY)],
+        rows,
+    )
+
+    assert summary.advanced == D(26_000_000)
+    # Both, whoever paid: the job's money out is the job's money out.
+    assert summary.spent == D(6_000_000)
+    assert summary.quoted == sum((row.quoted for row in rows), D(0))

@@ -13,14 +13,14 @@ shortfall themselves. Settling records the transfer that puts it back
 to zero, so the same job can be advanced, spent and settled again
 without the history being rewritten.
 
-Money the company paid directly is job spend that belongs to no float:
-it lands in actual-vs-quoted and changes nobody's balance.
+Money the company paid directly belongs to no float: it lands in
+actual-vs-quoted and moves nobody's float.
 
 **Categories mirror the quote.** An expense's category is one of the
 entries the client was quoted — a package, or a cost line quoted on its
 own — which is what makes actual-vs-quoted per package fall out with no
-extra work. The quoted side is measured in cash out (cost basis plus
-its input VAT: what leaves the bank), never the client-facing price.
+extra work. The quoted side is measured in what somebody on the job
+actually hands over, never the client-facing price.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ RETURN = "Return"  # the holder gives the remainder back
 TOP_UP = "Top-up"  # the company reimburses the holder
 EVEN = "Even"  # nothing to move
 
-# Where spend lands when it names no category the quote knows.
+# Where an expense lands when it names no category the quote knows.
 UNCATEGORISED = "Uncategorised"
 
 Row = Mapping[str, Any]
@@ -48,13 +48,17 @@ Row = Mapping[str, Any]
 
 @dataclass(frozen=True)
 class Float:
-    """One person's running balance of company cash on one job."""
+    """What one person is holding of the company's money on one job.
+
+    `amount` is the float itself — what they were advanced, less what
+    they have spent out of it, less what has already been settled.
+    """
 
     holder: str
     advanced: Decimal
     spent: Decimal
     settled: Decimal
-    outstanding: Decimal
+    amount: Decimal
     direction: str
 
 
@@ -83,16 +87,16 @@ def floats(
         _add(settled, row.get("recipient"), row.get("amount"))
 
     holders = set(advanced) | set(spent) | set(settled)
-    return [_float_for(holder, advanced, spent, settled) for holder in sorted(holders)]
+    return [_held_by(holder, advanced, spent, settled) for holder in sorted(holders)]
 
 
 def _add(totals: dict[str, Decimal], key: str, amount: Any) -> None:
     totals[key] = totals.get(key, Decimal(0)) + _d(amount or 0)
 
 
-def _float_for(holder, advanced, spent, settled) -> Float:
+def _held_by(holder, advanced, spent, settled) -> Float:
     zero = Decimal(0)
-    outstanding = (
+    amount = (
         advanced.get(holder, zero)
         - spent.get(holder, zero)
         - settled.get(holder, zero)
@@ -102,14 +106,40 @@ def _float_for(holder, advanced, spent, settled) -> Float:
         advanced=advanced.get(holder, zero),
         spent=spent.get(holder, zero),
         settled=settled.get(holder, zero),
-        outstanding=outstanding,
-        direction=direction_of(outstanding),
+        amount=amount,
+        direction=direction_of(amount),
     )
 
 
-def direction_of(outstanding: Any) -> str:
-    """Which way the remainder has to move to close the float."""
-    amount = _d(outstanding)
+def float_for(
+    holder: str,
+    advances: Iterable[Row],
+    expenses: Iterable[Row],
+    settlements: Iterable[Row] = (),
+) -> Float:
+    """One person's float, whether or not they are holding anything.
+
+    An empty float is a real answer — "you have nothing of ours" — and
+    the screen that asks after every logged expense needs it as often as
+    it needs a full one.
+    """
+    for held in floats(advances, expenses, settlements):
+        if held.holder == holder:
+            return held
+    zero = Decimal(0)
+    return Float(
+        holder=holder,
+        advanced=zero,
+        spent=zero,
+        settled=zero,
+        amount=zero,
+        direction=EVEN,
+    )
+
+
+def direction_of(amount: Any) -> str:
+    """Which way a float has to move to close."""
+    amount = _d(amount)
     if amount > 0:
         return RETURN
     if amount < 0:
@@ -119,12 +149,12 @@ def direction_of(outstanding: Any) -> str:
 
 @dataclass(frozen=True)
 class CategoryActual:
-    """What one quoted entry was budgeted to cost, and what it has cost."""
+    """What one quoted entry was expected to cost, and what it has cost."""
 
     title: str
     quoted: Decimal
     actual: Decimal
-    variance: Decimal  # actual − quoted; positive is over budget
+    variance: Decimal  # actual − quoted; positive is over the quoted cost
 
 
 def categories(packages: Iterable[Row], cost_lines: Iterable[Row]) -> list[str]:
@@ -146,9 +176,9 @@ def category_actuals(
     """Quoted cash-out against money actually spent, per category.
 
     Every category appears whether or not anything has been spent on it
-    — an untouched package is the interesting one during a shoot. Spend
-    naming no known category is gathered into one trailing row rather
-    than quietly dropped.
+    — an untouched package is the interesting one during a shoot. An
+    expense naming no known category is gathered into one trailing row
+    rather than quietly dropped.
     """
     quoted = _quoted_costs(packages, cost_lines)
 
@@ -175,10 +205,17 @@ def _actual_row(title, quoted, actual) -> CategoryActual:
 def _quoted_costs(packages, cost_lines) -> dict[str, Decimal]:
     """Cash out expected per category, keyed in quote order.
 
-    A package's budget is its member lines'; a line in no package
-    carries its own. Cost basis plus input VAT is what the bank actually
-    pays out — the VAT on a vendor's invoice is real money out, even
-    though it comes back on the next return.
+    A package's quoted cost is its member lines'; a line in no package
+    carries its own.
+
+    Per line that is the cost after the vendor management fee, plus the
+    VAT on an invoice-bearing one — money somebody on the job hands
+    over, which is the same kind of money an expense records. It is
+    deliberately *not* the line's profit cost basis: for a freelancer
+    that basis is grossed up by the PIT the company remits later
+    through its accountant, which nobody logs against a shoot. Comparing
+    against it would leave every crew-heavy package reading ~10% under
+    for good.
     """
     costs: dict[str, Decimal] = {
         (package.get("title") or ""): Decimal(0) for package in packages
@@ -186,5 +223,38 @@ def _quoted_costs(packages, cost_lines) -> dict[str, Decimal]:
     for line in cost_lines:
         title = line.get("package") or line.get("description") or ""
         costs.setdefault(title, Decimal(0))
-        costs[title] += _d(line.get("cost_basis") or 0) + _d(line.get("input_vat") or 0)
+        costs[title] += _handed_over(line)
     return costs
+
+
+def _handed_over(line: Row) -> Decimal:
+    """What one cost line is expected to cost in cash paid out."""
+    vendor_mf_rate = _d(line.get("vendor_mf_pct") or 0) / 100
+    after_vendor_mf = _d(line.get("subtotal") or 0) * (1 + vendor_mf_rate)
+    return after_vendor_mf + _d(line.get("input_vat") or 0)
+
+
+@dataclass(frozen=True)
+class Totals:
+    """A job's money out at a glance."""
+
+    advanced: Decimal
+    spent: Decimal
+    quoted: Decimal
+
+
+def totals(
+    advances: Iterable[Row],
+    expenses: Iterable[Row],
+    categories: Iterable[CategoryActual],
+) -> Totals:
+    """What the job has handed out, paid out, and expected to pay out."""
+    return Totals(
+        advanced=_total(row.get("amount") for row in advances),
+        spent=_total(row.get("amount") for row in expenses),
+        quoted=sum((row.quoted for row in categories), Decimal(0)),
+    )
+
+
+def _total(amounts) -> Decimal:
+    return sum((_d(amount or 0) for amount in amounts), Decimal(0))

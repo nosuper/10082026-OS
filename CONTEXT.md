@@ -90,15 +90,15 @@ The quote entry an expense belongs to: a package, or a cost line the deal quoted
 _Avoid_: type, bucket, tag, cost centre
 
 **Direct payment**:
-An expense the company paid the vendor itself rather than out of anyone's float. It counts against the job's money out and settles nobody's balance.
+An expense the company paid the vendor itself rather than out of anyone's float. It counts against the job's money out and settles nobody's float.
 _Avoid_: company expense, big item, direct cost
 
 **Settlement**:
-The transfer that closes a float, recorded with the direction it moved: the holder returns what is left, or the company tops them up. A job carries on spending afterwards on a fresh float.
+The transfer that closes a float, recorded with the direction it moved: the holder returns what is left, or the company tops them up. A job carries on paying for things afterwards, on a fresh float.
 _Avoid_: reconciliation, payout, clearing, closing
 
 **Quoted cost**:
-What a category was expected to pay out in cash — its lines' profit cost basis plus their input VAT. The number actual spend is compared against, never the price the client is charged for it.
+What a category was expected to pay out in cash — each line's cost after the vendor management fee, plus the VAT on an invoice-bearing one. What an expense is compared against, never the price the client is charged for it, and never the profit cost basis, which is grossed up by a freelancer's PIT that no shoot ever hands over.
 _Avoid_: budget, estimate, quoted price, allocation
 
 ## Environments

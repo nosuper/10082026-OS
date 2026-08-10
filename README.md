@@ -109,16 +109,20 @@ hands; every expense they pay *from that advance* hands part of it back
 as receipts. What is left is their **float**, and settling records the
 transfer that closes it — the holder returns the remainder, or the
 company tops them up. An expense the company paid the vendor itself is
-job spend that moves nobody's float, which is why `paid_from` exists.
-Settling does not end anything: the next advance starts a fresh float on
+money out that moves nobody's float, which is why `paid_from` exists and
+why nothing defaults it on the founder's form.
+Settling does not end anything: the next advance opens a fresh float on
 the same job.
 
 **What it was spent against.** An expense's category is one of the
 entries the client was quoted — a package, or a cost line quoted on its
 own — so actual-vs-quoted per package needs no bookkeeping of its own.
-The quoted side is measured in *cash out* (a line's profit cost basis
-plus its input VAT), not in the price the client pays, so both columns
-of that table are the same kind of money.
+The quoted side is measured in what somebody actually hands over — a
+line's cost after the vendor management fee, plus VAT on an invoice —
+not the price the client pays, so both columns of that table are the
+same kind of money. A freelancer's PIT is deliberately left out: the
+company remits it later through its accountant, and nobody logs it
+against a shoot.
 
 Both rules live framework-free in `auraos/lib/settlement.py` and are
 pinned by `tests/test_settlement.py`; the doctypes and API are adapters.

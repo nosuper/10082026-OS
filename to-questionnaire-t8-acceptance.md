@@ -10,7 +10,7 @@ T8 is the money-out half of a job. You hand Linh cash for a shoot (an **advance*
 
 The second one is free because an expense's **category** is one of the entries the client was quoted — a package, or a line quoted on its own. Nobody maintains a second list.
 
-Automation is green: 225/225 Frappe site tests on a fresh site (40 of them new for T8), 124 pure pytest (21 new), frontend build clean.
+Automation is green: 226/226 Frappe site tests on a fresh site (41 of them new for T8), 128 pure pytest (25 new), frontend build clean.
 
 What automation cannot judge: whether logging an expense on a phone is actually fast enough to happen during a shoot, whether "quoted cost" is the number you want spend compared against, and half a dozen permission calls I made that you may veto.
 
@@ -41,7 +41,7 @@ So the float standing open is **20.000.000 − 11.350.000 = 8.650.000 ₫**, and
 ### 1.1 Read the money panel
 
 **Do this:** open the job and scroll to **Money out**.
-**Expect:** one row saying you were advanced 20.000.000, have spent 11.350.000 out of it, balance 8.650.000, with the wording **"Administrator returns 8.650.000"** and a **Settle** button.
+**Expect:** one row saying you were advanced 20.000.000, have spent 11.350.000 out of it, float 8.650.000, with the wording **"Administrator returns 8.650.000"** and a **Settle** button.
 
 Pass / fail, and whether the wording tells you who pays whom:
 
@@ -50,7 +50,7 @@ Pass / fail, and whether the wording tells you who pays whom:
 ### 1.2 Record another advance
 
 **Do this:** in the **Advance** row at the bottom of that panel, pick a recipient, type `5000000`, click **Record**.
-**Expect:** advanced goes to 25.000.000 and the balance to 13.650.000.
+**Expect:** advanced goes to 25.000.000 and the float to 13.650.000.
 
 Pass / fail:
 
@@ -59,7 +59,7 @@ Pass / fail:
 ### 1.3 Log an expense from the job page
 
 **Do this:** in the **Expenses** panel, type an amount, pick a category, say what it was for, click **Log**.
-**Expect:** it appears in the ledger dated today, and the balance drops by exactly that amount.
+**Expect:** it appears in the ledger dated today, and the float drops by exactly that amount.
 
 Pass / fail:
 
@@ -68,7 +68,7 @@ Pass / fail:
 ### 1.4 Settle
 
 **Do this:** click **Settle**, then **Confirm**.
-**Expect:** a line telling you what was handed back, the balance now **0** and marked **Settled** — and the ledger above unchanged, because settling closes a float, it doesn't erase what it closed.
+**Expect:** a line telling you what was handed back, the float now **0** and marked **Settled** — and the ledger above unchanged, because settling closes a float, it doesn't erase what it closed.
 
 Pass / fail:
 
@@ -77,7 +77,7 @@ Pass / fail:
 ### 1.5 Carry on spending after settling
 
 **Do this:** log one more expense.
-**Expect:** the balance starts again from that expense — the job is not "closed" by a settlement, and the next advance opens a fresh float.
+**Expect:** the float starts again from that expense — the job is not "closed" by a settlement, and the next advance opens a fresh one.
 
 _Why this matters: a shoot that settles at the halfway point and carries on is normal; the alternative design would have made settlement final._
 
@@ -93,7 +93,7 @@ Pass / fail:
 
 ### 2.1 Open the quick-entry screen on your phone
 
-**Do this:** on your phone, go to **http://192.168.1.94:8008/aura/jobs/**`<job code>`**/spend** — or tap **Log expense on phone →** at the top of the money panel and send yourself the link.
+**Do this:** on your phone, go to **http://192.168.1.94:8008/aura/jobs/**`<job code>`**/expense** — or tap **Log expense on phone →** at the top of the money panel and send yourself the link.
 **Expect:** one screen — how much of your advance is left, a big amount box with the number keypad already up, the job's categories as tappable chips, an optional note, a receipt button and one big Log button.
 
 Pass / fail, and what it looks like on your actual phone:
@@ -141,9 +141,13 @@ Pass / fail:
 
 >
 
-### 3.2 The comparison is spend against **quoted cost** — what that category was expected to *pay out*, which for Equipment is 31.716.000: the vendor cost, the vendor management fee and the VAT on their invoice. It is **not** the price the client is charged for that package. Is that the comparison you want?
+### 3.2 The comparison is against **quoted cost** — what that category was expected to *pay out*, which for Equipment is 31.716.000: the vendor cost, the vendor management fee and the VAT on their invoice. It is **not** the price the client is charged for that package. Is that the comparison you want?
 
 _Why this matters: comparing cash out to a client price mixes two different kinds of money and makes every package look wildly profitable mid-shoot. The client-facing prices are still in the Packages panel above._
+
+>
+
+### 3.2a Human resources reads **36.000.000**, not the 40.000.000 the profit chain uses for the same lines. The difference is the **PIT on the freelancers** — the company remits it later through the accountant, and nobody hands it over on a shoot, so counting it would leave every crew-heavy package permanently reading "under budget". Right call, or do you want the freelancer PIT in this column?
 
 >
 
@@ -162,15 +166,15 @@ _Why this matters: locking the list is what makes actual-vs-quoted complete by c
 ### 4.1 Log one
 
 **Do this:** in the Expenses panel, log an amount with **company paid** selected.
-**Expect:** it joins the ledger with a **company** tag, counts in the money-out totals and in its category — and changes nobody's balance.
+**Expect:** it joins the ledger with a **company** tag, counts in the money-out totals and in its category — and changes nobody's float.
 
 Pass / fail:
 
 >
 
-### 4.2 The **Paid from** choice defaults to **from advance**. Should your own entries default to **company paid** instead?
+### 4.2 The job page's form makes you **pick** whose money it was — there is no default, and Log stays disabled until you choose. (The phone screen still assumes "from advance", because that is what somebody holding a float is doing.) Is being asked every time on this form right, or would you rather it defaulted and you corrected it?
 
-_Why this matters: it's the one field that changes who owes whom, and a wrong default is a wrong settlement._
+_Why this matters: it's the one field that changes who owes whom. Defaulting it to "from advance" meant a founder logging a bank transfer to a vendor quietly opened a float in his own name, and the screen then offered to pay him back 24 million he had never lent._
 
 >
 
@@ -184,7 +188,7 @@ _Why this matters: it's the one field that changes who owes whom, and a wrong de
 
 >
 
-### 5.2 **Only you can settle.** Linh sees the balance and the wording but has no Settle button. Right?
+### 5.2 **Only you can settle.** Linh sees the float and the wording but has no Settle button. Right?
 
 >
 
