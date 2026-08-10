@@ -308,6 +308,32 @@ def deal_quotes(deal):
 
 
 @frappe.whitelist()
+def deal_quote_links():
+    """Current quote link per deal, for the board — {deal: {...}}.
+
+    The board asks for the whole (small) mapping in one call, the way it
+    already does for tags: a card wants the link to hand out, and the
+    list API cannot build a URL from a token it never fetches.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    permitted = frappe.get_list("Deal", pluck="name", limit_page_length=0)
+    links = {}
+    for row in frappe.get_all(
+        "Deal Quote",
+        filters={"deal": ["in", permitted]},
+        fields=["deal", "name", "version", "status", "token"],
+        order_by="version asc",
+    ):
+        # Ascending order, so the last write per deal is the newest.
+        links[row.deal] = {
+            "version": row.version,
+            "status": row.status,
+            "url": deal_quote.page_url(row.token),
+        }
+    return links
+
+
+@frappe.whitelist()
 def quote_opens(quote):
     """Open events of one version, newest first (spec #2, story 22)."""
     deal = frappe.db.get_value("Deal Quote", quote, "deal")

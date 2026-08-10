@@ -81,11 +81,11 @@
           </span>
           <span class="ml-auto flex gap-1">
             <button
-              v-if="quote.status === 'Published'"
+              v-if="quote.status !== 'Sent'"
               class="rounded border px-1.5 py-0.5 hover:bg-gray-50"
               @click="mark(quote, 'sent')"
             >
-              Mark sent
+              {{ quote.status === "Confirmed" ? "Undo confirm" : "Mark sent" }}
             </button>
             <button
               v-if="quote.status !== 'Confirmed'"

@@ -74,6 +74,17 @@
               >
                 ⏰ Silent
               </span>
+              <a
+                v-if="quoteLinks[deal.name]"
+                :href="quoteLinks[deal.name].url"
+                target="_blank"
+                rel="noopener"
+                class="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
+                :title="`Open the client's quote page (v${quoteLinks[deal.name].version})`"
+                @click.stop
+              >
+                🔗 v{{ quoteLinks[deal.name].version }}
+              </a>
               <button
                 class="ml-auto rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
                 title="Breakdown & Quote"
@@ -252,6 +263,14 @@ const silentDeals = computed(() => {
   for (const deal of silence.data?.deals || []) map[deal.name] = deal
   return map
 })
+
+// The link to hand a client, straight off the card (T6 walkthrough).
+const quoteLinkMap = createResource({
+  url: "auraos.api.deal_quote_links",
+  auto: true,
+})
+
+const quoteLinks = computed(() => quoteLinkMap.data || {})
 
 const companies = createListResource({
   doctype: "Party Company",

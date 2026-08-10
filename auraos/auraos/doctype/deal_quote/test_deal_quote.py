@@ -170,14 +170,31 @@ class TestDealQuote(FrappeTestCase):
         self.assertEqual(after.subtotal - before.subtotal, 1_500_000)
         self.assertGreater(after.total, before.total)
 
-    def test_publishing_with_a_line_outside_every_package_is_refused(self):
+    def test_a_line_in_no_package_is_quoted_as_its_own_entry(self):
+        # The founder prices some items as standalone packages and
+        # quotes them straight (T6 walkthrough) — an unassigned line is
+        # its own one-line entry, not an error.
         lines = [dict(row) for row in LINES]
         lines[1]["package"] = None
         deal = make_quotable_deal(cost_lines=lines)
-        with self.assertRaises(frappe.ValidationError):
-            publish(deal.name)
+        quote = publish(deal.name)
+        titles = [package.title for package in quote.packages]
+        self.assertIn(lines[1]["description"], titles)
+        self.assertEqual(
+            quote.subtotal, sum(package.price for package in quote.packages)
+        )
 
-    def test_publishing_without_packages_is_refused(self):
+    def test_a_standalone_line_is_priced_at_its_quote_price(self):
+        lines = [dict(row) for row in LINES]
+        lines[1]["package"] = None
+        deal = make_quotable_deal(cost_lines=lines)
+        quote = publish(deal.name)
+        standalone = next(
+            p for p in quote.packages if p.title == lines[1]["description"]
+        )
+        self.assertEqual(standalone.price, deal.cost_lines[1].quote_price)
+
+    def test_publishing_an_empty_deal_is_refused(self):
         deal = make_quotable_deal(packages=[], cost_lines=[])
         with self.assertRaises(frappe.ValidationError):
             publish(deal.name)
@@ -223,9 +240,15 @@ class TestDealQuote(FrappeTestCase):
             self.assertIn(package.description, html)
         self.assertIn(format_vnd(quote.total), html)
 
-    def test_invalid_token_404s(self):
+    def test_invalid_token_404s_with_a_readable_page(self):
         frappe.set_user("Guest")
-        self.assertEqual(render_page("not-a-real-token").status_code, 404)
+        response = render_page("not-a-real-token")
+        html = response.get_data().decode()
+        self.assertEqual(response.status_code, 404)
+        # A client following a dead link gets a sentence, not a trace.
+        self.assertIn("Quote not found", html)
+        self.assertNotIn("Traceback", html)
+        self.assertNotIn("DoesNotExistError", html)
 
     def test_page_never_serializes_internals_to_a_guest(self):
         deal = make_quotable_deal()
@@ -377,6 +400,22 @@ class TestDealQuote(FrappeTestCase):
             quote_opens(quote.name)
         with self.assertRaises(frappe.PermissionError):
             mark_quote_sent(quote.name)
+
+    def test_an_accidental_confirm_can_be_undone(self):
+        # "If I marked confirmed by accident, no turning back" — marking
+        # it sent again is the way back, keeping the original send time.
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        quote.mark_sent()
+        sent_on = quote.sent_on
+        quote.mark_confirmed()
+        quote.mark_sent()
+        self.assertEqual(quote.status, "Sent")
+        self.assertIsNone(quote.confirmed_on)
+        self.assertEqual(quote.sent_on, sent_on)
+        self.assertEqual(
+            frappe.db.get_value("Deal", deal.name, "quote_status"), "Sent"
+        )
 
     def test_a_producer_can_publish_and_mark_a_quote(self):
         deal = make_quotable_deal()

@@ -80,13 +80,16 @@ class DealQuote(Document):
         sync_deal_quote_state(self.deal)
 
     def mark_sent(self):
-        if self.status == "Confirmed":
-            frappe.throw(
-                _("Quote {0} is already confirmed").format(self.name),
-                frappe.ValidationError,
-            )
+        """Mark the version sent — and undo an accidental confirm.
+
+        Confirming used to be a one-way door (T6 walkthrough: "if I
+        marked confirmed by accident, no turning back"). Marking sent
+        again is the way back: the confirmation is withdrawn, the send
+        it was based on is kept.
+        """
         self.status = "Sent"
-        self.sent_on = frappe.utils.now_datetime()
+        self.confirmed_on = None
+        self.sent_on = self.sent_on or frappe.utils.now_datetime()
         self.save()
         advance_deal_stage(self.deal)
 
@@ -131,24 +134,15 @@ def publish(deal_name, notes=None):
     """
     deal = frappe.get_doc("Deal", deal_name)
     deal.check_permission("write")
-    if not deal.packages:
+    entries = client_entries(deal)
+    if not entries:
         frappe.throw(
-            _("Add at least one client-facing package before publishing a quote"),
-            frappe.ValidationError,
-        )
-    ungrouped = [row.idx for row in deal.cost_lines if not row.package]
-    if ungrouped:
-        # The client's total is the sum of the packages they can see, so
-        # a line outside every package is money we'd quietly absorb.
-        frappe.throw(
-            _("Cost line(s) {0} belong to no package — assign them before publishing").format(
-                ", ".join(f"#{idx}" for idx in ungrouped)
-            ),
+            _("Nothing to publish — add a cost line or a package first"),
             frappe.ValidationError,
         )
 
     totals = quote_totals(
-        [package.price or 0 for package in deal.packages],
+        [entry["price"] for entry in entries],
         mf_rate=to_decimal(deal.quote_mf_pct or 0) / 100,
         vat_rate=to_decimal(deal.vat_pct or 0) / 100,
     )
@@ -165,18 +159,40 @@ def publish(deal_name, notes=None):
             "mf_amount": round_vnd(totals.mf_amount),
             "vat_amount": round_vnd(totals.vat_amount),
             "total": round_vnd(totals.total),
-            "packages": [
-                {
-                    "title": package.title,
-                    "description": package.description,
-                    "price": package.price,
-                }
-                for package in deal.packages
-            ],
+            "packages": entries,
         }
     )
     quote.insert()
     return quote
+
+
+def client_entries(deal):
+    """What the client is offered, in reading order.
+
+    Packages first, then any cost line that belongs to none — the
+    founder prices some items as standalone packages and quotes them
+    straight (T6 walkthrough), so an unassigned line is not a mistake to
+    block on; it is its own one-line package, priced at its marked-up
+    quote price.
+    """
+    entries = [
+        {
+            "title": package.title,
+            "description": package.description,
+            "price": round_vnd(package.price or 0),
+        }
+        for package in deal.packages
+    ]
+    entries += [
+        {
+            "title": row.description or _("Item {0}").format(row.idx),
+            "description": None,
+            "price": round_vnd(row.quote_price or 0),
+        }
+        for row in deal.cost_lines
+        if not row.package
+    ]
+    return entries
 
 
 def client_name(deal):
@@ -265,8 +281,8 @@ def silent_deals():
     ]
 
 
-def resolve_token(token):
-    """The quote a public token addresses; 404 for anything else.
+def find_by_token(token):
+    """The quote a public token addresses, or None.
 
     Read past the permission layer on purpose (db.get_value and get_doc
     both skip it): the caller is Guest, and the token *is* the
@@ -275,9 +291,16 @@ def resolve_token(token):
     /api/resource stays closed even to someone holding a valid token.
     """
     name = frappe.db.get_value("Deal Quote", {"token": token or ""}, "name")
-    if not name:
+    return frappe.get_doc("Deal Quote", name) if name else None
+
+
+def resolve_token(token):
+    """find_by_token for callers with no page to render — the PDF
+    endpoint, where a dead token is a 404 response, not a page."""
+    quote = find_by_token(token)
+    if not quote:
         frappe.throw(_("Quote not found"), frappe.DoesNotExistError)
-    return frappe.get_doc("Deal Quote", name)
+    return quote
 
 
 def page_url(token):
