@@ -49,6 +49,9 @@ class TestFounderSpikeNote(FrappeTestCase):
             }
         ).insert(ignore_permissions=True)
         cls.note_name = note.name
+        # Global search is normally flushed on commit; tests roll back,
+        # so flush the pending buffer into __global_search explicitly.
+        global_search.sync_global_search()
 
     def tearDown(self):
         frappe.set_user("Administrator")
