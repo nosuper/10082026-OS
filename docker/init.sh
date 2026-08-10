@@ -49,4 +49,9 @@ if [ ! -f "apps/auraos/auraos/www/aura.html" ]; then
     (cd apps/auraos/frontend && npm install --no-audit --no-fund && npm run build)
 fi
 
+# Ensure the app's assets symlink exists — without it the built
+# frontend 404s and /aura renders as a white page.
+mkdir -p sites/assets
+ln -sfn "$BENCH_DIR/apps/auraos/auraos/public" sites/assets/auraos
+
 exec bench start

@@ -109,5 +109,7 @@ jobs:
       - name: Run tests
         working-directory: /home/runner/frappe-bench
         run: |
+          mkdir -p sites/assets
+          ln -sfn /home/runner/frappe-bench/apps/auraos/auraos/public sites/assets/auraos
           bench --site test_site set-config allow_tests true
           bench --site test_site run-tests --app auraos
