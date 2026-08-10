@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "description",
+  "package",
+  "qty1",
+  "qty1_unit",
+  "qty2",
+  "qty2_unit",
+  "unit_price",
+  "tax_type",
+  "vendor_mf_pct",
+  "markup_pct",
+  "computed_section",
+  "subtotal",
+  "cost_basis",
+  "input_vat",
+  "quote_price",
+  "margin"
+ ],
+ "fields": [
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Description",
+   "reqd": 1
+  },
+  {
+   "description": "Title of a package on this deal; empty = ungrouped",
+   "fieldname": "package",
+   "fieldtype": "Data",
+   "label": "Package"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty1",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty 1",
+   "precision": "2"
+  },
+  {
+   "fieldname": "qty1_unit",
+   "fieldtype": "Data",
+   "label": "Unit 1"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty2",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty 2",
+   "precision": "2"
+  },
+  {
+   "fieldname": "qty2_unit",
+   "fieldtype": "Data",
+   "label": "Unit 2"
+  },
+  {
+   "fieldname": "unit_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Unit Price"
+  },
+  {
+   "default": "Công ty",
+   "fieldname": "tax_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Tax Type",
+   "options": "Công ty\nCty 10%\nCá nhân\nKhông hoá đơn",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "vendor_mf_pct",
+   "fieldtype": "Percent",
+   "label": "Vendor MF %"
+  },
+  {
+   "default": "0",
+   "fieldname": "markup_pct",
+   "fieldtype": "Percent",
+   "label": "Markup %"
+  },
+  {
+   "fieldname": "computed_section",
+   "fieldtype": "Section Break",
+   "label": "Computed"
+  },
+  {
+   "fieldname": "subtotal",
+   "fieldtype": "Currency",
+   "label": "Subtotal",
+   "read_only": 1
+  },
+  {
+   "description": "Chi phí tính lãi — cost basis for the profit chain",
+   "fieldname": "cost_basis",
+   "fieldtype": "Currency",
+   "label": "Cost Basis",
+   "read_only": 1
+  },
+  {
+   "fieldname": "input_vat",
+   "fieldtype": "Currency",
+   "label": "Input VAT",
+   "read_only": 1
+  },
+  {
+   "description": "Line total after markup (ex quote MF and VAT)",
+   "fieldname": "quote_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Quote Price",
+   "read_only": 1
+  },
+  {
+   "fieldname": "margin",
+   "fieldtype": "Currency",
+   "label": "Margin",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Deal Cost Line",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

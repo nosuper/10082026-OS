@@ -72,7 +72,14 @@
       </div>
     </template>
     <template #actions>
-      <div class="flex justify-end gap-2">
+      <div class="flex items-center gap-2">
+        <Button
+          v-if="name"
+          @click="openBreakdown"
+        >
+          Breakdown & Quote →
+        </Button>
+        <div class="ml-auto"></div>
         <Button @click="$emit('update:modelValue', false)">Cancel</Button>
         <Button variant="solid" :loading="saving" @click="save">
           {{ name ? "Save" : "Create" }}
@@ -84,6 +91,7 @@
 
 <script setup>
 import { ref, computed, watch } from "vue"
+import { useRouter } from "vue-router"
 import {
   Dialog,
   Button,
@@ -101,6 +109,13 @@ const props = defineProps({
   owners: { type: Array, default: () => [] },
 })
 const emit = defineEmits(["update:modelValue", "saved"])
+
+const router = useRouter()
+
+function openBreakdown() {
+  emit("update:modelValue", false)
+  router.push(`/deals/${props.name}/breakdown`)
+}
 
 const form = ref({})
 const companySelection = ref(null)
