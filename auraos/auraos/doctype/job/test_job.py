@@ -28,7 +28,11 @@ from auraos.auraos.doctype.deal.test_deal import (
     make_company,
 )
 from auraos.auraos.doctype.deal.test_deal_breakdown import make_breakdown_deal
-from auraos.auraos.doctype.job.job import FREE_REVISION_ROUNDS, STAGES
+from auraos.auraos.doctype.job.job import (
+    FREE_REVISION_ROUNDS,
+    REDO_STAGE,
+    STAGES,
+)
 from auraos.tests.utils import make_test_user
 
 PACKAGES = [
@@ -364,6 +368,72 @@ class TestJobRevisions(FrappeTestCase):
         frappe.set_user(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):
             log_job_revision(self.job.name, "sneaky")
+
+    def test_logging_a_revision_sends_the_job_back_to_the_redo_stage(self):
+        """The round-trip: a revision request reopens the work by itself.
+
+        From the T6 walkthrough (issue #9): "need a redo / automatically
+        change stage if need revision after feedback" — nobody should
+        have to drag the card back before starting the fix.
+        """
+        result = log_job_revision(self.job.name, "Khách muốn đổi nhạc")
+
+        self.assertEqual(result["stage"], REDO_STAGE)
+        self.assertTrue(result["reopened"])
+        self.assertEqual(
+            frappe.get_doc("Job", self.job.name).stage, REDO_STAGE
+        )
+
+    def test_the_automatic_move_is_logged_like_any_other(self):
+        log_job_revision(self.job.name, "Sửa màu")
+
+        history = frappe.get_doc("Job", self.job.name).stage_history
+        self.assertEqual(
+            (history[-1].from_stage, history[-1].to_stage),
+            ("Feedback", REDO_STAGE),
+        )
+        self.assertTrue(history[-1].changed_by and history[-1].changed_on)
+
+    def test_a_revision_after_delivery_reopens_the_work_too(self):
+        for stage in STAGES[STAGES.index("Delivery"):]:
+            job = frappe.get_doc("Job", self.job.name)
+            job.stage = stage
+            job.save()
+
+            result = log_job_revision(self.job.name, f"Sửa sau {stage}")
+            self.assertEqual(
+                result["stage"],
+                REDO_STAGE,
+                f"a revision logged at {stage} should reopen the work",
+            )
+
+    def test_a_revision_before_post_leaves_the_stage_alone(self):
+        """Nothing to redo yet — the job is already where the work is."""
+        for stage in STAGES[: STAGES.index(REDO_STAGE) + 1]:
+            job = frappe.get_doc("Job", self.job.name)
+            job.stage = stage
+            job.save()
+            history_before = len(job.stage_history)
+
+            result = log_job_revision(self.job.name, f"Đổi ý ở {stage}")
+            self.assertEqual(result["stage"], stage)
+            self.assertFalse(result["reopened"])
+            self.assertEqual(
+                len(frappe.get_doc("Job", self.job.name).stage_history),
+                history_before,
+                f"a revision at {stage} should not log a stage move",
+            )
+
+    def test_the_reopened_job_still_counts_the_round(self):
+        for i in range(FREE_REVISION_ROUNDS + 1):
+            job = frappe.get_doc("Job", self.job.name)
+            job.stage = "Feedback"
+            job.save()
+            result = log_job_revision(self.job.name, f"Sửa lần {i + 1}")
+
+        self.assertEqual(result["revision_rounds"], FREE_REVISION_ROUNDS + 1)
+        self.assertTrue(result["change_order_due"])
+        self.assertEqual(result["stage"], REDO_STAGE)
 
     def test_the_counter_survives_hand_edited_rows(self):
         """The rounds and the flag are derived, never trusted from input."""

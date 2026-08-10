@@ -114,9 +114,15 @@
                 Log revision
               </Button>
             </div>
+            <p v-if="reopenNotice" class="mt-1 text-xs text-blue-700">
+              {{ reopenNotice }}
+            </p>
             <p v-if="nextIsChargeable" class="mt-1 text-xs text-amber-700">
               The next round is past the included revisions — it will be
               flagged as a chargeable change order.
+            </p>
+            <p v-if="reopensOnLog" class="mt-1 text-xs text-gray-500">
+              Logging a revision sends this job back to {{ REDO_STAGE }}.
             </p>
           </div>
 
@@ -239,7 +245,7 @@ import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
-import { STAGES, FREE_REVISION_ROUNDS } from "../data/jobStages"
+import { STAGES, FREE_REVISION_ROUNDS, REDO_STAGE } from "../data/jobStages"
 
 const route = useRoute()
 const name = route.params.name
@@ -248,6 +254,7 @@ const error = ref("")
 const stage = ref("")
 const filesLocation = ref("")
 const revisionNote = ref("")
+const reopenNotice = ref("")
 
 const job = createResource({
   url: "frappe.client.get",
@@ -285,6 +292,13 @@ const nextIsChargeable = computed(
   () => (doc.value?.revision_rounds || 0) >= FREE_REVISION_ROUNDS
 )
 
+// Mirrors redo_stage_for on the server: a job the client has already
+// been shown goes back to the edit when a revision arrives.
+const reopensOnLog = computed(() => {
+  const current = STAGES.indexOf(doc.value?.stage)
+  return current > STAGES.indexOf(REDO_STAGE)
+})
+
 const setValue = createResource({
   url: "frappe.client.set_value",
   onSuccess() {
@@ -315,9 +329,13 @@ function saveFilesLocation() {
 
 const revision = createResource({
   url: "auraos.api.log_job_revision",
-  onSuccess() {
+  onSuccess(result) {
     revisionNote.value = ""
     error.value = ""
+    // Say it out loud: the stage moved without anyone dragging a card.
+    reopenNotice.value = result.reopened
+      ? `Round ${result.round} logged — this job is back in ${result.stage}.`
+      : ""
     job.reload()
   },
   onError(err) {
@@ -327,6 +345,7 @@ const revision = createResource({
 
 function logRevision() {
   if (!revisionNote.value.trim()) return
+  reopenNotice.value = ""
   revision.submit({ job: name, note: revisionNote.value })
 }
 </script>

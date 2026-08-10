@@ -456,28 +456,23 @@ def log_job_revision(job, note):
     """Record a client revision round on a job.
 
     The round number and the chargeable flag come back computed — the
-    job derives both from row order (Job.number_revisions).
+    job derives both from row order (Job.number_revisions) — as does
+    the stage, which the revision may have sent back to the edit.
     """
     _check_job_permission(job, "write")
     if not (note or "").strip():
         frappe.throw(_("A revision needs a note"), frappe.ValidationError)
     doc = frappe.get_doc("Job", job)
-    doc.append(
-        "revisions",
-        {
-            "note": note,
-            "requested_on": frappe.utils.now_datetime(),
-            "logged_by": frappe.session.user,
-        },
-    )
-    doc.save()
-    latest = doc.revisions[-1]
+    stage_before = doc.stage
+    latest = doc.log_revision(note)
     return {
         "name": doc.name,
         "revision_rounds": doc.revision_rounds,
         "change_order_due": bool(doc.change_order_due),
         "round": latest.round,
         "chargeable": bool(latest.chargeable),
+        "stage": doc.stage,
+        "reopened": doc.stage != stage_before,
     }
 
 

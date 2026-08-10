@@ -35,6 +35,27 @@ STAGES = [
 # change order (spec #2, story 28).
 FREE_REVISION_ROUNDS = 2
 
+# Where a revision request puts the job: the client has asked for
+# changes, so the work reopens where changes are made (issue #9, raised
+# at the T6 walkthrough).
+REDO_STAGE = "Post"
+
+
+def redo_stage_for(stage):
+    """The stage a job lands in when a revision is logged against it.
+
+    A revision is only a *redo* once the client has been shown a cut —
+    at Feedback and beyond. Before that the job is already where the
+    work happens, so its stage is left alone rather than shoved
+    sideways by a note.
+    """
+    if stage not in STAGES:
+        return stage
+    if STAGES.index(stage) > STAGES.index(REDO_STAGE):
+        return REDO_STAGE
+    return stage
+
+
 # Fields carried from the deal that the job stores verbatim.
 CARRIED_FIELDS = (
     "title",
@@ -141,6 +162,27 @@ class Job(Document):
     def before_save(self):
         # After validation, so a rejected transition is never logged.
         append_stage_change(self)
+
+    def log_revision(self, note):
+        """Record a revision round and reopen the work it asks for.
+
+        One call, because the two halves are one event: a client asking
+        for changes both counts against the included rounds *and* sends
+        the job back to the edit. The move is an ordinary stage change —
+        logged in the history, and free to be overridden by dragging the
+        card somewhere else.
+        """
+        self.append(
+            "revisions",
+            {
+                "note": note,
+                "requested_on": frappe.utils.now_datetime(),
+                "logged_by": frappe.session.user,
+            },
+        )
+        self.stage = redo_stage_for(self.stage)
+        self.save()
+        return self.revisions[-1]
 
     def carry_commission(self, deal):
         """Copy the deal's commission rate onto the job after the insert.

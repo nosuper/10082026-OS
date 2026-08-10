@@ -50,6 +50,20 @@ _Why this matters: a fixed stage set was decided; whether the order is enforced 
 
 >
 
+### You asked for the redo to move the stage itself. Logging a revision on a job at **Feedback or later** sends it back to **Post** — logged in the history like any other move, and you can still drag it anywhere afterwards. Is Post the stage a redo belongs in?
+
+_Why this matters: this is the round-trip you raised at the T6 walkthrough ("need a redo / automatically change stage if need revision after feedback"). Post is where the edit happens, so that's where the work reopens._
+
+>
+
+### A revision logged **before** Post (Pre-production, Shoot) leaves the stage alone — there is no cut to redo yet. Right call?
+
+>
+
+### A revision logged on a job at **Chờ thanh toán** or **Done** also drags it back to Post. That's honest about the work restarting, but it pulls a finished job back onto the board. Do you want a cut-off stage past which the stage stops moving?
+
+>
+
 ### A revision can be logged at any stage, not only Feedback. I chose that so a change request arriving during Delivery still gets counted. Do you want it restricted to the Feedback stage instead?
 
 _Why this matters: the ticket says "revision counter on feedback"; I read that as where it's shown, not where it's allowed._
@@ -75,6 +89,12 @@ _Why this matters: "shared folder by job code" is a convention the system curren
 ## Scope calls I made that you may veto
 
 ### The job also carries the quote parameters, totals and the commission rate (founder-only, invisible to Linh — same boundary as on the deal). That's groundwork for T8's expenses-vs-quoted and settlement. Keep it, or strip the job back to the breakdown alone?
+
+>
+
+### T6 landed while T7 was waiting, so a deal can now have **published quote versions**. The job still carries the deal's live breakdown, not the version the client confirmed. If you re-price a deal after the client agreed, the job would carry the newer numbers. Should the job instead point at (and carry) the confirmed version?
+
+_Why this matters: T8's settlement compares real spend against "what was quoted", and that's the number the client agreed to._
 
 >
 

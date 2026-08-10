@@ -68,6 +68,16 @@ COST_LINES = [
     },
 ]
 
+# The deal T7 wins and turns into a job — kept out of DEALS so the
+# pipeline board still shows a deal per interesting stage.
+WON_DEAL = "MV — Hà Anh Tuấn"
+
+# Two rounds used: the walkthrough's own third round is the chargeable one.
+REVISION_NOTES = [
+    "Khách muốn đổi nhạc nền và cắt bớt 10 giây",
+    "Sửa màu tối hơn ở cảnh cuối",
+]
+
 PACKAGES = [
     {"title": "Human resources", "description": "Director, DOP and crew for three shoot days"},
     {"title": "Equipment", "description": "Camera, lighting, grip and unit catering"},
@@ -212,6 +222,45 @@ def seed_t6_quote_delivery(deal_name):
     ).insert(ignore_permissions=True)
 
 
+def seed_t7_job_in_production(deal_name):
+    """T7: a won deal that became a job, mid-revision.
+
+    Its own deal rather than the quoted one: converting the deal T6
+    seeds would drag it out of the pipeline the quote walkthrough needs.
+    The job is parked one round short of a chargeable change order, so
+    logging a revision on the preview shows both the ⚠ flag and the
+    stage moving itself back to Post.
+    """
+    from auraos.auraos.doctype.job.job import create_from_deal
+
+    company = frappe.db.get_value("Deal", deal_name, "company")
+    won = ensure_deal(company, title=WON_DEAL, stage="Brief Received")
+    ensure_breakdown(won)
+
+    if frappe.db.exists("Job", {"deal": won}):
+        return
+
+    deal = frappe.get_doc("Deal", won)
+    deal.stage = "Won"
+    deal.save(ignore_permissions=True)
+
+    job = create_from_deal(won)
+    job.files_location = f"//nas/jobs/{job.name}"
+    job.stage = "Feedback"
+    job.save(ignore_permissions=True)
+
+    for note in REVISION_NOTES:
+        job = frappe.get_doc("Job", job.name)
+        job.stage = "Feedback"
+        job.log_revision(note)
+
+    # Left sitting at Feedback: the next revision is the interesting one.
+    job = frappe.get_doc("Job", job.name)
+    job.stage = "Feedback"
+    job.save(ignore_permissions=True)
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
+    "T7 job in production": seed_t7_job_in_production,
 }
