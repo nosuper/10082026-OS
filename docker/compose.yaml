@@ -40,7 +40,11 @@ services:
       - "8080:8080" # vite dev server (npm run dev in frontend/)
     volumes:
       - ..:/workspace/repo
-      - bench-data:/home/frappe/frappe-bench
+      # Mounted at the home dir, not the bench dir: bench init refuses
+      # to run into an existing (volume-created) directory, while an
+      # empty named volume at $HOME is seeded from the image on first
+      # mount and the bench is then created inside it.
+      - bench-data:/home/frappe
 
 volumes:
   mariadb-data:
