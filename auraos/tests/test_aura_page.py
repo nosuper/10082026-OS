@@ -36,6 +36,18 @@ class TestAuraPage(FrappeTestCase):
                 f"{path} not servable: {fs_path} missing (assets symlink?)",
             )
 
+    def test_page_injects_rendered_csrf_token(self):
+        # Without a CSRF token in the shell, every frappe-ui POST from
+        # the SPA fails for logged-in users (and the T2 guest-redirect
+        # turned that into an infinite reload loop). Assert the Jinja
+        # tag is present in the source and actually rendered.
+        set_request(method="GET", path="/aura")
+        html = get_response().get_data().decode()
+        self.assertIn("window.csrf_token", html)
+        self.assertNotIn(
+            "{{ csrf_token }}", html, "csrf_token Jinja tag not rendered"
+        )
+
     def test_deep_link_resolves_to_same_page(self):
         # website_route_rules forwards /aura/<anything> to the SPA shell.
         set_request(method="GET", path="/aura/deals")
