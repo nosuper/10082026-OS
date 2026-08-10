@@ -114,6 +114,7 @@ import {
   createListResource,
 } from "frappe-ui"
 import { VN_BANKS } from "../data/banks"
+import { frappeErrorMessage } from "../utils/frappeError"
 
 const props = defineProps({
   modelValue: Boolean,
@@ -263,7 +264,7 @@ function onSaveSuccess() {
 
 function onSaveError(err) {
   saving.value = false
-  saveError.value = err.messages?.join("\n") || err.message
+  saveError.value = frappeErrorMessage(err)
 }
 
 const saveResource = createResource({

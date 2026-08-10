@@ -91,9 +91,12 @@ def deal_tags_map():
     parents, so the table view asks for the whole (small) mapping.
     """
     frappe.has_permission("Deal", "read", throw=True)
+    # get_all skips row-level permissions, so scope the child rows to
+    # the deals this user may actually list.
+    permitted = frappe.get_list("Deal", pluck="name", limit_page_length=0)
     tags = frappe.get_all(
         "Deal Tag Item",
-        filters={"parenttype": "Deal"},
+        filters={"parenttype": "Deal", "parent": ["in", permitted]},
         fields=["parent", "deal_tag"],
         order_by="parent asc, idx asc",
     )

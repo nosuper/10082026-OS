@@ -146,3 +146,18 @@ class TestDealCollab(FrappeTestCase):
     def test_invalid_url_is_rejected(self):
         with self.assertRaises(frappe.ValidationError):
             make_deal(deal_links=[{"label": "bad", "url": "not a url"}])
+
+    def test_outsider_cannot_read_or_add_links(self):
+        deal = make_deal(
+            title="Linked, outsider probe",
+            deal_links=[{"label": "Drive", "url": "https://drive.google.com/x"}],
+        )
+        frappe.set_user(OUTSIDER)
+        with self.assertRaises(frappe.PermissionError):
+            frappe.get_doc("Deal", deal.name).check_permission("read")
+        loaded = frappe.get_doc("Deal", deal.name)
+        loaded.append(
+            "deal_links", {"label": "sneaky", "url": "https://evil.example"}
+        )
+        with self.assertRaises(frappe.PermissionError):
+            loaded.save()

@@ -39,22 +39,18 @@ def create_roles():
             ).insert(ignore_permissions=True)
 
 
+def _seed(doctype, fieldname, values):
+    for value in values:
+        if not frappe.db.exists(doctype, value):
+            frappe.get_doc({"doctype": doctype, fieldname: value}).insert(
+                ignore_permissions=True
+            )
+
+
 def create_party_roles():
-    for role_name in PARTY_ROLES:
-        if not frappe.db.exists("Party Role", role_name):
-            frappe.get_doc(
-                {"doctype": "Party Role", "role_name": role_name}
-            ).insert(ignore_permissions=True)
+    _seed("Party Role", "role_name", PARTY_ROLES)
 
 
 def create_deal_vocabularies():
-    for source_name in DEAL_SOURCES:
-        if not frappe.db.exists("Deal Source", source_name):
-            frappe.get_doc(
-                {"doctype": "Deal Source", "source_name": source_name}
-            ).insert(ignore_permissions=True)
-    for type_name in PROJECT_TYPES:
-        if not frappe.db.exists("Project Type", type_name):
-            frappe.get_doc(
-                {"doctype": "Project Type", "type_name": type_name}
-            ).insert(ignore_permissions=True)
+    _seed("Deal Source", "source_name", DEAL_SOURCES)
+    _seed("Project Type", "type_name", PROJECT_TYPES)

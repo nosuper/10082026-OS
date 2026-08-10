@@ -181,6 +181,7 @@ import {
 } from "frappe-ui"
 import DealFormDialog from "../components/DealFormDialog.vue"
 import LostReasonDialog from "../components/LostReasonDialog.vue"
+import { frappeErrorMessage } from "../utils/frappeError"
 
 // The agreed pipeline, in board order (spec issue #2, story 3).
 const STAGES = [
@@ -322,7 +323,7 @@ const setStage = createResource({
     deals.reload()
   },
   onError(err) {
-    moveError.value = err.messages?.join("\n") || err.message
+    moveError.value = frappeErrorMessage(err)
     deals.reload()
   },
 })

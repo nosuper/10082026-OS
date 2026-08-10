@@ -275,6 +275,7 @@ import {
   createResource,
   createListResource,
 } from "frappe-ui"
+import { frappeErrorMessage } from "../utils/frappeError"
 
 const props = defineProps({
   modelValue: Boolean,
@@ -410,7 +411,7 @@ async function addTag() {
       })
       tags.reload()
     } catch (err) {
-      tagError.value = err.messages?.join("\n") || err.message
+      tagError.value = frappeErrorMessage(err)
       return
     } finally {
       creatingTag.value = false
@@ -434,6 +435,12 @@ function addLink() {
     linkError.value = "A link needs both a label and a URL"
     return
   }
+  // The row renders as a clickable <a> before the server's URL
+  // validation runs on save — keep javascript:/data: out of href.
+  if (!/^https?:\/\//i.test(url)) {
+    linkError.value = "URL must start with http:// or https://"
+    return
+  }
   form.value.deal_links ||= []
   form.value.deal_links.push({ label, url })
   linkLabel.value = ""
@@ -455,7 +462,7 @@ const addComment = createResource({
     comments.reload()
   },
   onError(err) {
-    commentError.value = err.messages?.join("\n") || err.message
+    commentError.value = frappeErrorMessage(err)
   },
 })
 
@@ -543,7 +550,7 @@ function onSaveSuccess() {
 
 function onSaveError(err) {
   saving.value = false
-  saveError.value = err.messages?.join("\n") || err.message
+  saveError.value = frappeErrorMessage(err)
 }
 
 const saveResource = createResource({
