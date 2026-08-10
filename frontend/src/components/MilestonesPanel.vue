@@ -19,7 +19,7 @@
         <tr>
           <th class="py-1 font-medium">Milestone</th>
           <th class="py-1 font-medium">% of quote</th>
-          <th class="py-1 font-medium">Due at stage</th>
+          <th class="py-1 font-medium">Trigger stage</th>
           <th class="py-1 text-right font-medium">Amount (VND)</th>
           <th class="py-1 font-medium">Collection</th>
           <th></th>
@@ -93,10 +93,10 @@
             <button
               v-if="row.name"
               class="rounded border px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
-              title="Invoice-request text for the accountant"
-              @click="requestInvoice(row)"
+              title="Copy the invoice request for the accountant, ready to paste into Zalo"
+              @click="copyInvoiceRequest(row)"
             >
-              Invoice text
+              Invoice request
             </button>
             <button
               class="ml-1 rounded border px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-50"
@@ -128,17 +128,18 @@
       </span>
     </div>
 
-    <!-- The invoice request: read it, copy it, paste it into Zalo. -->
+    <!-- The invoice request: copied by the button above, shown here so
+         the founder can read what they are about to paste. -->
     <div v-if="invoiceText" class="mt-3 rounded-md border bg-gray-50 p-3">
       <div class="mb-1 flex items-center gap-2">
         <span class="text-xs font-semibold text-gray-700">
-          Invoice request for the accountant
+          {{ copied ? "Copied — paste into Zalo" : "Invoice request for the accountant" }}
         </span>
         <button
           class="ml-auto rounded border bg-white px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
           @click="copyInvoiceText"
         >
-          {{ copied ? "Copied" : "Copy" }}
+          {{ copied ? "Copy again" : "Copy" }}
         </button>
         <button
           class="rounded border bg-white px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
@@ -277,19 +278,24 @@ function stampFor(row) {
   return stamp ? stamp.slice(0, 10) : ""
 }
 
+// One click: fetch the text and put it on the clipboard. It is shown
+// below as well, both so the founder can read what they are pasting and
+// so a browser that refuses the clipboard still leaves them something
+// to select.
 const invoiceRequest = createResource({
   url: "auraos.api.milestone_invoice_request",
   onSuccess(data) {
     invoiceText.value = data.text
-    copied.value = false
     error.value = ""
+    copyInvoiceText()
   },
   onError(err) {
     error.value = frappeErrorMessage(err)
   },
 })
 
-function requestInvoice(row) {
+function copyInvoiceRequest(row) {
+  copied.value = false
   invoiceRequest.submit({ job: props.job, milestone: row.name })
 }
 

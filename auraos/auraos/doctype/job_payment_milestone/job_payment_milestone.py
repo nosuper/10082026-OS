@@ -19,6 +19,7 @@ from auraos.lib.milestones import (
     NOT_REQUESTED,
     STATUS_FLOW,
     allocated_pct,
+    days_overdue,
     due_stamp,
     format_pct,
     invoice_request_text,
@@ -27,6 +28,7 @@ from auraos.lib.milestones import (
     stage_reached,
     stamps_for,
 )
+from auraos.settings import setting
 
 # Days after a milestone falls due before it starts nudging. Overridable
 # in AuraOS Settings; 0 turns the nudge off, the same switch the margin
@@ -43,16 +45,8 @@ class JobPaymentMilestone(Document):
 
 
 def payment_terms_days():
-    """Days of grace after a milestone falls due before it nudges.
-
-    Read off the settings document rather than through
-    `db.get_single_value`, which casts an unset Int to 0 — and 0 is a
-    real setting here ("never nudge"). A site that migrated onto this
-    field has no stored value yet, and reading that as a deliberate 0
-    would quietly stop the founder being chased about money.
-    """
-    value = frappe.get_cached_doc("AuraOS Settings").payment_terms_days
-    return DEFAULT_PAYMENT_TERMS_DAYS if value is None else int(value)
+    """Days a due milestone may stay uncollected before it nudges."""
+    return int(setting("payment_terms_days", DEFAULT_PAYMENT_TERMS_DAYS))
 
 
 def apply_to(job, stages):
@@ -110,28 +104,40 @@ def validate_plan(rows, stages):
         )
 
 
-def as_dict(row, terms_days=None):
-    """One milestone as the screens read it, overdue already decided."""
+# What a milestone row carries onto a screen. The lateness verdict is
+# added by milestone_view, never stored.
+VIEW_FIELDS = (
+    "name",
+    "idx",
+    "title",
+    "pct",
+    "trigger_stage",
+    "amount",
+    "status",
+    "due_on",
+    "requested_on",
+    "invoiced_on",
+    "paid_on",
+)
+
+
+def milestone_view(row, terms_days=None, now=None):
+    """One milestone as every screen reads it, lateness already decided.
+
+    One builder for the job page and the board: the two surfaces showed
+    different fields when they each built their own row, and the job page
+    rendered a blank number where the days late should be.
+    """
     if terms_days is None:
         terms_days = payment_terms_days()
+    now = now or frappe.utils.now_datetime()
+    due_on = frappe.utils.get_datetime(row.due_on) if row.due_on else None
     return {
-        "name": row.name,
-        "idx": row.idx,
-        "title": row.title,
-        "pct": row.pct,
-        "trigger_stage": row.trigger_stage,
-        "amount": row.amount,
-        "status": row.status,
-        "due_on": row.due_on,
-        "requested_on": row.requested_on,
-        "invoiced_on": row.invoiced_on,
-        "paid_on": row.paid_on,
+        **{field: row.get(field) for field in VIEW_FIELDS},
         "overdue": is_overdue(
-            status=row.status,
-            due_on=frappe.utils.get_datetime(row.due_on) if row.due_on else None,
-            now=frappe.utils.now_datetime(),
-            terms_days=terms_days,
+            status=row.status, due_on=due_on, now=now, terms_days=terms_days
         ),
+        "days_overdue": days_overdue(due_on=due_on, now=now, terms_days=terms_days),
     }
 
 
@@ -155,7 +161,7 @@ def overdue():
             "status": ["!=", "Paid"],
             "due_on": ["is", "set"],
         },
-        fields=["name", "parent", "title", "pct", "amount", "status", "due_on"],
+        fields=[*VIEW_FIELDS, "parent"],
         order_by="due_on asc",
     )
     overdue_rows = [
@@ -180,13 +186,10 @@ def overdue():
     }
     return [
         {
-            **row,
+            **milestone_view(row, terms, now),
             "job": row.parent,
             "job_title": jobs.get(row.parent, {}).get("title"),
             "company": jobs.get(row.parent, {}).get("company"),
-            # Days past the terms, not days since it fell due: "8 days
-            # late" is what the founder chases on, not "15 days old".
-            "days_overdue": (now - frappe.utils.get_datetime(row.due_on)).days - terms,
         }
         for row in overdue_rows
     ]

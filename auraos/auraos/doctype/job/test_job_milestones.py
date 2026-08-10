@@ -148,6 +148,27 @@ class TestMilestonePlan(MilestoneTestCase):
         )
         self.assertEqual(len(result["milestones"]), 1)
 
+    def test_the_saved_order_is_the_order_the_plan_was_sent_in(self):
+        """A row added after another was deleted must not inherit a
+        position a surviving row already holds."""
+        job = make_job()
+        kept = job.payment_milestones[1]
+        save_job_milestones(
+            job.name,
+            [
+                {
+                    "name": kept.name,
+                    "title": kept.title,
+                    "pct": 40,
+                    "trigger_stage": kept.trigger_stage,
+                },
+                {"title": "Nghiệm thu", "pct": 60, "trigger_stage": "Complete"},
+            ],
+        )
+        rows = frappe.get_doc("Job", job.name).payment_milestones
+        self.assertEqual([row.idx for row in rows], [1, 2])
+        self.assertEqual([row.title for row in rows], [kept.title, "Nghiệm thu"])
+
     def test_a_job_can_have_no_milestones_at_all(self):
         job = make_job()
         self.assertEqual(save_job_milestones(job.name, [])["milestones"], [])
@@ -365,6 +386,11 @@ class TestOverdueNudge(MilestoneTestCase):
         self.assertEqual(nudges[0]["job_title"], self.job.title)
         self.assertEqual(nudges[0]["amount"], self.deposit.amount)
         self.assertEqual(nudges[0]["days_overdue"], 3)
+        # The job page reads the same row builder, so it shows the same
+        # lateness rather than a blank number.
+        page_row = job_milestones(self.job.name)["milestones"][0]
+        self.assertTrue(page_row["overdue"])
+        self.assertEqual(page_row["days_overdue"], 3)
         self.assertEqual(overdue_milestones()["payment_terms_days"], TERMS_DAYS)
 
     def test_a_paid_milestone_stops_nudging(self):

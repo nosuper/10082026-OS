@@ -12,8 +12,3 @@ export const COLLECTION_STATUSES = [
 ]
 
 export const PAID = "Paid"
-
-// How far along the flow a status sits — drives the progress colouring.
-export function statusIndex(status) {
-  return COLLECTION_STATUSES.findIndex((row) => row.value === status)
-}

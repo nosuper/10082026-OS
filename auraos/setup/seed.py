@@ -78,13 +78,13 @@ REVISION_NOTES = [
     "Sửa màu tối hơn ở cảnh cuối",
 ]
 
-# How the seeded job gets paid: keyed by title so the seed can tell its
-# own plan from the standard two-milestone one a conversion creates.
-MILESTONES = {
-    "Đặt cọc": {"title": "Đặt cọc", "pct": 30, "trigger_stage": "Pre-production"},
-    "Sau quay": {"title": "Sau quay", "pct": 40, "trigger_stage": "Post-production"},
-    "Nghiệm thu": {"title": "Nghiệm thu", "pct": 30, "trigger_stage": "Client sign-off"},
-}
+# How the seeded job gets paid — a three-stage collection, so the
+# walkthrough sees more than the standard 50/50 a conversion creates.
+MILESTONES = [
+    {"title": "Đặt cọc", "pct": 30, "trigger_stage": "Pre-production"},
+    {"title": "Sau quay", "pct": 40, "trigger_stage": "Post-production"},
+    {"title": "Nghiệm thu", "pct": 30, "trigger_stage": "Client sign-off"},
+]
 
 PACKAGES = [
     {"title": "Human resources", "description": "Director, DOP and crew for three shoot days"},
@@ -292,13 +292,11 @@ def seed_t10_payment_milestones(deal_name):
         return
 
     job = frappe.get_doc("Job", job_name)
-    if [row.title for row in job.payment_milestones] == list(MILESTONES):
+    planned = [row["title"] for row in MILESTONES]
+    if [row.title for row in job.payment_milestones] == planned:
         return
 
-    job.set(
-        "payment_milestones",
-        [dict(row) for row in MILESTONES.values()],
-    )
+    job.set("payment_milestones", [dict(row) for row in MILESTONES])
     job.payment_milestones[0].status = "Paid"
     job.payment_milestones[1].status = "Invoiced"
     job.save(ignore_permissions=True)

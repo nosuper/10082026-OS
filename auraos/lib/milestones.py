@@ -168,6 +168,17 @@ def is_overdue(
     return (now - due_on).total_seconds() >= terms_days * 86400
 
 
+def days_overdue(due_on: datetime | None, now: datetime, terms_days: int | None) -> int:
+    """How late the money is — days past the terms, not days since due.
+
+    "Eight days late" is what the founder chases on; "fifteen days old"
+    counts a week they were never owed anything for.
+    """
+    if due_on is None:
+        return 0
+    return max(0, (now - due_on).days - (terms_days or 0))
+
+
 def stamps_for(status: str, current: Mapping[str, Any], now: datetime) -> dict:
     """The collection timestamps a milestone should hold at `status`.
 

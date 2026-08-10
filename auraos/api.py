@@ -570,7 +570,7 @@ def job_milestones(job):
     return {
         "payment_terms_days": terms,
         "milestones": [
-            job_payment_milestone.as_dict(row, terms)
+            job_payment_milestone.milestone_view(row, terms)
             for row in frappe.get_doc("Job", job).payment_milestones
         ],
     }
@@ -599,8 +599,11 @@ def save_job_milestones(job, milestones):
         current = existing.get(row.get("name"))
         # Carrying the whole existing row keeps its identity, its status
         # and its stamps; only the three planning fields are taken from
-        # the caller.
+        # the caller. `idx` is dropped on purpose — the caller's order is
+        # the new order, and a carried idx from before a deletion would
+        # collide with a surviving row's.
         values = current.as_dict() if current else {}
+        values.pop("idx", None)
         values.update(
             {
                 field: row.get(field)
@@ -628,7 +631,7 @@ def set_milestone_status(job, milestone, status):
     doc.save()
     # The save recomputed the row's stamps in place, so this is the
     # stored milestone, not the one the caller described.
-    return job_payment_milestone.as_dict(row)
+    return job_payment_milestone.milestone_view(row)
 
 
 @frappe.whitelist()

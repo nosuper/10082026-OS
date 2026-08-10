@@ -27,6 +27,7 @@ from auraos.lib.milestones import (
     REQUESTED,
     STAMP_FIELDS,
     STATUS_FLOW,
+    days_overdue,
     due_stamp,
     invoice_request_text,
     invoice_split,
@@ -237,6 +238,20 @@ def test_zero_payment_terms_turns_the_nudge_off():
     due = NOW - timedelta(days=365)
     assert not is_overdue(status=REQUESTED, due_on=due, now=NOW, terms_days=0)
     assert not is_overdue(status=REQUESTED, due_on=due, now=NOW, terms_days=None)
+
+
+def test_lateness_is_counted_from_the_end_of_the_terms():
+    """What the founder chases on is "8 days late", not "15 days old" —
+    the terms are days they were never owed anything for."""
+    assert days_overdue(due_on=NOW - timedelta(days=15), now=NOW, terms_days=7) == 8
+
+
+def test_a_milestone_inside_its_terms_is_not_late_at_all():
+    assert days_overdue(due_on=NOW - timedelta(days=2), now=NOW, terms_days=7) == 0
+
+
+def test_a_milestone_that_never_fell_due_is_not_late():
+    assert days_overdue(due_on=None, now=NOW, terms_days=7) == 0
 
 
 def test_an_unrequested_milestone_past_its_terms_is_overdue_too():
