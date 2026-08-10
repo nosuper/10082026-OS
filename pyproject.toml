@@ -1,0 +1,20 @@
+[project]
+name = "auraos"
+description = "AuraOS — pipeline, pricing, quotes, jobs and money tracking for a small video production house"
+authors = [{ name = "Aura Productions" }]
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # Frappe itself is provided by the bench; keep this list free of it.
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.pytest.ini_options]
+# Pure tests only. Frappe-dependent tests live next to their DocTypes and
+# run via `bench --site <site> run-tests --app auraos`.
+testpaths = ["tests"]
+pythonpath = ["."]

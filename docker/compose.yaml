@@ -1,0 +1,47 @@
+# AuraOS development environment.
+#
+#   cd docker && docker compose up -d
+#
+# First boot takes several minutes: the frappe container initialises a
+# bench, creates the dev site and installs the auraos app (see init.sh),
+# then runs `bench start`. Follow progress with:
+#
+#   docker compose logs -f frappe
+#
+# Site: http://localhost:8000 (login Administrator / admin)
+# Placeholder page: http://localhost:8000/aura
+services:
+  mariadb:
+    image: mariadb:10.6
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MARIADB_ROOT_PASSWORD: admin
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20
+
+  frappe:
+    image: frappe/bench:latest
+    command: bash /workspace/repo/docker/init.sh
+    working_dir: /home/frappe
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "8000:8000" # bench web
+      - "9000:9000" # socketio
+      - "8080:8080" # vite dev server (npm run dev in frontend/)
+    volumes:
+      - ..:/workspace/repo
+      - bench-data:/home/frappe/frappe-bench
+
+volumes:
+  mariadb-data:
+  bench-data:

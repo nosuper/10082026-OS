@@ -1,6 +1,17 @@
 # Machine-local Claude Code settings
 .claude/settings.local.json
 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Frontend
+frontend/node_modules/
+auraos/public/aura/
+auraos/www/aura.html
+
 # OS cruft
 Thumbs.db
 Desktop.ini
