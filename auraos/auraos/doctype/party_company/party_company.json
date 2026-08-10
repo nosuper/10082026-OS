@@ -92,8 +92,9 @@
   },
   {
    "fieldname": "bank_name",
-   "fieldtype": "Data",
-   "label": "Bank Name"
+   "fieldtype": "Select",
+   "label": "Bank Name",
+   "options": "\nVietcombank\nVietinBank\nBIDV\nAgribank\nTechcombank\nMB Bank\nACB\nVPBank\nSacombank\nTPBank\nHDBank\nSHB\nVIB\nMSB\nOCB\nEximbank\nSeABank\nLPBank\nNam A Bank\nBac A Bank\nABBANK\nPVcomBank\nViet A Bank\nKienlongbank\nNCB\nSCB\nSaigonbank\nBaoViet Bank\nVietBank\nCIMB\nShinhan Bank\nWoori Bank\nHSBC\nStandard Chartered\nUOB\nPublic Bank"
   },
   {
    "fieldname": "bank_account_number",

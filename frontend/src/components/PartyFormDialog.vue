@@ -17,7 +17,6 @@
             :label="field.label"
             v-model="form[field.fieldname]"
             :required="field.required"
-            :class="{ 'sm:col-span-2': field.wide }"
           />
         </div>
 
@@ -35,11 +34,50 @@
           <div class="mb-1.5 text-xs text-gray-600">Role Tags</div>
           <div class="flex gap-4">
             <Checkbox
-              v-for="role in partyRoles.data || []"
-              :key="role.name"
-              :label="role.name"
-              :modelValue="selectedRoles.includes(role.name)"
-              @update:modelValue="toggleRole(role.name, $event)"
+              v-for="role in availableRoles"
+              :key="role"
+              :label="role"
+              :modelValue="selectedRoles.includes(role)"
+              @update:modelValue="toggleRole(role, $event)"
+            />
+          </div>
+        </div>
+
+        <div v-if="showFreelancerPaperwork">
+          <div class="mb-2 border-t pt-3 text-xs font-medium text-gray-700">
+            Freelancer Paperwork
+          </div>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormControl
+              v-for="field in FREELANCER_FIELDS"
+              :key="field.fieldname"
+              :type="field.type || 'text'"
+              :label="field.label"
+              v-model="form[field.fieldname]"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div class="mb-2 border-t pt-3 text-xs font-medium text-gray-700">
+            Bank
+          </div>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormControl
+              type="select"
+              label="Bank Name"
+              :options="bankOptions"
+              v-model="form.bank_name"
+            />
+            <FormControl
+              type="text"
+              label="Bank Account Number"
+              v-model="form.bank_account_number"
+            />
+            <FormControl
+              type="text"
+              label="Bank Account Name"
+              v-model="form.bank_account_name"
             />
           </div>
         </div>
@@ -75,6 +113,7 @@ import {
   createResource,
   createListResource,
 } from "frappe-ui"
+import { VN_BANKS } from "../data/banks"
 
 const props = defineProps({
   modelValue: Boolean,
@@ -97,26 +136,30 @@ const COMPANY_FIELDS = [
   { fieldname: "email", label: "Email", type: "email" },
   { fieldname: "website", label: "Website" },
   { fieldname: "address", label: "Address" },
-  { fieldname: "bank_name", label: "Bank Name" },
-  { fieldname: "bank_account_number", label: "Bank Account Number" },
-  { fieldname: "bank_account_name", label: "Bank Account Name" },
 ]
 
 const CONTACT_FIELDS = [
   { fieldname: "full_name", label: "Full Name", required: true },
-  { fieldname: "phone", label: "Phone" },
-  { fieldname: "zalo", label: "Zalo" },
+  { fieldname: "phone", label: "Phone / Zalo", required: true },
   { fieldname: "email", label: "Email", type: "email" },
-  { fieldname: "tax_code", label: "Personal Tax Code" },
-  { fieldname: "id_number", label: "ID Number (CCCD)" },
-  { fieldname: "bank_name", label: "Bank Name" },
-  { fieldname: "bank_account_number", label: "Bank Account Number" },
-  { fieldname: "bank_account_name", label: "Bank Account Name" },
 ]
+
+const FREELANCER_FIELDS = [
+  { fieldname: "id_number", label: "ID Number (CCCD)" },
+  { fieldname: "date_of_birth", label: "Date of Birth", type: "date" },
+  { fieldname: "tax_code", label: "Personal Tax Code" },
+  { fieldname: "permanent_address", label: "Permanent Address" },
+  { fieldname: "contact_address", label: "Contact Address" },
+]
+
+// Freelancers are people; the server rejects this tag on companies.
+const ROLES_NOT_FOR_COMPANIES = ["Freelancer"]
 
 const fields = computed(() =>
   isContact.value ? CONTACT_FIELDS : COMPANY_FIELDS
 )
+
+const bankOptions = ["", ...VN_BANKS]
 
 const form = ref({})
 const selectedRoles = ref([])
@@ -134,6 +177,17 @@ const partyRoles = createListResource({
   pageLength: 50,
   auto: true,
 })
+
+const availableRoles = computed(() => {
+  const all = (partyRoles.data || []).map((r) => r.name)
+  return isContact.value
+    ? all
+    : all.filter((r) => !ROLES_NOT_FOR_COMPANIES.includes(r))
+})
+
+const showFreelancerPaperwork = computed(
+  () => isContact.value && selectedRoles.value.includes("Freelancer")
+)
 
 const companies = createListResource({
   doctype: "Party Company",

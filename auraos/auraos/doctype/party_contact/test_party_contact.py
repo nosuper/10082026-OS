@@ -85,6 +85,14 @@ class TestPartyContact(FrappeTestCase):
                 {"doctype": "Party Contact", "phone": "0901234567"}
             ).insert()
 
+    def test_contact_requires_phone(self):
+        # Phone doubles as the Zalo handle in Vietnam — a contact
+        # without one is unreachable, so the field is mandatory.
+        with self.assertRaises(frappe.MandatoryError):
+            frappe.get_doc(
+                {"doctype": "Party Contact", "full_name": "Ai Đó"}
+            ).insert()
+
     def test_company_stores_tax_and_bank_info(self):
         company = make_company()
         reloaded = frappe.get_doc("Party Company", company.name)
@@ -124,6 +132,13 @@ class TestPartyContact(FrappeTestCase):
             sorted(row.party_role for row in reloaded.role_tags),
             ["Freelancer", "Vendor"],
         )
+
+    def test_company_rejects_freelancer_tag(self):
+        with self.assertRaises(frappe.ValidationError):
+            make_company(
+                company_name="Not a freelancer",
+                role_tags=[{"party_role": "Freelancer"}],
+            )
 
     def test_company_carries_role_tag(self):
         company = make_company(role_tags=[{"party_role": "Client"}])

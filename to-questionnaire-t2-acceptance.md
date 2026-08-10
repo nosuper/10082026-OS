@@ -18,11 +18,11 @@ Automation is green: 26/26 Frappe site tests (required fields, company linking, 
 
 _Why this matters: this is the bug you hit; a stale cached bundle can make it look unfixed._
 
->
+> Yes — "the loop is fixed, I can use it now." (2026-08-10)
 
 ### Log out and open /aura/contacts. Are you bounced to the login page once, and returned to Contacts after logging in?
 
->
+> Partial: there was no logout control inside /aura — only from the Desk at /. And re-login from the plain login page landed in the Desk, not AuraOS. **Fix applied:** a Log out button now sits in the /aura header and routes back through /login?redirect-to=/aura/contacts.
 
 ## Create, edit, browse (the ticket's core criterion)
 
@@ -30,11 +30,11 @@ _Why this matters: this is the bug you hit; a stale cached bundle can make it lo
 
 _Why this matters: saving from the UI is the exact path the CSRF bug broke; the REST smoke test bypassed it._
 
->
+> Yes — "I create new and it's on the list. Worked for both company and people."
 
 ### Create a person via "New Person" — link them to that company with the autocomplete, tick two role tags (e.g. Vendor + Freelancer). Reopen the record: are the company link and both tags still there?
 
->
+> Yes (covered by the same walkthrough answer).
 
 ### Edit an existing record (change a phone number, add a tag). Do the changes stick after reopening?
 
@@ -44,7 +44,7 @@ _Why this matters: saving from the UI is the exact path the CSRF bug broke; the 
 
 _Why this matters: English UI holding Vietnamese data is a spec requirement; encoding bugs surface exactly here._
 
->
+> Mostly — "Trịnh Đăng Lê Vũ" displays correctly, but the letter "g" was clipped (only the top half showed). **Fix applied:** list-row line-height raised; stacked diacritics were eating the descender space.
 
 ### Does the search box and the role-tag filter ("All roles" dropdown) narrow the list the way you'd expect — could you find a party "in seconds"?
 
@@ -70,20 +70,20 @@ _Why this matters: Linh works from a phone on shoots; contacts is her first dail
 
 _Why this matters: unrequested fields are clutter if you'll never fill them; removal is cheap now, annoying after data exists._
 
->
+> Zalo is okay — but phone and Zalo are the same thing in Vietnam, so they are now **one required field "Phone / Zalo"**. CCCD and other paperwork data is freelancer-only; the person form now has a Freelancer Paperwork section (shown when the Freelancer tag is ticked) with: CCCD, date of birth (Sinh ngày), permanent address (Địa chỉ thường trú), contact address (Địa chỉ liên hệ), personal tax code — phone/email/bank were already there.
 
 ### Producer can also **delete** parties (ticket only required read/write). Keep, or make delete founder-only?
 
 _Why this matters: this is an access-policy decision the spec didn't make — it should be yours, not mine._
 
->
+> "Okay with this" — Producer keeps delete.
 
 ### Role tags are Client / Vendor / Freelancer, growable by you in Desk (Party Role). Does this vocabulary match how you think about parties, or is something missing (e.g. "Partner", "Accountant")?
 
->
+> "Okay for now." One correction: companies must not offer the Freelancer tag (freelancers don't have companies). **Fix applied:** the tag is hidden on the company form and rejected server-side.
 
 ## Anything else?
 
 ### Anything you saw during the walkthrough — slow pages, odd wording, a worry about T3+ — that we didn't ask about?
 
->
+> Requests, both applied: (1) a dropdown for Bank Name with Vietnamese banks; (2) phone = Zalo, single required field.

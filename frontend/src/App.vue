@@ -14,6 +14,9 @@
             {{ item.label }}
           </router-link>
         </nav>
+        <Button class="ml-auto" variant="ghost" @click="logout.fetch()">
+          Log out
+        </Button>
       </div>
     </header>
     <main>
@@ -23,7 +26,20 @@
 </template>
 
 <script setup>
+import { Button, createResource } from "frappe-ui"
+
 const nav = [{ label: "Contacts", route: "/contacts" }]
+
+// Log out via the API, then land on a login page that returns here —
+// otherwise re-login strands the user in the Desk.
+const logout = createResource({
+  url: "logout",
+  onSuccess() {
+    window.location.replace(
+      "/login?redirect-to=" + encodeURIComponent("/aura/contacts")
+    )
+  },
+})
 
 // The page itself is public; the data is not. Bounce guests to login.
 // Read Frappe's user_id cookie instead of calling the API: a failed
