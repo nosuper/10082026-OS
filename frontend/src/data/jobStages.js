@@ -16,5 +16,7 @@ export const STAGES = [
 export const INCLUDED_REVISION_ROUNDS = 2
 
 // Where logging a revision sends a job that has already been shown to
-// the client — mirrors REDO_STAGE on the server.
+// the client, and the last stage that still reopens — mirrors
+// REDO_STAGE and LAST_REOPENABLE_STAGE on the server.
 export const REDO_STAGE = "Post"
+export const LAST_REOPENABLE_STAGE = "Delivery"

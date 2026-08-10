@@ -40,20 +40,30 @@ INCLUDED_REVISION_ROUNDS = 2
 # at the T6 walkthrough).
 REDO_STAGE = "Post"
 
+# The last stage a revision may reopen. Past it the client has signed
+# the work off (nghiệm thu) and is being invoiced for it, so a change
+# request is a new negotiation, not a redo: the round is still counted
+# and flagged chargeable, but a job nobody is working on any more is
+# not dragged back onto the board.
+LAST_REOPENABLE_STAGE = "Delivery"
+
 
 def redo_stage_for(stage):
     """The stage a job lands in when a revision is logged against it.
 
-    A revision is only a *redo* once the client has been shown a cut —
-    at Feedback and beyond. Before that the job is already where the
-    work happens, so its stage is left alone rather than shoved
+    A revision is only a *redo* between the two lines: after the client
+    has been shown a cut (Feedback) and before they have signed it off.
+    Outside that window the stage is left alone rather than shoved
     sideways by a note.
     """
     if stage not in STAGES:
         return stage
-    if STAGES.index(stage) > STAGES.index(REDO_STAGE):
-        return REDO_STAGE
-    return stage
+    position = STAGES.index(stage)
+    reopenable = range(
+        STAGES.index(REDO_STAGE) + 1,
+        STAGES.index(LAST_REOPENABLE_STAGE) + 1,
+    )
+    return REDO_STAGE if position in reopenable else stage
 
 
 # Fields carried from the deal that the job stores verbatim.
@@ -148,8 +158,11 @@ class Job(Document):
         """Round numbers and the chargeable flag are derived, never input.
 
         Row order is the round order, so deleting a mistaken row
-        renumbers the rest instead of leaving a hole — and no client can
-        be charged because of a hand-edited counter.
+        renumbers the rest instead of leaving a hole, and a hand-typed
+        round or flag is overwritten on the next save. What this does
+        *not* do is make the rounds themselves immutable: whoever may
+        write the job may delete a round and lower the count. That is a
+        permission question, and the walkthrough asks it.
         """
         for index, row in enumerate(self.revisions, start=1):
             row.round = index

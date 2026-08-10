@@ -30,6 +30,7 @@ from auraos.auraos.doctype.deal.test_deal import (
 from auraos.auraos.doctype.deal.test_deal_breakdown import make_breakdown_deal
 from auraos.auraos.doctype.job.job import (
     INCLUDED_REVISION_ROUNDS,
+    LAST_REOPENABLE_STAGE,
     REDO_STAGE,
     STAGES,
 )
@@ -394,18 +395,34 @@ class TestJobRevisions(FrappeTestCase):
         )
         self.assertTrue(history[-1].changed_by and history[-1].changed_on)
 
-    def test_a_revision_after_delivery_reopens_the_work_too(self):
-        for stage in STAGES[STAGES.index("Delivery"):]:
+    def test_a_revision_during_delivery_reopens_the_work_too(self):
+        job = frappe.get_doc("Job", self.job.name)
+        job.stage = LAST_REOPENABLE_STAGE
+        job.save()
+
+        result = log_job_revision(self.job.name, "Sửa lúc giao")
+        self.assertEqual(result["stage"], REDO_STAGE)
+
+    def test_a_revision_after_sign_off_counts_but_does_not_reopen(self):
+        """Past nghiệm thu the work is signed off and being invoiced.
+
+        Dragging a finished job back onto the board would be a surprise;
+        the round is still counted and still flagged chargeable.
+        """
+        for stage in STAGES[STAGES.index(LAST_REOPENABLE_STAGE) + 1:]:
             job = frappe.get_doc("Job", self.job.name)
             job.stage = stage
             job.save()
 
-            result = log_job_revision(self.job.name, f"Sửa sau {stage}")
+            result = log_job_revision(self.job.name, f"Khách đòi sửa ở {stage}")
             self.assertEqual(
                 result["stage"],
-                REDO_STAGE,
-                f"a revision logged at {stage} should reopen the work",
+                stage,
+                f"a revision logged at {stage} should leave the job there",
             )
+            self.assertFalse(result["reopened"])
+
+        self.assertTrue(result["change_order_due"])
 
     def test_a_revision_before_post_leaves_the_stage_alone(self):
         """Nothing to redo yet — the job is already where the work is."""

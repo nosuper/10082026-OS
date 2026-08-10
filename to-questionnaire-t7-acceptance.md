@@ -6,11 +6,13 @@
 
 ## Context
 
-Automation is green: 130/130 Frappe site tests on the box (23 of them new for T7 — conversion completeness and its refusals, the stage flow and its history, the revision counter, and the producer boundary on the carried commission through the document API, the list API and global search), 108 pure pytest, frontend build clean.
+Automation is green: 175/175 Frappe site tests on a fresh site (28 of them new for T7 — conversion completeness and its refusals, the stage flow and its history, the revision counter, the revision round-trip, and the producer boundary on the carried commission through the document API, the list API and global search), 103 pure pytest, frontend build clean. T6 (the hosted quote page) is merged in, so this branch has everything main has.
 
 What automation cannot see: whether the job screen is the thing you'd actually open during a shoot, whether the stage names match how you and Linh talk, and several scope decisions I made that you may veto.
 
-The test site serves the T7 branch: open **http://192.168.1.94:8000/aura/deals**, drag a deal to **Won**, accept the job offer. **Hard-refresh first (Ctrl+Shift+R).**
+The T7 preview stack is up: open **http://192.168.1.94:8007/aura/deals**, drag a deal to **Won**, accept the job offer. **Hard-refresh first (Ctrl+Shift+R).**
+
+It is seeded with **MV — Hà Anh Tuấn** — already won, already a job (`/aura/jobs`), sitting at Feedback with two revision rounds used. Logging a third there is the interesting click: it should flag the chargeable change order *and* move the job back to Post on its own.
 
 ## Conversion — "nothing is re-entered"
 
@@ -60,7 +62,13 @@ _Why this matters: this is the round-trip you raised at the T6 walkthrough ("nee
 
 >
 
-### A revision logged on a job at **Chờ thanh toán** or **Done** also drags it back to Post. That's honest about the work restarting, but it pulls a finished job back onto the board. Do you want a cut-off stage past which the stage stops moving?
+### The redo stops at **Delivery**. A revision logged at **Nghiệm thu**, **Chờ thanh toán** or **Done** is still counted and still flagged chargeable, but the job stays where it is — past sign-off a change request is a new negotiation, not a redo. Is that the right place to draw the line?
+
+_Why this matters: the alternative is that a note typed against a delivered, invoiced job silently pulls it back onto the production board._
+
+>
+
+### A revision round can be **deleted** by whoever can edit the job, which lowers the count and can clear the change-order flag. Should logged rounds be immutable once saved — or is deleting a mistyped round something you and Linh need?
 
 >
 

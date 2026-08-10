@@ -245,7 +245,12 @@ import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
-import { STAGES, INCLUDED_REVISION_ROUNDS, REDO_STAGE } from "../data/jobStages"
+import {
+  STAGES,
+  INCLUDED_REVISION_ROUNDS,
+  REDO_STAGE,
+  LAST_REOPENABLE_STAGE,
+} from "../data/jobStages"
 
 const route = useRoute()
 const name = route.params.name
@@ -292,11 +297,14 @@ const nextIsChargeable = computed(
   () => (doc.value?.revision_rounds || 0) >= INCLUDED_REVISION_ROUNDS
 )
 
-// Mirrors redo_stage_for on the server: a job the client has already
-// been shown goes back to the edit when a revision arrives.
+// Mirrors redo_stage_for on the server: between being shown a cut and
+// signing it off, a revision sends the job back to the edit.
 const reopensOnLog = computed(() => {
   const current = STAGES.indexOf(doc.value?.stage)
-  return current > STAGES.indexOf(REDO_STAGE)
+  return (
+    current > STAGES.indexOf(REDO_STAGE) &&
+    current <= STAGES.indexOf(LAST_REOPENABLE_STAGE)
+  )
 })
 
 const setValue = createResource({
