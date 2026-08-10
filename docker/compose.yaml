@@ -27,6 +27,9 @@ services:
       interval: 5s
       retries: 20
 
+  redis:
+    image: redis:7-alpine
+
   frappe:
     image: frappe/bench:latest
     command: bash /workspace/repo/docker/init.sh
@@ -34,6 +37,8 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "8000:8000" # bench web
       - "9000:9000" # socketio
