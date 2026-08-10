@@ -1,5 +1,13 @@
 # T2 acceptance walkthrough — are Contacts done?
 
+> **Outcome (2026-08-10): GO.** First pass surfaced a reload loop
+> (missing CSRF token), a missing logout, clipped Vietnamese
+> descenders, and five domain corrections (phone=Zalo required,
+> freelancer paperwork fields, no Freelancer companies, VN bank
+> dropdown) — all fixed and re-verified. Founder confirmed create/
+> browse for companies and people, Producer-account access, and
+> phone usability. T2 merged.
+
 **Purpose:** decide whether ticket [#4 (T2: Contacts)](https://github.com/nosuper/10082026-OS/issues/4) is complete — merge [PR #17](https://github.com/nosuper/10082026-OS/pull/17) to `main` and unblock T3 — or send it back for fixes.
 
 **From:** Claude (the implementing agent) — **To:** the founder, plus the next Claude session — **How your answers will be used:** the next session reads this file, treats every "yes" as a verified acceptance criterion, and merges (or fixes) accordingly.
@@ -38,7 +46,7 @@ _Why this matters: saving from the UI is the exact path the CSRF bug broke; the 
 
 ### Edit an existing record (change a phone number, add a tag). Do the changes stick after reopening?
 
->
+> Not answered explicitly; founder accepted overall ("merge it").
 
 ### Enter a real Vietnamese name and address with full diacritics (e.g. "Nguyễn Trần Phương Thảo"). Does it display correctly in the list and dialog after saving?
 
@@ -48,7 +56,7 @@ _Why this matters: English UI holding Vietnamese data is a spec requirement; enc
 
 ### Does the search box and the role-tag filter ("All roles" dropdown) narrow the list the way you'd expect — could you find a party "in seconds"?
 
->
+> Not answered explicitly; founder accepted overall ("merge it").
 
 ## The producer's seat
 
@@ -56,13 +64,13 @@ _Why this matters: English UI holding Vietnamese data is a spec requirement; enc
 
 _Why this matters: "both founder and producer can find and edit any party" is an acceptance criterion; automated tests prove the permission, not the UI experience._
 
->
+> Yes — "Producer account works fine." (2026-08-10)
 
 ### Open /aura/contacts on a phone browser. Is the list usable and can a record be opened and edited?
 
 _Why this matters: Linh works from a phone on shoots; contacts is her first daily screen._
 
->
+> Yes — works fine on the phone.
 
 ## Scope decisions you may veto (I chose, you decide)
 
