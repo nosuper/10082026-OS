@@ -8,7 +8,7 @@
 
 T6 is the first thing in this system a **person outside the company** will ever see. Publishing a breakdown freezes its packages and totals into a numbered version with its own random link; the client opens that link with no login, downloads a PDF of the same page, and we record every open. You mark a version sent, then confirmed; a sent quote that goes quiet past a configurable window gets flagged on the board.
 
-What automation covers: 138 pure tests (the guest field whitelist, which version speaks for a deal, the nudge condition) all green on this machine. 23 new Frappe site tests — token access, version immutability, the guest serialization boundary, open events, PDF/page parity, the nudge — are written but **have not been run yet**: this machine has no bench and no Docker, so CI is their first run. Treat their result as a gate before you merge, not as something already proven.
+What automation covers: 142 pure tests and 26 Frappe site tests — token access, version immutability, the guest serialization boundary, open events, PDF/page parity, the nudge — all green on the test box. Running them there for the first time turned up three real bugs, now fixed; one of them changes pricing behaviour you need to sign off on (the first two questions under **Packages and what the client pays**). Two unrelated tests still fail on that box, on 56 leftover rows from the buggy build — nothing to do with the code, and CI builds a clean site each run.
 
 What automation cannot see: whether a page you'd actually send a client looks like a quote from your company, whether the English wording is right, whether the publish → send → chase loop fits how you and Linh really work, and four scope decisions I made that you may veto.
 
@@ -16,7 +16,7 @@ What automation cannot see: whether a page you'd actually send a client looks li
 
 20–25 minutes, with one real deal's breakdown already built (the T5 walkthrough deal is fine). Answer inline under each `>`. Partial answers and "I don't know" are useful — flag anything you're unsure of rather than skipping it.
 
-**Before you start:** the T6 branch has to be deployed to the test site (192.168.1.94) — the quote link only means anything on a real hostname. Ask the next session to deploy it, then **hard-refresh (Ctrl+Shift+R)**. Open a deal → **₫ Breakdown** → the **Client-facing quote** panel is on the right, under the totals.
+**Before you start:** T6 is already deployed to the test site — open **http://192.168.1.94:8000/aura/deals** and **hard-refresh (Ctrl+Shift+R)**. Open a deal → **₫ Breakdown** → the **Client-facing quote** panel is on the right, under the totals. Two things to know about that box: it was serving T7 until this deploy, so T7's job data on it is gone (its code is safe on its own branch); and quote links there are `http://192.168.1.94:8000/quote/<token>`, which only work inside the office network — judge the page, not the shareability.
 
 ## Publishing and versions (the ticket's headline)
 
@@ -37,6 +37,26 @@ _Why this matters: "wrong version sent" is the failure versioning exists to stop
 >
 
 ### Try opening a made-up link — take a real quote URL and change a few characters. Do you get a plain 404 rather than anything about the deal?
+
+>
+
+## Packages and what the client pays
+
+### Override a package price upward (round 58.4m up to 60m), publish, and look at the client's Total. It is now **1.6m higher** than before the rounding. Is that what rounding a package up should mean — you charge more?
+
+_Why this matters: this is the one behaviour the deployment changed. Until now the override moved only the package's printed price and the internal variance; the total you charged came from the cost lines and never moved, so the page showed an offer that didn't add up to its own Total. I made the client's Total follow the package prices. The alternative is that rounding is cosmetic — the client's Total stays put and one package silently subsidises another._
+
+>
+
+### Because of that, publishing now **refuses** if any cost line belongs to no package, telling you which line to assign. Right call, or do you need to publish with lines left out?
+
+_Why this matters: with the Total built from package prices, an unassigned line is money we'd quietly absorb. Refusing is the safe reading — but if you deliberately keep some costs out of the client's offer (contingency you're absorbing on purpose), this blocks a real workflow and should be a warning instead._
+
+>
+
+### The client sees Subtotal → Management fee (10%) → VAT (8%) → Total as separate lines. Is showing the management fee to the client right, or should it be folded into the package prices?
+
+_Why this matters: it's a one-line change now and an awkward conversation with a client later._
 
 >
 
