@@ -19,6 +19,7 @@ from auraos.lib.quote import (
     needs_nudge,
     quote_totals,
 )
+from auraos.lib.quote import client_entries as quote_client_entries
 
 # Delivery status is the only thing that moves after publishing;
 # everything else is the frozen snapshot the client may already have
@@ -167,31 +168,17 @@ def publish(deal_name, notes=None):
 
 
 def client_entries(deal):
-    """What the client is offered, in reading order.
+    """What the client is offered — the shared rule, applied to a Deal.
 
-    Packages first, then any cost line that belongs to none — the
-    founder prices some items as standalone packages and quotes them
-    straight (T6 walkthrough), so an unassigned line is not a mistake to
-    block on; it is its own one-line package, priced at its marked-up
-    quote price.
+    auraos.lib.quote owns the rule so the published quote and the
+    breakdown's own totals cannot disagree about what the client sees.
     """
-    entries = [
-        {
-            "title": package.title,
-            "description": package.description,
-            "price": round_vnd(package.price or 0),
-        }
-        for package in deal.packages
-    ]
-    entries += [
-        {
-            "title": row.description or _("Item {0}").format(row.idx),
-            "description": None,
-            "price": round_vnd(row.quote_price or 0),
-        }
-        for row in deal.cost_lines
-        if not row.package
-    ]
+    entries = quote_client_entries(
+        [package.as_dict() for package in deal.packages],
+        [row.as_dict() for row in deal.cost_lines],
+    )
+    for entry in entries:
+        entry["price"] = round_vnd(entry["price"])
     return entries
 
 

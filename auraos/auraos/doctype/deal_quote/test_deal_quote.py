@@ -194,6 +194,41 @@ class TestDealQuote(FrappeTestCase):
         )
         self.assertEqual(standalone.price, deal.cost_lines[1].quote_price)
 
+    def test_rounding_a_package_up_raises_the_stored_margin(self):
+        # Issue #32: the client pays the overridden price, so the
+        # margin, the margin % and the floor warning must move with it —
+        # they used to be measured against the line-based total.
+        deal = make_quotable_deal()
+        before = frappe.get_doc("Deal", deal.name)
+        deal.packages[0].price_override = deal.packages[0].price + 2_000_000
+        deal.save()
+        after = frappe.get_doc("Deal", deal.name)
+
+        self.assertGreater(after.quote_margin, before.quote_margin)
+        self.assertGreater(after.quote_margin_pct, before.quote_margin_pct)
+        self.assertGreater(after.quote_total, before.quote_total)
+
+    def test_rounding_a_package_up_raises_the_founder_chain(self):
+        deal = make_quotable_deal()
+        before = frappe.get_doc("Deal", deal.name)
+        deal.packages[0].price_override = deal.packages[0].price + 2_000_000
+        deal.save()
+        after = frappe.get_doc("Deal", deal.name)
+
+        self.assertGreater(after.net_profit, before.net_profit)
+        self.assertGreater(after.total_commission, before.total_commission)
+
+    def test_the_published_total_matches_the_deals_own_total(self):
+        # One price, computed one way: what the breakdown says the deal
+        # is worth is what the client is asked to pay.
+        deal = make_quotable_deal()
+        deal.packages[0].price_override = deal.packages[0].price + 2_000_000
+        deal.save()
+        quote = publish(deal.name)
+        reloaded = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(quote.total, reloaded.quote_total)
+        self.assertEqual(quote.subtotal, reloaded.quote_subtotal)
+
     def test_publishing_an_empty_deal_is_refused(self):
         deal = make_quotable_deal(packages=[], cost_lines=[])
         with self.assertRaises(frappe.ValidationError):

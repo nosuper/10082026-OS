@@ -25,6 +25,7 @@ from decimal import Decimal
 from typing import Any, Mapping
 
 from auraos.lib.money import to_decimal
+from auraos.lib.pricing import TNDN_RATE
 
 # Everything a client may read off a quote. Ordered as the page reads.
 CLIENT_QUOTE_FIELDS = (
@@ -88,6 +89,94 @@ def quote_totals(package_prices, mf_rate, vat_rate) -> QuoteTotals:
         mf_amount=mf_amount,
         vat_amount=vat_amount,
         total=subtotal + mf_amount + vat_amount,
+    )
+
+
+def client_entries(packages, lines):
+    """What the client is offered, in reading order.
+
+    Packages first, then any cost line belonging to none: the founder
+    prices some items as standalone packages and quotes them straight
+    (T6 walkthrough), so an unassigned line is its own one-line entry at
+    its marked-up quote price — never money we silently absorb.
+    """
+    entries = [
+        {
+            "title": package.get("title"),
+            "description": package.get("description"),
+            "price": package.get("price") or 0,
+        }
+        for package in packages
+    ]
+    entries += [
+        {
+            "title": line.get("description") or f"Item {line.get('idx')}",
+            "description": None,
+            "price": line.get("quote_price") or 0,
+        }
+        for line in lines
+        if not line.get("package")
+    ]
+    return entries
+
+
+@dataclass(frozen=True)
+class QuoteChain:
+    """The client's price and everything it implies, exactly."""
+
+    subtotal: Decimal
+    mf_amount: Decimal
+    vat_amount: Decimal
+    total: Decimal
+    revenue_ex_vat: Decimal
+    margin: Decimal
+    margin_fraction: Decimal | None
+    total_commission: Decimal
+    cm: Decimal
+    profit_before_tax: Decimal
+    tndn: Decimal
+    net_profit: Decimal
+    vat_payable: Decimal
+
+
+def quote_chain(
+    package_prices,
+    cost_basis,
+    input_vat,
+    mf_rate,
+    vat_rate,
+    commission_rate,
+) -> QuoteChain:
+    """The profit chain measured against the price the client actually pays.
+
+    The engine (auraos.lib.pricing) owns the cost side and stays the
+    xlsx's arithmetic; what it cannot know is that a producer rounded a
+    package up. Revenue therefore comes from the packages as printed,
+    and margin, commission, tax and net profit all follow from it —
+    otherwise rounding a package up would flatter the client's invoice
+    without ever showing up in what the deal earns (issue #32).
+    """
+    totals = quote_totals(package_prices, mf_rate, vat_rate)
+    cost_basis = to_decimal(cost_basis)
+    revenue_ex_vat = totals.subtotal + totals.mf_amount
+    margin = revenue_ex_vat - cost_basis
+    total_commission = revenue_ex_vat * to_decimal(commission_rate)
+    profit_before_tax = revenue_ex_vat - cost_basis - total_commission
+    tndn = profit_before_tax * TNDN_RATE
+    return QuoteChain(
+        subtotal=totals.subtotal,
+        mf_amount=totals.mf_amount,
+        vat_amount=totals.vat_amount,
+        total=totals.total,
+        revenue_ex_vat=revenue_ex_vat,
+        margin=margin,
+        margin_fraction=(margin / revenue_ex_vat if revenue_ex_vat else None),
+        total_commission=total_commission,
+        cm=margin - total_commission,
+        profit_before_tax=profit_before_tax,
+        tndn=tndn,
+        net_profit=profit_before_tax - tndn,
+        vat_payable=totals.vat_amount - to_decimal(input_vat),
     )
 
 

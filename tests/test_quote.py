@@ -20,9 +20,11 @@ import pytest
 from auraos.lib.quote import (
     CLIENT_PACKAGE_FIELDS,
     CLIENT_QUOTE_FIELDS,
+    client_entries,
     client_view,
     delivery_state,
     needs_nudge,
+    quote_chain,
     quote_totals,
 )
 
@@ -169,6 +171,106 @@ def test_quote_totals_of_no_packages_are_zero():
 def test_vat_applies_to_the_management_fee_too():
     totals = quote_totals([100_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
     assert totals.vat_amount == (totals.subtotal + totals.mf_amount) * D("0.08")
+
+
+# -- what the client is offered --
+
+
+def package(title, price, description=None):
+    return {"title": title, "description": description, "price": price}
+
+
+def cost_line(idx, description, package_title, quote_price):
+    return {
+        "idx": idx,
+        "description": description,
+        "package": package_title,
+        "quote_price": quote_price,
+    }
+
+
+def test_client_entries_lists_packages_first():
+    entries = client_entries(
+        [package("Human resources", 60_000_000), package("Equipment", 40_000_000)],
+        [cost_line(1, "Đạo diễn", "Human resources", 60_000_000)],
+    )
+    assert [e["title"] for e in entries] == ["Human resources", "Equipment"]
+
+
+def test_a_line_in_no_package_becomes_its_own_entry():
+    # The founder prices some items as standalone packages and quotes
+    # them straight — an unassigned line is an offer, not an error.
+    entries = client_entries(
+        [package("Equipment", 40_000_000)],
+        [
+            cost_line(1, "Thuê thiết bị", "Equipment", 40_000_000),
+            cost_line(2, "Drone operator", None, 12_000_000),
+        ],
+    )
+    assert [e["title"] for e in entries] == ["Equipment", "Drone operator"]
+    assert entries[1]["price"] == 12_000_000
+
+
+def test_a_standalone_line_without_a_description_still_gets_a_name():
+    entries = client_entries([], [cost_line(3, "", None, 5_000_000)])
+    assert entries[0]["title"] == "Item 3"
+
+
+# -- the profit chain the client's price implies --
+
+
+CHAIN = dict(
+    cost_basis=D(70_000_000),
+    input_vat=D(4_000_000),
+    mf_rate=D("0.1"),
+    vat_rate=D("0.08"),
+    commission_rate=D("0.05"),
+)
+
+
+def test_margin_is_measured_against_what_the_client_pays():
+    chain = quote_chain([100_000_000], **CHAIN)
+    assert chain.revenue_ex_vat == 110_000_000
+    assert chain.margin == 110_000_000 - 70_000_000
+
+
+def test_rounding_a_package_up_raises_the_margin():
+    # Issue #32: the breakdown used to measure margin against the
+    # line-based total, so an override moved the client's price without
+    # moving the margin, the margin %, or the floor warning.
+    plain = quote_chain([98_400_000], **CHAIN)
+    rounded = quote_chain([100_000_000], **CHAIN)
+    assert rounded.margin > plain.margin
+    assert rounded.margin - plain.margin == (100_000_000 - 98_400_000) * D("1.1")
+
+
+def test_commission_is_taken_on_the_client_facing_revenue():
+    chain = quote_chain([100_000_000], **CHAIN)
+    assert chain.total_commission == chain.revenue_ex_vat * D("0.05")
+    assert chain.cm == chain.margin - chain.total_commission
+
+
+def test_the_profit_chain_runs_to_net_profit():
+    chain = quote_chain([100_000_000], **CHAIN)
+    assert chain.profit_before_tax == (
+        chain.revenue_ex_vat - D(70_000_000) - chain.total_commission
+    )
+    assert chain.tndn == chain.profit_before_tax * D("0.2")
+    assert chain.net_profit == chain.profit_before_tax - chain.tndn
+
+
+def test_vat_payable_is_output_vat_less_input_vat():
+    chain = quote_chain([100_000_000], **CHAIN)
+    assert chain.vat_payable == chain.vat_amount - D(4_000_000)
+
+
+def test_margin_fraction_is_none_without_revenue():
+    assert quote_chain([], **CHAIN).margin_fraction is None
+
+
+def test_margin_fraction_is_margin_over_revenue():
+    chain = quote_chain([100_000_000], **CHAIN)
+    assert chain.margin_fraction == chain.margin / chain.revenue_ex_vat
 
 
 # -- which version the deal's status follows --

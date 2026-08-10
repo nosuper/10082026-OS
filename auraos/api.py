@@ -6,15 +6,18 @@ from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
     OPERATING_ROLES,
+    client_prices,
+    deal_chain,
     floor_breached,
     margin_floor_pct,
-    quote_margin_fraction,
     rate,
     to_engine_lines,
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
+# Imported by name: `quote` is a parameter throughout this module.
+from auraos.lib.quote import quote_chain
 
 # The company's standing commission practice (spec #2, story 14); the
 # Deal field carries the same default.
@@ -125,7 +128,7 @@ def _is_founder():
     return "Founder" in frappe.get_roles()
 
 
-def _founder_block(result, commission_pct):
+def _founder_block(chain, result, commission_pct):
     """The profit chain, assembled only for Founder sessions.
 
     The same numbers are persisted on the deal as permlevel-1 fields
@@ -134,17 +137,13 @@ def _founder_block(result, commission_pct):
     """
     return {
         "commission_pct": float(commission_pct),
-        "total_commission": round_vnd(result.total_commission),
-        "cm": round_vnd(
-            result.revenue_ex_vat
-            - result.total_profit_cost_basis
-            - result.total_commission
-        ),
-        "profit_before_tax": round_vnd(result.profit_before_tax),
-        "tndn": round_vnd(result.tndn),
-        "net_profit": round_vnd(result.net_profit),
+        "total_commission": round_vnd(chain.total_commission),
+        "cm": round_vnd(chain.cm),
+        "profit_before_tax": round_vnd(chain.profit_before_tax),
+        "tndn": round_vnd(chain.tndn),
+        "net_profit": round_vnd(chain.net_profit),
         "total_input_vat": round_vnd(result.total_input_vat),
-        "vat_payable": round_vnd(result.vat_payable),
+        "vat_payable": round_vnd(chain.vat_payable),
         "margin_floor_pct": float(margin_floor_pct()),
     }
 
@@ -176,7 +175,30 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
         if row.get("package"):
             budgets.setdefault(row["package"], []).append(line.budget)
 
-    pct = quote_margin_fraction(result)
+    packages = [
+        {
+            "title": row.get("title"),
+            **_package_dict(
+                budgets.get(row.get("title"), []), row.get("price_override") or None
+            ),
+        }
+        for row in package_rows
+    ]
+    # The client's price, live: package prices as shown, plus any line
+    # standing on its own — the same rule the published quote uses.
+    priced_lines = [
+        {**row, "quote_price": round_vnd(line.budget)}
+        for row, line in zip(line_rows, result.lines)
+    ]
+    chain = quote_chain(
+        client_prices(packages, priced_lines),
+        cost_basis=result.total_profit_cost_basis,
+        input_vat=result.total_input_vat,
+        mf_rate=rate(quote_mf_pct),
+        vat_rate=rate(vat_pct),
+        commission_rate=rate(commission_pct),
+    )
+    pct = chain.margin_fraction
     out = {
         "lines": [
             {
@@ -188,26 +210,17 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
             }
             for line in result.lines
         ],
-        "packages": [
-            {
-                "title": row.get("title"),
-                **_package_dict(
-                    budgets.get(row.get("title"), []),
-                    row.get("price_override") or None,
-                ),
-            }
-            for row in package_rows
-        ],
-        "subtotal": round_vnd(result.subtotal),
-        "management_fee": round_vnd(result.management_fee),
-        "vat": round_vnd(result.vat),
-        "total": round_vnd(result.total),
-        "margin": round_vnd(result.revenue_ex_vat - result.total_profit_cost_basis),
+        "packages": packages,
+        "subtotal": round_vnd(chain.subtotal),
+        "management_fee": round_vnd(chain.mf_amount),
+        "vat": round_vnd(chain.vat_amount),
+        "total": round_vnd(chain.total),
+        "margin": round_vnd(chain.margin),
         "margin_pct": float(pct * 100) if pct is not None else None,
-        "floor_breached": bool(result.lines) and floor_breached(result),
+        "floor_breached": bool(result.lines) and floor_breached(pct),
     }
     if _is_founder():
-        out["founder"] = _founder_block(result, commission_pct)
+        out["founder"] = _founder_block(chain, result, commission_pct)
     return out
 
 
@@ -240,7 +253,7 @@ def deal_profit(deal):
         commission_rate=rate(doc.commission_pct),
     )
     result = pricing.compute_quote(to_engine_lines(doc.cost_lines), params)
-    return _founder_block(result, doc.commission_pct or 0)
+    return _founder_block(deal_chain(doc, result), result, doc.commission_pct or 0)
 
 
 # -- quote delivery (T6, issue #8) --
