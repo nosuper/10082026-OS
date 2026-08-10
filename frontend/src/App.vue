@@ -28,7 +28,10 @@
 <script setup>
 import { Button, createResource } from "frappe-ui"
 
-const nav = [{ label: "Contacts", route: "/contacts" }]
+const nav = [
+  { label: "Deals", route: "/deals" },
+  { label: "Contacts", route: "/contacts" },
+]
 
 // Log out via the API, then land on a login page that returns here —
 // otherwise re-login strands the user in the Desk.
@@ -36,7 +39,7 @@ const logout = createResource({
   url: "logout",
   onSuccess() {
     window.location.replace(
-      "/login?redirect-to=" + encodeURIComponent("/aura/contacts")
+      "/login?redirect-to=" + encodeURIComponent("/aura/deals")
     )
   },
 })
