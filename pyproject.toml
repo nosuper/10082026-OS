@@ -9,6 +9,10 @@ dependencies = [
     # Frappe itself is provided by the bench; keep this list free of it.
 ]
 
+[project.optional-dependencies]
+# Pure-test tooling only; the parity test reads the sample xlsx.
+test = ["pytest", "openpyxl"]
+
 [build-system]
 requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
