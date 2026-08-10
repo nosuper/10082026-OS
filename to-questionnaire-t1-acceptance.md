@@ -1,5 +1,14 @@
 # T1 acceptance walkthrough — is the scaffold done?
 
+> **Outcome (2026-08-10): GO.** First pass found a real blocker — `/aura`
+> was a white screen (missing `sites/assets/auraos` symlink; fixed in
+> init.sh + CI, with a new regression test asserting asset
+> servability). On re-test the founder confirmed: page renders with a
+> working button; Desk login works; a Founder-role user
+> (anhchung.work@gmail.com) can read/edit/comment on Founder Spike
+> Note; the Producer-role user (Linh) has no access. Mobile check and
+> fresh-machine boot were not exercised — accepted as-is. T1 merged.
+
 **Purpose:** decide whether ticket [#3 (T1: Scaffold)](https://github.com/nosuper/10082026-OS/issues/3) is complete — merge `feat/t1-scaffold` to `main` and start T2 — or send it back for fixes.
 
 **From:** Claude (the implementing agent) — **To:** the founder, plus the next Claude session — **How your answers will be used:** the next session reads this file, treats every "yes" as a verified acceptance criterion, and merges (or fixes) accordingly.
