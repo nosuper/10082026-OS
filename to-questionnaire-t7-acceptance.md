@@ -6,7 +6,7 @@
 
 ## Context
 
-Automation is green: 175/175 Frappe site tests on a fresh site (28 of them new for T7 — conversion completeness and its refusals, the stage flow and its history, the revision counter, the revision round-trip, and the producer boundary on the carried commission through the document API, the list API and global search), 103 pure pytest, frontend build clean. T6 (the hosted quote page) is merged in, so this branch has everything main has.
+Automation is green: 176/176 Frappe site tests on a fresh site (30 of them new for T7 — conversion completeness and its refusals, the stage flow and its history, the revision counter, the revision round-trip and where it stops, and the producer boundary on the carried commission through the document API, the list API and global search), 103 pure pytest, frontend build clean. T6 (the hosted quote page) is merged in, so this branch has everything main has.
 
 What automation cannot see: whether the job screen is the thing you'd actually open during a shoot, whether the stage names match how you and Linh talk, and several scope decisions I made that you may veto.
 
