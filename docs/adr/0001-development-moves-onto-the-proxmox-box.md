@@ -49,9 +49,13 @@ human to click through.
 - Sessions run over **VS Code Remote-SSH**, so an editor, a file tree and
   several concurrent Claude Code terminals all live on the box. The
   desktop app's browser pane and visual tooling are given up.
-- **Git worktrees replace the tar-and-extract deploy entirely** — one
-  worktree per ticket, no copying, and no more accumulating files from
-  unmerged branches in `/opt/auraos`.
+- **The tar-and-extract deploy is gone entirely** — each preview is its
+  own clone of the branch, so no files travel between machines and
+  `/opt/auraos` no longer accumulates leftovers from unmerged branches.
+  (Git worktrees were the first attempt and do not work here: `bench
+  get-app` clones `/workspace/repo` from inside the container, and a
+  linked worktree's `.git` is a file pointing at a parent object store
+  that isn't mounted there.)
 - Concurrency is capped at **three running stacks**; a fourth stops the
   least-recently-used one, which restarts in seconds because its volume
   survives. A stack untouched for seven days is pruned when the next boots.

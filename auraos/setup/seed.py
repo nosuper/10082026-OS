@@ -12,7 +12,11 @@ boots. Everything here is idempotent — running it twice changes nothing.
 
 Run by scripts/preview.sh; by hand:
 
-    bench --site dev.localhost execute auraos.setup.seed.run
+    echo 'from auraos.setup.seed import run; run()' \
+        | bench --site dev.localhost console
+
+(`bench execute` cannot run this: it evals the dotted path against its
+own module globals, where `auraos` is not a name.)
 """
 
 import frappe
@@ -72,6 +76,7 @@ PACKAGES = [
 
 def run():
     """Build the base data, then every registered feature seed."""
+    ensure_founder_role()
     company = ensure_company()
     ensure_contact(company)
     deals = [ensure_deal(company, **deal) for deal in DEALS]
@@ -115,13 +120,32 @@ def ensure_contact(company):
     ).insert(ignore_permissions=True)
 
 
-def founder():
-    """Whoever holds the Founder role — Administrator on a fresh site."""
-    holders = frappe.get_all(
+def founder_holders():
+    return frappe.get_all(
         "Has Role",
         filters={"role": "Founder", "parenttype": "User"},
         pluck="parent",
     )
+
+
+def ensure_founder_role():
+    """Give Administrator the Founder role if nobody holds it.
+
+    A deal's owner must hold an operating role, and that check reads
+    explicit Has Role rows — Administrator's implicit access to
+    everything does not count. On a fresh site nobody holds it, so
+    seeding a deal would fail before it began.
+    """
+    if founder_holders():
+        return
+    user = frappe.get_doc("User", "Administrator")
+    user.append_roles("Founder")
+    user.save(ignore_permissions=True)
+
+
+def founder():
+    """Whoever holds the Founder role — Administrator on a fresh site."""
+    holders = founder_holders()
     return holders[0] if holders else "Administrator"
 
 
