@@ -192,7 +192,10 @@ const milestones = createResource({
       ...row,
       key: row.name || `new-${nextKey++}`,
     }))
-    error.value = ""
+    // Deliberately not clearing `error`: a refused save reloads to show
+    // what is actually stored, and clearing here wiped the very message
+    // explaining the refusal — the plan snapped back saying nothing.
+    // Each user action clears it when it starts instead.
   },
   onError(err) {
     error.value = frappeErrorMessage(err)
@@ -243,8 +246,10 @@ const saver = createResource({
     milestones.reload()
   },
   onError(err) {
+    // The typed plan is left alone on purpose: a refusal is usually a
+    // number to correct, and throwing away what the founder just typed
+    // makes them retype it to find out they were nearly right.
     error.value = frappeErrorMessage(err)
-    milestones.reload()
   },
 })
 
@@ -274,6 +279,7 @@ const statusSetter = createResource({
 })
 
 function setStatus(row, status) {
+  error.value = ""
   row.status = status
   statusSetter.submit({ job: props.job, milestone: row.name, status })
 }
@@ -302,6 +308,7 @@ const invoiceRequest = createResource({
 
 function copyInvoiceRequest(row) {
   copied.value = false
+  error.value = ""
   invoiceRequest.submit({ job: props.job, milestone: row.name })
 }
 
