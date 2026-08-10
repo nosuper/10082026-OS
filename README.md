@@ -23,7 +23,7 @@ install, frontend build). Watch it with `docker compose logs -f frappe`.
 Then:
 
 - Site: <http://localhost:8000> — login `Administrator` / `admin`
-- Placeholder frappe-ui page: <http://localhost:8000/aura>
+- frappe-ui app (Contacts): <http://localhost:8000/aura>
 
 The repo is mounted into the container; the bench lives in a named
 volume, so `docker compose down` keeps the site and `docker compose up`

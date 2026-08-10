@@ -12,27 +12,13 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import global_search
 
+from auraos.tests.utils import make_test_user
+
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
 
 # Unique marker so global-search assertions cannot collide with other data.
 SECRET = "chiphibimat8823"
-
-
-def make_test_user(email, role):
-    if not frappe.db.exists("User", email):
-        frappe.get_doc(
-            {
-                "doctype": "User",
-                "email": email,
-                "first_name": email.split("@")[0].title(),
-                "user_type": "System User",
-                "send_welcome_email": 0,
-            }
-        ).insert(ignore_permissions=True)
-    user = frappe.get_doc("User", email)
-    user.append_roles(role)
-    user.save(ignore_permissions=True)
 
 
 class TestFounderSpikeNote(FrappeTestCase):

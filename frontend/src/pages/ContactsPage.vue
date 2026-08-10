@@ -22,6 +22,12 @@
         placeholder="Search…"
         v-model="search"
       />
+      <FormControl
+        type="select"
+        class="w-40"
+        :options="roleFilterOptions"
+        v-model="roleFilter"
+      />
       <div class="ml-auto">
         <Button variant="solid" @click="openNew">
           {{ activeTab === "companies" ? "New Company" : "New Person" }}
@@ -55,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue"
+import { ref, computed, watch } from "vue"
 import { Button, FormControl, ListView, createListResource } from "frappe-ui"
 import PartyFormDialog from "../components/PartyFormDialog.vue"
 
@@ -65,6 +71,30 @@ const tabs = [
 ]
 const activeTab = ref("companies")
 const search = ref("")
+const roleFilter = ref("")
+
+const partyRoles = createListResource({
+  doctype: "Party Role",
+  fields: ["name"],
+  pageLength: 50,
+  auto: true,
+})
+
+const roleFilterOptions = computed(() => [
+  { label: "All roles", value: "" },
+  ...(partyRoles.data || []).map((r) => ({ label: r.name, value: r.name })),
+])
+
+// Filtering on the child table server-side: works past any page cap.
+watch(roleFilter, (role) => {
+  const filters = role
+    ? [["Party Role Tag", "party_role", "=", role]]
+    : []
+  companies.filters = filters
+  people.filters = filters
+  companies.reload()
+  people.reload()
+})
 
 const companies = createListResource({
   doctype: "Party Company",

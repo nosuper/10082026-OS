@@ -27,8 +27,11 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "create": 1,
+   "delete": 1,
    "read": 1,
-   "role": "Founder"
+   "role": "Founder",
+   "write": 1
   },
   {
    "read": 1,

@@ -201,30 +201,27 @@ function toggleRole(role, checked) {
     : selectedRoles.value.filter((r) => r !== role)
 }
 
+function onSaveSuccess() {
+  saving.value = false
+  emit("update:modelValue", false)
+  emit("saved")
+}
+
+function onSaveError(err) {
+  saving.value = false
+  saveError.value = err.messages?.join("\n") || err.message
+}
+
 const saveResource = createResource({
   url: "frappe.client.save",
-  onSuccess() {
-    saving.value = false
-    emit("update:modelValue", false)
-    emit("saved")
-  },
-  onError(err) {
-    saving.value = false
-    saveError.value = err.messages?.join("\n") || err.message
-  },
+  onSuccess: onSaveSuccess,
+  onError: onSaveError,
 })
 
 const insertResource = createResource({
   url: "frappe.client.insert",
-  onSuccess() {
-    saving.value = false
-    emit("update:modelValue", false)
-    emit("saved")
-  },
-  onError(err) {
-    saving.value = false
-    saveError.value = err.messages?.join("\n") || err.message
-  },
+  onSuccess: onSaveSuccess,
+  onError: onSaveError,
 })
 
 function save() {

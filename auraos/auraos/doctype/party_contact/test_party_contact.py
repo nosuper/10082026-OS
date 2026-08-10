@@ -15,6 +15,8 @@ from auraos.tests.utils import make_test_user
 
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
+# A System User with neither app role — the negative control.
+OUTSIDER = "outsider@test.auraos.local"
 
 
 def make_company(**overrides):
@@ -51,6 +53,7 @@ class TestPartyContact(FrappeTestCase):
         super().setUpClass()
         make_test_user(FOUNDER, "Founder")
         make_test_user(PRODUCER, "Producer")
+        make_test_user(OUTSIDER)
 
     def setUp(self):
         frappe.set_user("Administrator")
@@ -146,8 +149,13 @@ class TestPartyContact(FrappeTestCase):
         # a full round trip: create above, then edit and list
         contact.phone = "0912345678"
         contact.save()
+        # frappe.client.get_list backs GET /api/resource/<doctype> — the
+        # REST list seam, not just the internal document API.
+        from frappe.client import get_list
+
         self.assertIn(
-            contact.name, frappe.get_list("Party Contact", pluck="name")
+            contact.name,
+            [row["name"] for row in get_list("Party Contact", fields=["name"])],
         )
 
     def test_founder_can_read_write_parties(self):
@@ -155,3 +163,19 @@ class TestPartyContact(FrappeTestCase):
 
     def test_producer_can_read_write_parties(self):
         self.assert_role_can_read_write(PRODUCER)
+
+    def test_user_without_app_role_is_denied(self):
+        from frappe.client import get_list
+
+        frappe.set_user(OUTSIDER)
+        for doctype in ("Party Company", "Party Contact"):
+            self.assertFalse(frappe.has_permission(doctype, "read"))
+            with self.assertRaises(frappe.PermissionError):
+                get_list(doctype)
+
+    def test_only_founder_can_manage_party_roles(self):
+        frappe.set_user(PRODUCER)
+        self.assertTrue(frappe.has_permission("Party Role", "read"))
+        self.assertFalse(frappe.has_permission("Party Role", "create"))
+        frappe.set_user(FOUNDER)
+        self.assertTrue(frappe.has_permission("Party Role", "create"))
