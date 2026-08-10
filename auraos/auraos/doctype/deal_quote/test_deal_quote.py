@@ -12,10 +12,6 @@ The four seams the ticket names:
 - **Nudge condition** — a sent quote that stays quiet past the configured
   window shows up in the nudge query; a confirmed one never does.
 
-Note: rendering the public page commits (the open event is the point of
-the request), so this module cleans up its own rows rather than relying
-on the test-case transaction rollback.
-
 Runs via: bench --site <site> run-tests --app auraos
 """
 
@@ -118,8 +114,6 @@ class TestDealQuote(FrappeTestCase):
 
     def tearDown(self):
         frappe.set_user("Administrator")
-        for name in frappe.get_all("Deal Quote Open", pluck="name"):
-            frappe.delete_doc("Deal Quote Open", name, force=True)
         super().tearDown()
 
     # -- publishing & versions --
@@ -155,6 +149,33 @@ class TestDealQuote(FrappeTestCase):
         reloaded = frappe.get_doc("Deal Quote", first.name)
         self.assertEqual(reloaded.total, frozen_total)
         self.assertNotEqual(second.total, frozen_total)
+
+    def test_the_published_total_is_what_the_client_can_add_up(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        packages = sum(package.price for package in quote.packages)
+        self.assertEqual(quote.subtotal, packages)
+        self.assertEqual(
+            quote.total, quote.subtotal + quote.mf_amount + quote.vat_amount
+        )
+
+    def test_an_overridden_package_price_moves_the_published_total(self):
+        # The producer rounds a package up; the client's Total has to
+        # follow the price they're shown, not the internal line sum.
+        deal = make_quotable_deal()
+        before = publish(deal.name)
+        deal.packages[0].price_override = deal.packages[0].price + 1_500_000
+        deal.save()
+        after = publish(deal.name)
+        self.assertEqual(after.subtotal - before.subtotal, 1_500_000)
+        self.assertGreater(after.total, before.total)
+
+    def test_publishing_with_a_line_outside_every_package_is_refused(self):
+        lines = [dict(row) for row in LINES]
+        lines[1]["package"] = None
+        deal = make_quotable_deal(cost_lines=lines)
+        with self.assertRaises(frappe.ValidationError):
+            publish(deal.name)
 
     def test_publishing_without_packages_is_refused(self):
         deal = make_quotable_deal(packages=[], cost_lines=[])

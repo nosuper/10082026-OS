@@ -13,6 +13,7 @@ and API actually go through these functions.
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal as D
 
 import pytest
 
@@ -22,6 +23,7 @@ from auraos.lib.quote import (
     client_view,
     delivery_state,
     needs_nudge,
+    quote_totals,
 )
 
 
@@ -136,6 +138,37 @@ def test_client_view_tolerates_missing_optional_fields():
     assert view["title"] == "Bare quote"
     assert view["packages"] == []
     assert view["total"] is None
+
+
+# -- the totals the client adds up --
+
+
+def test_quote_totals_are_built_from_the_package_prices():
+    totals = quote_totals([60_000_000, 40_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
+    assert totals.subtotal == 100_000_000
+    assert totals.mf_amount == 10_000_000
+    assert totals.vat_amount == D("8800000.0")
+    assert totals.total == D("118800000.0")
+
+
+def test_an_overridden_package_price_moves_the_quote_total():
+    # The bug this pins: a producer rounds a package up, the client sees
+    # the rounded price — and the Total must be the number they get when
+    # they add the packages up themselves, or the page contradicts itself.
+    plain = quote_totals([58_400_000, 40_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
+    rounded = quote_totals([60_000_000, 40_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
+    assert rounded.subtotal - plain.subtotal == 1_600_000
+    assert rounded.total > plain.total
+
+
+def test_quote_totals_of_no_packages_are_zero():
+    totals = quote_totals([], mf_rate=D("0.1"), vat_rate=D("0.08"))
+    assert (totals.subtotal, totals.mf_amount, totals.vat_amount, totals.total) == (0, 0, 0, 0)
+
+
+def test_vat_applies_to_the_management_fee_too():
+    totals = quote_totals([100_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
+    assert totals.vat_amount == (totals.subtotal + totals.mf_amount) * D("0.08")
 
 
 # -- which version the deal's status follows --

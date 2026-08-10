@@ -9,20 +9,27 @@ the delivery status (sent / confirmed) writable.
 
 import frappe
 from frappe import _
+from frappe.model import default_fields, optional_fields
 from frappe.model.document import Document
 
-from auraos.lib.money import format_vnd, round_vnd
-from auraos.lib.quote import client_view, delivery_state, needs_nudge
+from auraos.lib.money import format_vnd, round_vnd, to_decimal
+from auraos.lib.quote import (
+    client_view,
+    delivery_state,
+    needs_nudge,
+    quote_totals,
+)
 
 # Delivery status is the only thing that moves after publishing;
 # everything else is the frozen snapshot the client may already have
 # opened. Frappe's own bookkeeping columns are exempt.
 MUTABLE_FIELDS = frozenset({"status", "sent_on", "confirmed_on"})
 
-FRAPPE_BOOKKEEPING = frozenset(
-    {"modified", "modified_by", "docstatus", "idx", "_user_tags", "_comments",
-     "_assign", "_liked_by", "_seen"}
-)
+# Frappe's own columns (name, owner, creation, modified, docstatus…) are
+# not quote content, and comparing them raises false alarms: a freshly
+# inserted doc holds `creation` as a string where its database copy
+# holds a datetime.
+FRAPPE_BOOKKEEPING = frozenset(default_fields) | frozenset(optional_fields)
 
 DEFAULT_SILENCE_DAYS = 5
 
@@ -129,7 +136,22 @@ def publish(deal_name, notes=None):
             _("Add at least one client-facing package before publishing a quote"),
             frappe.ValidationError,
         )
+    ungrouped = [row.idx for row in deal.cost_lines if not row.package]
+    if ungrouped:
+        # The client's total is the sum of the packages they can see, so
+        # a line outside every package is money we'd quietly absorb.
+        frappe.throw(
+            _("Cost line(s) {0} belong to no package — assign them before publishing").format(
+                ", ".join(f"#{idx}" for idx in ungrouped)
+            ),
+            frappe.ValidationError,
+        )
 
+    totals = quote_totals(
+        [package.price or 0 for package in deal.packages],
+        mf_rate=to_decimal(deal.quote_mf_pct or 0) / 100,
+        vat_rate=to_decimal(deal.vat_pct or 0) / 100,
+    )
     quote = frappe.get_doc(
         {
             "doctype": "Deal Quote",
@@ -139,10 +161,10 @@ def publish(deal_name, notes=None):
             "notes": notes,
             "quote_mf_pct": deal.quote_mf_pct,
             "vat_pct": deal.vat_pct,
-            "subtotal": deal.quote_subtotal,
-            "mf_amount": deal.quote_mf_amount,
-            "vat_amount": deal.quote_vat_amount,
-            "total": deal.quote_total,
+            "subtotal": round_vnd(totals.subtotal),
+            "mf_amount": round_vnd(totals.mf_amount),
+            "vat_amount": round_vnd(totals.vat_amount),
+            "total": round_vnd(totals.total),
             "packages": [
                 {
                     "title": package.title,
@@ -296,9 +318,10 @@ def request_header(name):
 def record_open(quote_name, via="Page"):
     """Log a client opening the quote page or downloading its PDF.
 
-    Inserted with ignore_permissions because the caller is Guest, and
-    committed explicitly: the open is the point of the request, and a
-    later render error must not roll it back.
+    Inserted with ignore_permissions because the caller is Guest. Frappe
+    rolls back GET requests unless asked not to, and the open *is* the
+    point of this request — flags.commit makes the request's own commit
+    run, rather than committing mid-render behind Frappe's back.
     """
     frappe.get_doc(
         {
@@ -310,4 +333,4 @@ def record_open(quote_name, via="Page"):
             "user_agent": request_header("User-Agent"),
         }
     ).insert(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.local.flags.commit = True

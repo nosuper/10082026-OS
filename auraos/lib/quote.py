@@ -19,8 +19,12 @@ page and the API are thin adapters over this module.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Mapping
+
+from auraos.lib.money import to_decimal
 
 # Everything a client may read off a quote. Ordered as the page reads.
 CLIENT_QUOTE_FIELDS = (
@@ -54,6 +58,37 @@ def client_view(quote: Mapping[str, Any]) -> dict:
         for package in (quote.get("packages") or [])
     ]
     return view
+
+
+@dataclass(frozen=True)
+class QuoteTotals:
+    """Exact totals; rounding to whole đồng is the caller's concern."""
+
+    subtotal: Decimal
+    mf_amount: Decimal
+    vat_amount: Decimal
+    total: Decimal
+
+
+def quote_totals(package_prices, mf_rate, vat_rate) -> QuoteTotals:
+    """The client-facing totals, built from the prices the client can see.
+
+    Deliberately *not* the engine's quote total. A producer who rounds a
+    package price up (T5's override) changes what the client is offered,
+    so the subtotal has to be the sum of the package prices as printed —
+    otherwise the page shows an offer that doesn't add up to its own
+    Total. Management fee and VAT then apply exactly as the engine does:
+    MF on the subtotal, VAT on both.
+    """
+    subtotal = sum((to_decimal(price) for price in package_prices), Decimal(0))
+    mf_amount = subtotal * to_decimal(mf_rate)
+    vat_amount = (subtotal + mf_amount) * to_decimal(vat_rate)
+    return QuoteTotals(
+        subtotal=subtotal,
+        mf_amount=mf_amount,
+        vat_amount=vat_amount,
+        total=subtotal + mf_amount + vat_amount,
+    )
 
 
 DELIVERED_STATUSES = ("Sent", "Confirmed")
