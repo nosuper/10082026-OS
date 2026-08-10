@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Vietnamese text (stacked diacritics like ề, ỗ) pushes the font's
+   ascent; frappe-ui's tight list-row line-heights then clip descenders
+   (g, y show only their top half). Give truncated text headroom. */
+#aura-frontend-root .truncate {
+  line-height: 1.5;
+}

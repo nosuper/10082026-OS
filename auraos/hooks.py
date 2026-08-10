@@ -9,6 +9,7 @@ app_email = "anhchung.work@gmail.com"
 app_license = "unlicensed"
 
 after_install = "auraos.setup.install.after_install"
+after_migrate = "auraos.setup.install.after_migrate"
 
 # Doctypes that appear in global search. A doctype absent from this
 # hook is invisible in search for everyone; sensitive doctypes are
@@ -17,6 +18,8 @@ after_install = "auraos.setup.install.after_install"
 global_search_doctypes = {
     "Default": [
         {"doctype": "Founder Spike Note"},
+        {"doctype": "Party Company"},
+        {"doctype": "Party Contact"},
     ]
 }
 
