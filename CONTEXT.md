@@ -17,6 +17,10 @@ _Avoid_: COGS, cash paid, recorded expenses
 A client-facing group of cost lines carrying its own description and price — what a client reads instead of our line-level costs. A cost line belonging to no package is quoted as a package of its own.
 _Avoid_: bundle, group, section, item
 
+**Phase**:
+An ordered, named group of packages on a quote, carrying its own blurb and its own subtotal — how a client reads a job split into pre-production, production and post. A package belonging to no phase is quoted on its own, ahead of the first phase. Distinct from a production stage: a phase is what the client is offered, a production stage is where a job sits once we are making it.
+_Avoid_: section, group, block, stage
+
 **Quote preview**:
 A mutable client-facing view of a deal at its tokenised URL, refreshed from the breakdown while only authenticated internal users have seen it. It becomes a quote version when marked Sent or first opened by a guest.
 _Avoid_: draft version, editable version, live quote
