@@ -1,0 +1,18 @@
+services:
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.55.0-noble
+    working_dir: /workspace/repo/frontend
+    environment:
+      E2E_BASE_URL: http://frappe:8000
+      E2E_ADMIN_USER: Administrator
+      E2E_ADMIN_PASSWORD: admin
+      E2E_PRODUCER_USER: playwright-producer@example.test
+      E2E_PRODUCER_PASSWORD: playwright-only
+    volumes:
+      - ..:/workspace/repo
+      - playwright-node-modules:/workspace/repo/frontend/node_modules
+    depends_on:
+      - frappe
+
+volumes:
+  playwright-node-modules:
