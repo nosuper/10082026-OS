@@ -56,6 +56,26 @@ def client_view(quote: Mapping[str, Any]) -> dict:
     return view
 
 
+DELIVERED_STATUSES = ("Sent", "Confirmed")
+
+
+def delivery_state(versions):
+    """Which version says where a deal actually stands with its client.
+
+    Not simply the newest one. Publishing v2 does not un-send v1: the
+    client still holds a quote they haven't answered, so the newest
+    *delivered* version (sent or confirmed) is what the board and the
+    silence nudge must read. Only when nothing has gone out yet does the
+    newest published version speak.
+
+    `versions` is newest-first; None when there are none.
+    """
+    for version in versions:
+        if version.get("status") in DELIVERED_STATUSES:
+            return version
+    return versions[0] if versions else None
+
+
 def needs_nudge(
     status: str | None,
     sent_on: datetime | None,

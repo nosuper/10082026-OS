@@ -58,6 +58,7 @@
 <script setup>
 import { ref } from "vue"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { frappeErrorMessage } from "../utils/frappeError"
 
 const floorPct = ref(0)
 const denied = ref(false)
@@ -85,7 +86,7 @@ const saver = createResource({
   },
   onError(err) {
     saved.value = false
-    error.value = err.messages?.join("\n") || err.message
+    error.value = frappeErrorMessage(err)
   },
 })
 
@@ -117,7 +118,7 @@ const silenceSaver = createResource({
   },
   onError(err) {
     silenceSaved.value = false
-    error.value = err.messages?.join("\n") || err.message
+    error.value = frappeErrorMessage(err)
   },
 })
 

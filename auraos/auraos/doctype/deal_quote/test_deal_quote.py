@@ -32,12 +32,14 @@ from auraos.api import (
     mark_quote_sent,
     publish_quote,
     quote_opens,
+    quote_pdf,
     silent_quote_deals,
 )
 from auraos.auraos.doctype.deal.test_deal import make_company
 from auraos.auraos.doctype.deal_quote.deal_quote import (
     client_context,
     publish,
+    record_open,
     silent_deals,
 )
 from auraos.lib.money import format_vnd
@@ -45,6 +47,8 @@ from auraos.tests.utils import make_test_user
 
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
+# A System User with neither app role — the negative control.
+OUTSIDER = "outsider@test.auraos.local"
 
 LINES = [
     {
@@ -106,6 +110,7 @@ class TestDealQuote(FrappeTestCase):
         super().setUpClass()
         make_test_user(FOUNDER, "Founder")
         make_test_user(PRODUCER, "Producer")
+        make_test_user(OUTSIDER)
 
     def setUp(self):
         frappe.set_user("Administrator")
@@ -254,6 +259,40 @@ class TestDealQuote(FrappeTestCase):
 
     # -- PDF export --
 
+    def test_pdf_export_is_downloadable_by_a_guest(self):
+        quote = publish(make_quotable_deal().name)
+        frappe.set_user("Guest")
+        try:
+            quote_pdf(quote.token)
+        except Exception as error:  # wkhtmltopdf is not installed everywhere
+            if "wkhtmltopdf" not in str(error).lower():
+                raise
+            self.skipTest("wkhtmltopdf unavailable on this machine")
+        self.assertEqual(frappe.local.response.type, "pdf")
+        self.assertTrue(frappe.local.response.filecontent.startswith(b"%PDF"))
+        frappe.set_user("Administrator")
+        self.assertEqual(
+            frappe.db.count("Deal Quote Open", {"quote": quote.name, "via": "PDF"}), 1
+        )
+
+    def test_pdf_export_refuses_an_invalid_token(self):
+        frappe.set_user("Guest")
+        with self.assertRaises(frappe.DoesNotExistError):
+            quote_pdf("not-a-real-token")
+
+    def test_pdf_downloads_are_counted_apart_from_page_opens(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        frappe.set_user("Guest")
+        render_page(quote.token)
+        record_open(quote.name, via="PDF")
+
+        frappe.set_user(FOUNDER)
+        row = deal_quotes(deal.name)[0]
+        self.assertEqual(row["opens"], 1)
+        self.assertEqual(row["downloads"], 1)
+        self.assertTrue(row["last_open"])
+
     def test_pdf_renders_the_same_body_as_the_page(self):
         quote = publish(make_quotable_deal().name)
         frappe.set_user("Guest")
@@ -296,6 +335,28 @@ class TestDealQuote(FrappeTestCase):
             frappe.db.get_value("Deal", deal.name, "quote_status"), "Confirmed"
         )
 
+    def test_confirming_an_older_version_still_reaches_the_deal(self):
+        # The producer re-published a tweak, then the client confirmed
+        # the version they were actually holding.
+        deal = make_quotable_deal()
+        first = publish(deal.name)
+        publish(deal.name)
+        first.mark_confirmed()
+        self.assertEqual(
+            frappe.db.get_value("Deal", deal.name, "quote_status"), "Confirmed"
+        )
+
+    def test_a_user_without_deal_access_cannot_read_or_mark_quotes(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        frappe.set_user(OUTSIDER)
+        with self.assertRaises(frappe.PermissionError):
+            deal_quotes(deal.name)
+        with self.assertRaises(frappe.PermissionError):
+            quote_opens(quote.name)
+        with self.assertRaises(frappe.PermissionError):
+            mark_quote_sent(quote.name)
+
     def test_a_producer_can_publish_and_mark_a_quote(self):
         deal = make_quotable_deal()
         frappe.set_user(PRODUCER)
@@ -319,6 +380,14 @@ class TestDealQuote(FrappeTestCase):
 
     def test_a_quiet_sent_quote_is_nudged_after_the_window(self):
         deal = self.sent_quote_deal(days_ago=6)
+        self.assertIn(deal.name, [row.name for row in silent_deals()])
+
+    def test_republishing_does_not_cancel_the_nudge(self):
+        # Re-pricing a quote the client is sitting on must not make the
+        # deal look untouched — that is the silence death T6 exists to
+        # stop (spec #2, story 6).
+        deal = self.sent_quote_deal(days_ago=10)
+        publish(deal.name)
         self.assertIn(deal.name, [row.name for row in silent_deals()])
 
     def test_a_fresh_sent_quote_is_not_nudged(self):

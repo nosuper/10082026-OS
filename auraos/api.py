@@ -246,17 +246,13 @@ def deal_profit(deal):
 # -- quote delivery (T6, issue #8) --
 
 
-def _quote_url(token):
-    """The public page's absolute URL, on the company domain."""
-    return f"{frappe.utils.get_url()}/quote/{token}"
-
-
-def _quote_dict(quote, opens=None):
+def _quote_dict(quote, tracking=None):
     """A quote version as the producer's screen needs it.
 
     The client's view is a different, narrower projection — see
     auraos.lib.quote.client_view.
     """
+    tracking = tracking or {}
     return {
         "name": quote.name,
         "version": quote.version,
@@ -265,9 +261,13 @@ def _quote_dict(quote, opens=None):
         "published_on": quote.published_on,
         "sent_on": quote.sent_on,
         "confirmed_on": quote.confirmed_on,
-        "url": _quote_url(quote.token),
-        "pdf_url": f"/api/method/auraos.api.quote_pdf?token={quote.token}",
-        "opens": opens if opens is not None else 0,
+        "url": deal_quote.page_url(quote.token),
+        "pdf_url": deal_quote.pdf_url(quote.token),
+        # Page opens and PDF downloads are counted apart: the page's own
+        # download button would otherwise score one visit as two opens.
+        "opens": tracking.get("Page", 0),
+        "downloads": tracking.get("PDF", 0),
+        "last_open": tracking.get("last_open"),
     }
 
 
@@ -291,16 +291,20 @@ def deal_quotes(deal):
         ],
         order_by="version desc",
     )
-    counts = {}
+    tracking = {}
     if quotes:
         for row in frappe.get_all(
             "Deal Quote Open",
             filters={"quote": ["in", [q.name for q in quotes]]},
-            fields=["quote", "count(name) as opens"],
-            group_by="quote",
+            fields=["quote", "via", "count(name) as events", "max(opened_on) as last_open"],
+            group_by="quote, via",
         ):
-            counts[row.quote] = row.opens
-    return [_quote_dict(quote, counts.get(quote.name, 0)) for quote in quotes]
+            counts = tracking.setdefault(row.quote, {})
+            counts[row.via] = row.events
+            counts["last_open"] = max(
+                filter(None, [counts.get("last_open"), row.last_open]), default=None
+            )
+    return [_quote_dict(quote, tracking.get(quote.name)) for quote in quotes]
 
 
 @frappe.whitelist()
@@ -315,6 +319,8 @@ def quote_opens(quote):
         filters={"quote": quote},
         fields=["opened_on", "via", "ip_address"],
         order_by="opened_on desc",
+        # Follow-up timing is decided by the recent opens; the rest is
+        # history nobody scrolls to.
         limit=50,
     )
 

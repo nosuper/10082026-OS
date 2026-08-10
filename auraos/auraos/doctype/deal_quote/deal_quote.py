@@ -12,7 +12,7 @@ from frappe import _
 from frappe.model.document import Document
 
 from auraos.lib.money import format_vnd, round_vnd
-from auraos.lib.quote import client_view, needs_nudge
+from auraos.lib.quote import client_view, delivery_state, needs_nudge
 
 # Delivery status is the only thing that moves after publishing;
 # everything else is the frozen snapshot the client may already have
@@ -86,11 +86,9 @@ class DealQuote(Document):
     def mark_confirmed(self):
         self.status = "Confirmed"
         self.confirmed_on = frappe.utils.now_datetime()
-        if not self.sent_on:
-            # Confirmed without ever being marked sent (it went out over
-            # Zalo before anyone touched the button); the send time is
-            # unknown, so record it as now to keep the nudge honest.
-            self.sent_on = self.confirmed_on
+        # sent_on is deliberately left alone: a quote confirmed without
+        # ever being marked sent has no known send time, and inventing
+        # one would put a fiction in the record.
         self.save()
 
 
@@ -166,33 +164,36 @@ def client_name(deal):
     return frappe.db.get_value("Party Company", deal.company, "company_name")
 
 
-def latest_quote(deal_name):
-    rows = frappe.get_all(
+def deal_versions(deal_name):
+    """Every version of a deal, newest first."""
+    return frappe.get_all(
         "Deal Quote",
         filters={"deal": deal_name},
         fields=["name", "version", "status", "sent_on"],
         order_by="version desc",
-        limit=1,
     )
-    return rows[0] if rows else None
 
 
 def sync_deal_quote_state(deal_name):
-    """Mirror the newest version's delivery state onto the deal.
+    """Mirror the quote delivery state onto the deal.
 
     The board and the nudge query read deals, not quotes; a stored
     mirror keeps both a single list query. Written with db.set_value so
     a producer's publish never trips Deal validation on fields they
     cannot edit.
     """
-    latest = latest_quote(deal_name)
+    versions = deal_versions(deal_name)
+    newest = versions[0] if versions else None
+    delivered = delivery_state(versions)
     frappe.db.set_value(
         "Deal",
         deal_name,
         {
-            "latest_quote": latest.name if latest else None,
-            "quote_status": latest.status if latest else "Not Sent",
-            "quote_sent_on": latest.sent_on if latest else None,
+            # The link is always the current version — that's the URL to
+            # hand out; the status is the delivered one.
+            "latest_quote": newest.name if newest else None,
+            "quote_status": delivered.status if delivered else "Not Sent",
+            "quote_sent_on": delivered.sent_on if delivered else None,
         },
         update_modified=False,
     )
@@ -213,7 +214,7 @@ def silence_days():
 
 
 def silent_deals():
-    """Deals whose newest quote was sent and has gone quiet (story 6).
+    """Deals whose delivered quote has gone quiet (spec #2, story 6).
 
     Deals already resolved (Won / Lost) are past nudging.
     """
@@ -245,15 +246,26 @@ def silent_deals():
 def resolve_token(token):
     """The quote a public token addresses; 404 for anything else.
 
-    Read with ignore_permissions on purpose: the caller is Guest, and
-    the token *is* the authorization. What Guest may then see is decided
-    by client_context, not by row permissions — Deal Quote grants Guest
-    nothing, so /api/resource stays closed.
+    Read past the permission layer on purpose (db.get_value and get_doc
+    both skip it): the caller is Guest, and the token *is* the
+    authorization. What Guest may then see is decided by client_context,
+    not by row permissions — Deal Quote grants Guest nothing, so
+    /api/resource stays closed even to someone holding a valid token.
     """
     name = frappe.db.get_value("Deal Quote", {"token": token or ""}, "name")
     if not name:
         frappe.throw(_("Quote not found"), frappe.DoesNotExistError)
     return frappe.get_doc("Deal Quote", name)
+
+
+def page_url(token):
+    """The public page's absolute URL, on the company domain."""
+    return f"{frappe.utils.get_url()}/quote/{token}"
+
+
+def pdf_url(token):
+    """The PDF export of the same page — one definition, two callers."""
+    return f"/api/method/auraos.api.quote_pdf?token={token}"
 
 
 def client_context(quote):
@@ -276,10 +288,9 @@ def client_context(quote):
 
 def request_header(name):
     """A request header, or None when there is no request (tests, jobs)."""
-    try:
-        return frappe.get_request_header(name)
-    except Exception:
+    if not getattr(frappe.local, "request", None):
         return None
+    return frappe.get_request_header(name)
 
 
 def record_open(quote_name, via="Page"):

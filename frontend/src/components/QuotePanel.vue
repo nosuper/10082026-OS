@@ -62,9 +62,19 @@
         </div>
 
         <div class="mt-2 flex items-center gap-2 text-xs text-gray-600">
-          <span :class="quote.opens ? 'text-green-700' : ''">
+          <button
+            class="underline-offset-2 hover:underline"
+            :class="quote.opens ? 'text-green-700' : ''"
+            @click="toggleOpens(quote)"
+          >
             {{ quote.opens }} open{{ quote.opens === 1 ? "" : "s" }}
-          </span>
+            <template v-if="quote.downloads">
+              · {{ quote.downloads }} PDF
+            </template>
+            <template v-if="quote.last_open">
+              · last {{ day(quote.last_open) }}
+            </template>
+          </button>
           <span v-if="quote.sent_on">· sent {{ day(quote.sent_on) }}</span>
           <span v-if="quote.confirmed_on">
             · confirmed {{ day(quote.confirmed_on) }}
@@ -86,6 +96,17 @@
             </button>
           </span>
         </div>
+
+        <!-- Story 22: *when* it was opened is what decides follow-up timing. -->
+        <ul
+          v-if="openLog[quote.name]"
+          class="mt-2 border-t pt-2 text-xs text-gray-500"
+        >
+          <li v-for="(event, i) in openLog[quote.name]" :key="i">
+            {{ event.opened_on?.slice(0, 16) }} · {{ event.via }}
+          </li>
+          <li v-if="!openLog[quote.name].length">No opens yet.</li>
+        </ul>
       </div>
     </div>
     <p v-else class="mt-4 text-xs text-gray-400">
@@ -100,6 +121,7 @@
 import { ref } from "vue"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
+import { vnd } from "../utils/money"
 
 const props = defineProps({
   deal: { type: String, required: true },
@@ -177,14 +199,26 @@ function mark(quote, what) {
   markers[what].submit({ quote: quote.name })
 }
 
+const openLog = ref({})
+
+const opensLoader = createResource({
+  url: "auraos.api.quote_opens",
+  onError: onFail,
+})
+
+function toggleOpens(quote) {
+  if (openLog.value[quote.name]) {
+    delete openLog.value[quote.name]
+    return
+  }
+  opensLoader.submit({ quote: quote.name }).then((events) => {
+    openLog.value = { ...openLog.value, [quote.name]: events || [] }
+  })
+}
+
 function copy(url) {
   navigator.clipboard?.writeText(url)
   copied.value = url
-}
-
-function vnd(amount) {
-  if (amount == null) return "—"
-  return new Intl.NumberFormat("vi-VN").format(amount)
 }
 
 function day(value) {

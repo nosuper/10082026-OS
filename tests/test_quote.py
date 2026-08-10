@@ -20,6 +20,7 @@ from auraos.lib.quote import (
     CLIENT_PACKAGE_FIELDS,
     CLIENT_QUOTE_FIELDS,
     client_view,
+    delivery_state,
     needs_nudge,
 )
 
@@ -135,6 +136,44 @@ def test_client_view_tolerates_missing_optional_fields():
     assert view["title"] == "Bare quote"
     assert view["packages"] == []
     assert view["total"] is None
+
+
+# -- which version the deal's status follows --
+
+
+def version(n, status):
+    return {"name": f"DEAL-0001-Q{n}", "version": n, "status": status}
+
+
+def test_delivery_state_of_a_deal_with_no_versions_is_nothing():
+    assert delivery_state([]) is None
+
+
+def test_the_only_version_speaks_for_the_deal():
+    assert delivery_state([version(1, "Published")])["version"] == 1
+
+
+def test_republishing_does_not_unsend_the_version_the_client_holds():
+    # The regression: a quote sent 10 days ago, then re-published with a
+    # tweak, must keep saying "Sent" — otherwise it drops out of the
+    # nudge and dies of silence, which is the whole point of T6.
+    versions = [version(2, "Published"), version(1, "Sent")]
+    assert delivery_state(versions)["version"] == 1
+
+
+def test_the_newest_delivered_version_wins():
+    versions = [version(3, "Sent"), version(2, "Sent"), version(1, "Confirmed")]
+    assert delivery_state(versions)["version"] == 3
+
+
+def test_a_confirmed_older_version_still_speaks_over_a_fresh_draft():
+    versions = [version(2, "Published"), version(1, "Confirmed")]
+    assert delivery_state(versions)["status"] == "Confirmed"
+
+
+def test_nothing_delivered_yet_falls_back_to_the_newest():
+    versions = [version(2, "Published"), version(1, "Published")]
+    assert delivery_state(versions)["version"] == 2
 
 
 # -- the silence nudge --

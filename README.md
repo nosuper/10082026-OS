@@ -92,7 +92,13 @@ system a guest can reach. Two rules hold it shut, and both are tested:
 
 Published quote versions are immutable: the controller refuses every
 content change and leaves only the delivery status (sent / confirmed)
-writable. Re-pricing means publishing a new version.
+writable. Re-pricing means publishing a new version. The founder can
+still *delete* a version (a misfire, or a deal being removed entirely) —
+that 404s its link rather than changing what a client already read.
+
+Publishing v2 does not un-send v1: the deal's quote status follows the
+newest *delivered* version, so re-pricing a quote the client is sitting
+on never makes it drop out of the silence nudge.
 
 ## Maintenance notes (evening-hobby budget)
 

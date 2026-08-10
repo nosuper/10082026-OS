@@ -206,6 +206,7 @@ import {
 import DealFormDialog from "../components/DealFormDialog.vue"
 import LostReasonDialog from "../components/LostReasonDialog.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
+import { vnd } from "../utils/money"
 
 // The agreed pipeline, in board order (spec issue #2, story 3).
 const STAGES = [
@@ -338,7 +339,7 @@ const sortedDeals = computed(() => {
 })
 
 function formatBudget(value) {
-  return value ? Number(value).toLocaleString("vi-VN") : ""
+  return value ? vnd(value) : ""
 }
 
 const dealsByStage = computed(() => {

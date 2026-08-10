@@ -10,6 +10,7 @@ import frappe
 
 from auraos.auraos.doctype.deal_quote.deal_quote import (
     client_context,
+    pdf_url,
     record_open,
     resolve_token,
 )
@@ -24,7 +25,7 @@ def get_context(context):
     quote = resolve_token(frappe.form_dict.token)
     context.update(client_context(quote))
     context.title = quote.title or "Quote"
-    context.pdf_url = f"/api/method/auraos.api.quote_pdf?token={quote.token}"
+    context.pdf_url = pdf_url(quote.token)
 
     record_open(quote.name, via="Page")
     return context
