@@ -22,3 +22,4 @@ frontend/vite.config.js.timestamp-*.mjs
 frontend/auto-imports.d.ts
 frontend/components.d.ts
 frontend/*.log
+~$*

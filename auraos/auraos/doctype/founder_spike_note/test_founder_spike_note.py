@@ -111,6 +111,14 @@ class TestFounderSpikeNote(FrappeTestCase):
         with self.assertRaises(frappe.PermissionError):
             frappe.get_list("Founder Spike Note")
 
+    def test_producer_cannot_list_via_rest_list_endpoint(self):
+        # frappe.client.get_list backs GET /api/resource/<doctype>
+        from frappe.client import get_list
+
+        frappe.set_user(PRODUCER)
+        with self.assertRaises(frappe.PermissionError):
+            get_list("Founder Spike Note")
+
     def test_producer_cannot_global_search(self):
         frappe.set_user(PRODUCER)
         results = global_search.search(SECRET)
