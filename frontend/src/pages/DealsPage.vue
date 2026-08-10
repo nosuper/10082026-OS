@@ -13,7 +13,7 @@
                 ? 'bg-white font-medium text-gray-900 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             "
-            @click="view = mode"
+            @click="setView(mode)"
           >
             {{ mode }}
           </button>
@@ -106,12 +106,39 @@
       </div>
     </div>
 
-    <div v-else class="overflow-x-auto rounded-lg border">
-      <table class="w-full text-sm">
+    <div v-else>
+      <div class="mb-2 flex justify-end">
+        <details class="relative">
+          <summary
+            class="cursor-pointer select-none rounded-md border bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Columns
+          </summary>
+          <div
+            class="absolute right-0 z-10 mt-1 w-48 rounded-md border bg-white p-2 shadow-lg"
+          >
+            <label
+              v-for="col in COLUMNS"
+              :key="col.key"
+              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50"
+            >
+              <input
+                type="checkbox"
+                :checked="visibleColumnKeys.includes(col.key)"
+                @change="toggleColumn(col.key)"
+              />
+              {{ col.label }}
+            </label>
+          </div>
+        </details>
+      </div>
+
+      <div class="overflow-x-auto rounded-lg border">
+        <table class="w-full text-sm">
         <thead>
           <tr class="border-b bg-gray-50 text-left text-xs text-gray-600">
             <th
-              v-for="col in COLUMNS"
+              v-for="col in visibleColumns"
               :key="col.key"
               class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-medium hover:text-gray-900"
               @click="sortBy(col.key)"
@@ -121,82 +148,163 @@
                 {{ sortDir === "asc" ? "↑" : "↓" }}
               </span>
             </th>
+            <th class="whitespace-nowrap px-3 py-2 font-medium">Action</th>
           </tr>
         </thead>
         <tbody>
+          <tr class="border-b bg-blue-50/40 align-top">
+            <td
+              v-for="col in visibleColumns"
+              :key="col.key"
+              class="min-w-32 px-2 py-1.5"
+            >
+              <select
+                v-if="col.editable && col.type === 'select'"
+                v-model="newDeal[col.key]"
+                class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
+              >
+                <option
+                  v-for="option in optionsFor(col.key)"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+              <input
+                v-else-if="col.editable"
+                v-model="newDeal[col.key]"
+                :type="col.type === 'number' ? 'number' : 'text'"
+                :placeholder="col.key === 'tags' ? 'tag, tag' : col.label"
+                class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
+                @keydown.enter="createFromTable"
+              />
+              <span v-else class="text-gray-300">—</span>
+            </td>
+            <td class="whitespace-nowrap px-2 py-1.5">
+              <Button
+                variant="solid"
+                :loading="createTableRow.loading"
+                @click="createFromTable"
+              >
+                Add
+              </Button>
+            </td>
+          </tr>
           <tr
             v-for="deal in sortedDeals"
             :key="deal.name"
-            class="cursor-pointer border-b last:border-b-0 hover:bg-gray-50"
-            @click="openEdit(deal)"
+            class="border-b last:border-b-0 hover:bg-gray-50"
           >
-            <td class="px-3 py-2 font-medium text-gray-900">
-              {{ deal.title }}
-            </td>
-            <td class="px-3 py-2 text-gray-700">
-              {{ companyNames[deal.company] || deal.company }}
-            </td>
-            <td class="whitespace-nowrap px-3 py-2">
+            <td
+              v-for="col in visibleColumns"
+              :key="col.key"
+              class="min-w-32 px-3 py-2 text-gray-700"
+              :class="col.editable && col.key !== 'title' ? 'cursor-text' : ''"
+              @click="startEditing(deal, col)"
+            >
+              <template v-if="isEditing(deal, col)">
+                <select
+                  v-if="col.type === 'select'"
+                  v-model="editing.value"
+                  class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-sm"
+                  autofocus
+                  @click.stop
+                  @change="saveInline"
+                  @keydown.esc="cancelEditing"
+                >
+                  <option
+                    v-for="option in optionsFor(col.key)"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <input
+                  v-else
+                  v-model="editing.value"
+                  :type="col.type === 'number' ? 'number' : 'text'"
+                  class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-sm"
+                  autofocus
+                  @click.stop
+                  @change="saveInline"
+                  @keydown.enter.prevent="$event.target.blur()"
+                  @keydown.esc="cancelEditing"
+                />
+              </template>
+              <template v-else-if="col.key === 'title'">
+                <button
+                  class="font-medium text-blue-700 hover:underline"
+                  @click.stop="openEdit(deal)"
+                >
+                  {{ deal.title }}
+                </button>
+                <button
+                  class="ml-2 text-xs text-gray-400 hover:text-gray-700"
+                  title="Edit title inline"
+                  @click.stop="startEditing(deal, col, true)"
+                >
+                  ✎
+                </button>
+              </template>
               <span
-                class="rounded-full px-2 py-0.5 text-xs"
-                :class="
-                  deal.stage === 'Lost'
-                    ? 'bg-red-50 text-red-700'
-                    : deal.stage === 'Won'
-                      ? 'bg-green-50 text-green-700'
-                      : 'bg-gray-100 text-gray-700'
-                "
+                v-else-if="col.key === 'stage'"
+                class="whitespace-nowrap rounded-full px-2 py-0.5 text-xs"
+                :class="stageClass(deal.stage)"
               >
                 {{ deal.stage }}
               </span>
-            </td>
-            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
-              {{ ownerLabel(deal.deal_owner) }}
-            </td>
-            <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">
-              {{ formatBudget(deal.estimated_budget) }}
-            </td>
-            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
-              {{ deal.source }}
-            </td>
-            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
-              {{ deal.project_type }}
-            </td>
-            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
-              {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
-              <span
-                v-if="silentDeals[deal.name]"
-                class="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-              >
-                ⏰ Silent
+              <template v-else-if="col.key === 'tags'">
+                <span
+                  v-for="tag in tagsFor(deal)"
+                  :key="tag"
+                  class="mr-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+                >
+                  {{ tag }}
+                </span>
+              </template>
+              <template v-else-if="col.key === 'quote_status'">
+                {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
+                <span
+                  v-if="silentDeals[deal.name]"
+                  class="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                >
+                  ⏰ Silent
+                </span>
+              </template>
+              <span v-else-if="col.key === 'company'">
+                {{ companyNames[deal.company] || deal.company }}
               </span>
-            </td>
-            <td class="px-3 py-2">
-              <span
-                v-for="tag in tagsFor(deal)"
-                :key="tag"
-                class="mr-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
-              >
-                {{ tag }}
+              <span v-else-if="col.key === 'deal_owner'">
+                {{ ownerLabel(deal.deal_owner) }}
               </span>
+              <span v-else-if="col.key === 'estimated_budget'" class="tabular-nums">
+                {{ formatBudget(deal.estimated_budget) }}
+              </span>
+              <span v-else-if="col.key === 'modified'" class="whitespace-nowrap tabular-nums text-gray-500">
+                {{ deal.modified?.slice(0, 16) }}
+              </span>
+              <span v-else>{{ deal[col.key] }}</span>
             </td>
-            <td class="whitespace-nowrap px-3 py-2 tabular-nums text-gray-500">
-              {{ deal.modified?.slice(0, 16) }}
+            <td class="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
+              Click a cell to edit
             </td>
           </tr>
           <tr v-if="!sortedDeals.length">
             <td
-              :colspan="COLUMNS.length"
+              :colspan="visibleColumns.length + 1"
               class="px-3 py-6 text-center text-gray-400"
             >
               No deals yet.
             </td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
 
-    <ErrorMessage class="mt-2" :message="moveError" />
+    <ErrorMessage class="mt-2" :message="moveError || tableError" />
 
     <DealFormDialog
       v-model="dialogOpen"
@@ -312,6 +420,22 @@ const companies = createListResource({
   auto: true,
 })
 
+const sources = createListResource({
+  doctype: "Deal Source",
+  fields: ["name"],
+  orderBy: "name asc",
+  pageLength: 500,
+  auto: true,
+})
+
+const projectTypes = createListResource({
+  doctype: "Project Type",
+  fields: ["name"],
+  orderBy: "name asc",
+  pageLength: 500,
+  auto: true,
+})
+
 const companyNames = computed(() => {
   const map = {}
   for (const c of companies.data || []) map[c.name] = c.company_name
@@ -332,22 +456,122 @@ function ownerLabel(user) {
 
 // -- table view (T3.2) --
 
-const view = ref("Board")
+function currentUser() {
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("user_id="))
+  return cookie ? decodeURIComponent(cookie.slice("user_id=".length)) : "unknown"
+}
+
+const preferenceKey = `auraos.deals.table.${currentUser()}`
+
+function loadTablePreferences() {
+  try {
+    return JSON.parse(localStorage.getItem(preferenceKey)) || {}
+  } catch {
+    return {}
+  }
+}
+
+const savedPreferences = loadTablePreferences()
+const view = ref(savedPreferences.view === "Table" ? "Table" : "Board")
 const sortKey = ref("modified")
 const sortDir = ref("desc")
 
 const COLUMNS = [
-  { key: "title", label: "Title" },
-  { key: "company", label: "Company" },
-  { key: "stage", label: "Stage" },
-  { key: "deal_owner", label: "Owner" },
-  { key: "estimated_budget", label: "Budget (VND)" },
-  { key: "source", label: "Source" },
-  { key: "project_type", label: "Project Type" },
+  { key: "title", label: "Title", editable: true, type: "text" },
+  { key: "company", label: "Company", editable: true, type: "select" },
+  { key: "stage", label: "Stage", editable: true, type: "select" },
+  { key: "deal_owner", label: "Owner", editable: true, type: "select" },
+  {
+    key: "estimated_budget",
+    label: "Budget (VND)",
+    editable: true,
+    type: "number",
+  },
+  { key: "source", label: "Source", editable: true, type: "select" },
+  {
+    key: "project_type",
+    label: "Project Type",
+    editable: true,
+    type: "select",
+  },
   { key: "quote_status", label: "Quote" },
-  { key: "tags", label: "Tags" },
+  { key: "tags", label: "Tags", editable: true, type: "text" },
   { key: "modified", label: "Updated" },
 ]
+
+const allColumnKeys = COLUMNS.map((col) => col.key)
+const savedColumns = Array.isArray(savedPreferences.columns)
+  ? savedPreferences.columns.filter((key) => allColumnKeys.includes(key))
+  : allColumnKeys
+const visibleColumnKeys = ref(savedColumns.length ? savedColumns : allColumnKeys)
+const visibleColumns = computed(() =>
+  COLUMNS.filter((col) => visibleColumnKeys.value.includes(col.key))
+)
+
+function saveTablePreferences() {
+  try {
+    localStorage.setItem(
+      preferenceKey,
+      JSON.stringify({ view: view.value, columns: visibleColumnKeys.value })
+    )
+  } catch {
+    // Preferences are an enhancement; a blocked storage API must not
+    // make the deals page unusable.
+  }
+}
+
+function setView(mode) {
+  view.value = mode
+  saveTablePreferences()
+}
+
+function toggleColumn(key) {
+  if (visibleColumnKeys.value.includes(key)) {
+    if (visibleColumnKeys.value.length === 1) return
+    visibleColumnKeys.value = visibleColumnKeys.value.filter((item) => item !== key)
+  } else {
+    visibleColumnKeys.value = [...visibleColumnKeys.value, key]
+  }
+  saveTablePreferences()
+}
+
+const blankOption = { label: "", value: "" }
+
+function optionsFor(key) {
+  if (key === "company") {
+    return [
+      blankOption,
+      ...(companies.data || []).map((company) => ({
+        label: company.company_name,
+        value: company.name,
+      })),
+    ]
+  }
+  if (key === "stage") return STAGES
+  if (key === "deal_owner") {
+    return [
+      blankOption,
+      ...owners.value.map((owner) => ({
+        label: owner.full_name || owner.name,
+        value: owner.name,
+      })),
+    ]
+  }
+  if (key === "source") {
+    return [blankOption, ...(sources.data || []).map(namedOption)]
+  }
+  if (key === "project_type") {
+    return [blankOption, ...(projectTypes.data || []).map(namedOption)]
+  }
+  return []
+}
+
+function namedOption(row) {
+  return { label: row.name, value: row.name }
+}
 
 // Child rows aren't reachable through the list API; the endpoint
 // returns {deal_name: [tag, ...]} in one call.
@@ -358,6 +582,137 @@ const dealTags = createResource({
 
 function tagsFor(deal) {
   return dealTags.data?.[deal.name] || []
+}
+
+function stageClass(stage) {
+  if (stage === "Lost") return "bg-red-50 text-red-700"
+  if (stage === "Won") return "bg-green-50 text-green-700"
+  return "bg-gray-100 text-gray-700"
+}
+
+// -- inline editing and blank-row creation (T3.3, issue #27) --
+
+const tableError = ref("")
+const editing = ref(null)
+const updateTableRow = createResource({
+  url: "auraos.api.update_deal_table_row",
+  onError() {},
+})
+const createTableRow = createResource({
+  url: "auraos.api.create_deal_table_row",
+  onError() {},
+})
+const newDeal = ref(emptyTableRow())
+
+function emptyTableRow() {
+  return {
+    title: "",
+    company: "",
+    stage: "Brief Received",
+    deal_owner: "",
+    estimated_budget: "",
+    source: "",
+    project_type: "",
+    tags: "",
+  }
+}
+
+function isEditing(deal, col) {
+  return editing.value?.deal.name === deal.name && editing.value?.key === col.key
+}
+
+function startEditing(deal, col, force = false) {
+  if (!col.editable || (col.key === "title" && !force)) return
+  tableError.value = ""
+  editing.value = {
+    deal,
+    key: col.key,
+    original: editableValue(deal, col.key),
+    value: editableValue(deal, col.key),
+  }
+}
+
+function editableValue(deal, key) {
+  if (key === "tags") return tagsFor(deal).join(", ")
+  return deal[key] ?? ""
+}
+
+function cancelEditing() {
+  editing.value = null
+}
+
+function valueForServer(key, value) {
+  if (key === "tags") {
+    return [...new Set(String(value).split(",").map((tag) => tag.trim()).filter(Boolean))]
+  }
+  if (key === "estimated_budget") return value === "" ? null : Number(value)
+  return value
+}
+
+async function saveInline() {
+  if (updateTableRow.loading) return
+  const active = editing.value
+  if (!active) return
+  if (active.value === active.original) {
+    cancelEditing()
+    return
+  }
+  if (active.key === "stage" && active.value === "Lost") {
+    pendingLost.value = active.deal
+    lostDialogOpen.value = true
+    cancelEditing()
+    return
+  }
+  tableError.value = ""
+  try {
+    await updateTableRow.submit({
+      deal: active.deal.name,
+      values: {
+        [active.key === "tags" ? "deal_tags" : active.key]: valueForServer(
+          active.key,
+          active.value
+        ),
+      },
+    })
+    if (editing.value === active) cancelEditing()
+    deals.reload()
+    dealTags.reload()
+    if (active.key === "stage" && active.value === "Won" && !jobFor(active.deal)) {
+      offerJob({ ...active.deal, stage: "Won" })
+    }
+  } catch (err) {
+    tableError.value = frappeErrorMessage(err)
+  }
+}
+
+function tableRowValues(row) {
+  const values = {
+    title: row.title.trim(),
+    company: row.company,
+    stage: row.stage,
+  }
+  for (const key of ["deal_owner", "source", "project_type"]) {
+    if (row[key]) values[key] = row[key]
+  }
+  if (row.estimated_budget !== "") {
+    values.estimated_budget = Number(row.estimated_budget)
+  }
+  const tags = valueForServer("tags", row.tags)
+  if (tags.length) values.deal_tags = tags
+  return values
+}
+
+async function createFromTable() {
+  if (createTableRow.loading) return
+  tableError.value = ""
+  try {
+    await createTableRow.submit({ values: tableRowValues(newDeal.value) })
+    newDeal.value = emptyTableRow()
+    deals.reload()
+    dealTags.reload()
+  } catch (err) {
+    tableError.value = frappeErrorMessage(err)
+  }
 }
 
 function sortBy(key) {
