@@ -14,6 +14,7 @@ from auraos.auraos.doctype.deal.deal import (
     to_engine_lines,
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
+from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
@@ -58,6 +59,17 @@ def _check_deal_permission(deal, ptype):
     if not frappe.db.exists("Deal", deal):
         frappe.throw(_("Deal {0} not found").format(deal), frappe.DoesNotExistError)
     frappe.has_permission("Deal", ptype, doc=deal, throw=True)
+
+
+def _check_job_permission(job, ptype):
+    """Gate a job endpoint on the job itself — missing means missing.
+
+    Without the existence check a bad name reads as a permission
+    failure, which tells the caller the wrong thing.
+    """
+    if not frappe.db.exists("Job", job):
+        frappe.throw(_("Job {0} not found").format(job), frappe.DoesNotExistError)
+    frappe.has_permission("Job", ptype, doc=job, throw=True)
 
 
 COMMENT_FIELDS = ["name", "content", "comment_email", "comment_by", "creation"]
@@ -412,6 +424,56 @@ def quote_pdf(token):
     frappe.local.response.filename = f"{quote.name}.pdf"
     frappe.local.response.filecontent = get_pdf(html)
     frappe.local.response.type = "pdf"
+
+
+@frappe.whitelist()
+def create_job_from_deal(deal):
+    """Turn a won deal into a job, carrying breakdown, packages and links."""
+    _check_deal_permission(deal, "read")
+    job = create_from_deal(deal)
+    return {"name": job.name, "title": job.title, "stage": job.stage}
+
+
+@frappe.whitelist()
+def jobs_by_deal():
+    """{deal_name: job_name} for the jobs this user may list.
+
+    The board uses it to tell a won deal that still needs converting
+    from one that already has a job.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    rows = frappe.get_list(
+        "Job",
+        filters={"deal": ["is", "set"]},
+        fields=["name", "deal"],
+        limit_page_length=0,
+    )
+    return {row.deal: row.name for row in rows}
+
+
+@frappe.whitelist()
+def log_job_revision(job, note):
+    """Record a client revision round on a job.
+
+    The round number and the chargeable flag come back computed — the
+    job derives both from row order (Job.number_revisions) — as does
+    the stage, which the revision may have sent back to the edit.
+    """
+    _check_job_permission(job, "write")
+    if not (note or "").strip():
+        frappe.throw(_("A revision needs a note"), frappe.ValidationError)
+    doc = frappe.get_doc("Job", job)
+    stage_before = doc.stage
+    latest = doc.log_revision(note)
+    return {
+        "name": doc.name,
+        "revision_rounds": doc.revision_rounds,
+        "change_order_due": bool(doc.change_order_due),
+        "round": latest.round,
+        "chargeable": bool(latest.chargeable),
+        "stage": doc.stage,
+        "reopened": doc.stage != stage_before,
+    }
 
 
 @frappe.whitelist()

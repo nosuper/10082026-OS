@@ -15,6 +15,16 @@ const routes = [
     component: () => import("./pages/DealBreakdownPage.vue"),
   },
   {
+    path: "/jobs",
+    name: "Jobs",
+    component: () => import("./pages/JobsPage.vue"),
+  },
+  {
+    path: "/jobs/:name",
+    name: "Job",
+    component: () => import("./pages/JobPage.vue"),
+  },
+  {
     path: "/contacts",
     name: "Contacts",
     component: () => import("./pages/ContactsPage.vue"),

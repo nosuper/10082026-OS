@@ -104,6 +104,28 @@ def floor_breached(margin_fraction):
     return pricing.is_floor_breached(margin_fraction, rate(floor))
 
 
+def append_stage_change(doc):
+    """Log a stage move on a doc carrying a `stage_history` table.
+
+    Shared by Deal and Job — both move through a fixed stage list and
+    both answer "who moved this, and when" from the same child table.
+    Call from before_save, after validation, so a rejected transition is
+    never logged.
+    """
+    previous = doc.get_doc_before_save()
+    from_stage = previous.stage if previous else None
+    if doc.is_new() or from_stage != doc.stage:
+        doc.append(
+            "stage_history",
+            {
+                "from_stage": from_stage,
+                "to_stage": doc.stage,
+                "changed_on": frappe.utils.now_datetime(),
+                "changed_by": frappe.session.user,
+            },
+        )
+
+
 def holds_operating_role(user):
     # Explicit role assignments only — frappe.get_roles reports every
     # role for Administrator, which would let it slip through.
@@ -276,15 +298,4 @@ class Deal(Document):
 
     def before_save(self):
         # After validation, so a rejected transition is never logged.
-        previous = self.get_doc_before_save()
-        from_stage = previous.stage if previous else None
-        if self.is_new() or from_stage != self.stage:
-            self.append(
-                "stage_history",
-                {
-                    "from_stage": from_stage,
-                    "to_stage": self.stage,
-                    "changed_on": frappe.utils.now_datetime(),
-                    "changed_by": frappe.session.user,
-                },
-            )
+        append_stage_change(self)

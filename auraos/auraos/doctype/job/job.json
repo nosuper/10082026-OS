@@ -1,0 +1,322 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:JOB-{####}",
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "stage",
+  "job_owner",
+  "files_location",
+  "deal",
+  "client_section",
+  "company",
+  "column_break_client",
+  "contact",
+  "links_section",
+  "job_links",
+  "feedback_section",
+  "included_revision_rounds",
+  "revision_rounds",
+  "change_order_due",
+  "revisions",
+  "breakdown_section",
+  "cost_lines",
+  "packages",
+  "params_section",
+  "quote_mf_pct",
+  "vat_pct",
+  "column_break_params",
+  "commission_pct",
+  "quote_section",
+  "quote_subtotal",
+  "quote_mf_amount",
+  "column_break_quote",
+  "quote_vat_amount",
+  "quote_total",
+  "history_section",
+  "stage_history"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "default": "Pre-production",
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "Pre-production\nProduction\nPost-production\nClient review\nDelivery\nClient sign-off\nAwaiting payment\nComplete",
+   "reqd": 1
+  },
+  {
+   "fieldname": "job_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Owner",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "description": "Shared folder for this job code — the one place its files live",
+   "fieldname": "files_location",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Files Location"
+  },
+  {
+   "description": "The won deal this job was converted from",
+   "fieldname": "deal",
+   "fieldtype": "Link",
+   "label": "Deal",
+   "options": "Deal",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "client_section",
+   "fieldtype": "Section Break",
+   "label": "Client"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Party Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_client",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "label": "Contact",
+   "options": "Party Contact"
+  },
+  {
+   "fieldname": "links_section",
+   "fieldtype": "Section Break",
+   "label": "Links"
+  },
+  {
+   "fieldname": "job_links",
+   "fieldtype": "Table",
+   "label": "Links",
+   "options": "Deal Link"
+  },
+  {
+   "fieldname": "feedback_section",
+   "fieldtype": "Section Break",
+   "label": "Client Review & Revisions"
+  },
+  {
+   "default": "2",
+   "description": "Revision rounds this client gets at no charge; the next one is a change order",
+   "fieldname": "included_revision_rounds",
+   "fieldtype": "Int",
+   "label": "Included Revision Rounds",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "revision_rounds",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Revision Rounds",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Set once the revision rounds pass the included ones — this round is a change order",
+   "fieldname": "change_order_due",
+   "fieldtype": "Check",
+   "label": "Change Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revisions",
+   "fieldtype": "Table",
+   "label": "Revisions",
+   "options": "Job Revision"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "breakdown_section",
+   "fieldtype": "Section Break",
+   "label": "Breakdown (carried from the deal)"
+  },
+  {
+   "description": "Carried at conversion; the deal stays the place where pricing is edited",
+   "fieldname": "cost_lines",
+   "fieldtype": "Table",
+   "label": "Cost Lines",
+   "options": "Deal Cost Line",
+   "read_only": 1
+  },
+  {
+   "fieldname": "packages",
+   "fieldtype": "Table",
+   "label": "Packages",
+   "options": "Deal Package",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "params_section",
+   "fieldtype": "Section Break",
+   "label": "Quote Parameters"
+  },
+  {
+   "fieldname": "quote_mf_pct",
+   "fieldtype": "Percent",
+   "label": "Quote MF %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vat_pct",
+   "fieldtype": "Percent",
+   "label": "VAT %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_params",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "commission_pct",
+   "fieldtype": "Percent",
+   "label": "Commission %",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "quote_section",
+   "fieldtype": "Section Break",
+   "label": "Quote Totals"
+  },
+  {
+   "fieldname": "quote_subtotal",
+   "fieldtype": "Currency",
+   "label": "Quote Subtotal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_mf_amount",
+   "fieldtype": "Currency",
+   "label": "Management Fee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_quote",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quote_vat_amount",
+   "fieldtype": "Currency",
+   "label": "VAT",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_total",
+   "fieldtype": "Currency",
+   "label": "Quote Total",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "Stage History"
+  },
+  {
+   "fieldname": "stage_history",
+   "fieldtype": "Table",
+   "label": "Stage History",
+   "options": "Deal Stage Log",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Job",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Founder",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Producer",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Founder",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "search_fields": "title,company,stage,job_owner",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}
