@@ -170,6 +170,9 @@
               The deal had no packages.
             </p>
           </div>
+
+          <!-- Advances, expenses and settlement (T8) -->
+          <JobMoneyPanel :name="name" />
         </div>
 
         <!-- Client, links, totals -->
@@ -256,6 +259,7 @@ import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
+import JobMoneyPanel from "../components/JobMoneyPanel.vue"
 import {
   STAGES,
   INCLUDED_REVISION_ROUNDS,

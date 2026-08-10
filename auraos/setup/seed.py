@@ -83,6 +83,28 @@ PACKAGES = [
     {"title": "Equipment", "description": "Camera, lighting, grip and unit catering"},
 ]
 
+# The float T8 leaves open on that job, and the receipts against it. The
+# arithmetic is meant to be checkable by hand on the walkthrough:
+# 20.000.000 advanced − 11.350.000 spent = 8.650.000 to hand back.
+ADVANCE = 20_000_000
+
+FLOAT_EXPENSES = [
+    {"amount": 6_000_000, "category": "Human resources",
+     "description": "Ứng tiền đạo diễn ngày 1"},
+    {"amount": 4_500_000, "category": "Equipment",
+     "description": "Thuê thêm đèn ngoài kế hoạch"},
+    # No category on purpose: spend nobody quoted still has to be visible.
+    {"amount": 850_000, "description": "Gửi xe + cà phê đoàn"},
+]
+
+# The founder's own transfer to a vendor: job spend that settles no float.
+DIRECT_PAYMENT = {
+    "amount": 24_000_000,
+    "category": "Equipment",
+    "description": "Chuyển khoản thẳng cho vendor thiết bị",
+    "paid_from": "Company",
+}
+
 
 def run():
     """Build the base data, then every registered feature seed."""
@@ -265,7 +287,42 @@ def back_to_feedback(job_name):
     job.save(ignore_permissions=True)
 
 
+def seed_t8_money_out(deal_name):
+    """T8: the same job mid-shoot, holding a float nobody has settled.
+
+    Everything the money screen shows needs rows behind it: a float with
+    receipts against it, spend that landed outside every package, and a
+    direct payment that has to *not* move the float.
+    """
+    job = frappe.db.get_value("Job", {"title": WON_DEAL})
+    if not job or frappe.db.exists("Job Advance", {"job": job}):
+        return
+
+    frappe.get_doc(
+        {
+            "doctype": "Job Advance",
+            "job": job,
+            "recipient": founder(),
+            "amount": ADVANCE,
+            "transferred_on": frappe.utils.add_days(frappe.utils.today(), -6),
+            "note": "Tiền mặt cho đoàn quay",
+        }
+    ).insert(ignore_permissions=True)
+
+    for offset, expense in enumerate(FLOAT_EXPENSES + [DIRECT_PAYMENT]):
+        frappe.get_doc(
+            {
+                "doctype": "Job Expense",
+                "job": job,
+                "paid_by": founder(),
+                "spent_on": frappe.utils.add_days(frappe.utils.today(), offset - 5),
+                **expense,
+            }
+        ).insert(ignore_permissions=True)
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T7 job in production": seed_t7_job_in_production,
+    "T8 money out": seed_t8_money_out,
 }

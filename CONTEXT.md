@@ -71,6 +71,36 @@ _Avoid_: extra, overage, out of scope
 The shared folder a job's material lives in, named after the job code.
 _Avoid_: path, directory, drive, storage
 
+## Money out
+
+**Advance**:
+Company cash handed to one person for one job, to spend on it and account for. Recorded with its recipient, because it is money the company is still owed until the receipts come back.
+_Avoid_: float (that's what it leaves behind), petty cash, loan, top-up
+
+**Float**:
+What an advance leaves in someone's hands: what they were advanced, less what they have spent out of it. Negative when they have covered a shortfall from their own pocket.
+_Avoid_: balance, outstanding, petty cash, running total
+
+**Expense**:
+One payment out on a job — amount, category, optionally a photo of the receipt. Actual money that left, as distinct from a cost line, which is what a deal was priced at.
+_Avoid_: cost, spend, purchase, receipt
+
+**Category**:
+The quote entry an expense belongs to: a package, or a cost line the deal quoted on its own. The categories a job offers are exactly what its client was quoted, which is what makes actual-vs-quoted free.
+_Avoid_: type, bucket, tag, cost centre
+
+**Direct payment**:
+An expense the company paid the vendor itself rather than out of anyone's float. It counts against the job's money out and settles nobody's balance.
+_Avoid_: company expense, big item, direct cost
+
+**Settlement**:
+The transfer that closes a float, recorded with the direction it moved: the holder returns what is left, or the company tops them up. A job carries on spending afterwards on a fresh float.
+_Avoid_: reconciliation, payout, clearing, closing
+
+**Quoted cost**:
+What a category was expected to pay out in cash — its lines' profit cost basis plus their input VAT. The number actual spend is compared against, never the price the client is charged for it.
+_Avoid_: budget, estimate, quoted price, allocation
+
 ## Environments
 
 **Preview stack**:
