@@ -60,8 +60,19 @@
               </span>
               <span v-else class="text-xs text-gray-500">
                 {{ doc.revision_rounds || 0 }} of
-                {{ INCLUDED_REVISION_ROUNDS }} included rounds used
+                {{ includedRounds }} included rounds used
               </span>
+
+              <label class="ml-auto flex items-center gap-1 text-xs text-gray-500">
+                Included rounds
+                <input
+                  v-model.number="includedRounds"
+                  type="number"
+                  min="0"
+                  class="w-14 rounded border-gray-200 px-1 py-0.5 text-xs tabular-nums"
+                  @change="saveIncludedRounds"
+                />
+              </label>
             </div>
 
             <table v-if="doc.revisions?.length" class="w-full text-sm">
@@ -260,6 +271,9 @@ const stage = ref("")
 const filesLocation = ref("")
 const revisionNote = ref("")
 const reopenNotice = ref("")
+// Per job, negotiated deal by deal; the constant is only what a new job
+// starts with, and the server is the authority on both.
+const includedRounds = ref(INCLUDED_REVISION_ROUNDS)
 
 const job = createResource({
   url: "frappe.client.get",
@@ -268,6 +282,8 @@ const job = createResource({
   onSuccess(loaded) {
     stage.value = loaded.stage
     filesLocation.value = loaded.files_location || ""
+    includedRounds.value =
+      loaded.included_revision_rounds ?? INCLUDED_REVISION_ROUNDS
     error.value = ""
   },
   onError(err) {
@@ -294,7 +310,7 @@ watch(
 const companyName = computed(() => company.data?.company_name)
 
 const nextIsChargeable = computed(
-  () => (doc.value?.revision_rounds || 0) >= INCLUDED_REVISION_ROUNDS
+  () => (doc.value?.revision_rounds || 0) >= includedRounds.value
 )
 
 // Mirrors redo_stage_for on the server: between being shown a cut and
@@ -324,6 +340,14 @@ function saveStage() {
     doctype: "Job",
     name,
     fieldname: { stage: stage.value },
+  })
+}
+
+function saveIncludedRounds() {
+  setValue.submit({
+    doctype: "Job",
+    name,
+    fieldname: { included_revision_rounds: includedRounds.value },
   })
 }
 

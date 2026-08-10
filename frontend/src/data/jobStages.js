@@ -2,13 +2,13 @@
 // doctype's stage options and auraos.auraos.doctype.job.job.STAGES.
 export const STAGES = [
   "Pre-production",
-  "Shoot",
-  "Post",
-  "Feedback",
+  "Production",
+  "Post-production",
+  "Client review",
   "Delivery",
-  "Nghiệm thu",
-  "Chờ thanh toán",
-  "Done",
+  "Client sign-off",
+  "Awaiting payment",
+  "Complete",
 ]
 
 // Rounds included before a revision becomes a change order — mirrors
@@ -18,5 +18,5 @@ export const INCLUDED_REVISION_ROUNDS = 2
 // Where logging a revision sends a job that has already been shown to
 // the client, and the last stage that still reopens — mirrors
 // REDO_STAGE and LAST_REOPENABLE_STAGE on the server.
-export const REDO_STAGE = "Post"
+export const REDO_STAGE = "Post-production"
 export const LAST_REOPENABLE_STAGE = "Delivery"

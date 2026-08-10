@@ -18,6 +18,7 @@
   "links_section",
   "job_links",
   "feedback_section",
+  "included_revision_rounds",
   "revision_rounds",
   "change_order_due",
   "revisions",
@@ -55,7 +56,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Stage",
-   "options": "Pre-production\nShoot\nPost\nFeedback\nDelivery\nNghiệm thu\nChờ thanh toán\nDone",
+   "options": "Pre-production\nProduction\nPost-production\nClient review\nDelivery\nClient sign-off\nAwaiting payment\nComplete",
    "reqd": 1
   },
   {
@@ -123,7 +124,15 @@
   {
    "fieldname": "feedback_section",
    "fieldtype": "Section Break",
-   "label": "Feedback & Revisions"
+   "label": "Client Review & Revisions"
+  },
+  {
+   "default": "2",
+   "description": "Revision rounds this client gets at no charge; the next one is a change order",
+   "fieldname": "included_revision_rounds",
+   "fieldtype": "Int",
+   "label": "Included Revision Rounds",
+   "non_negative": 1
   },
   {
    "default": "0",

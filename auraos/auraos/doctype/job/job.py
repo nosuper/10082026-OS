@@ -22,26 +22,27 @@ from auraos.auraos.doctype.deal.deal import (
 # The agreed production flow (spec #2, story 27), in board order.
 STAGES = [
     "Pre-production",
-    "Shoot",
-    "Post",
-    "Feedback",
+    "Production",
+    "Post-production",
+    "Client review",
     "Delivery",
-    "Nghiệm thu",
-    "Chờ thanh toán",
-    "Done",
+    "Client sign-off",
+    "Awaiting payment",
+    "Complete",
 ]
 
-# Revision rounds the client gets included; the next one is a chargeable
-# change order (spec #2, story 28).
+# What a new job includes before a revision round becomes a chargeable
+# change order (spec #2, story 28). The standing house number only —
+# each job carries its own, negotiable count.
 INCLUDED_REVISION_ROUNDS = 2
 
 # Where a revision request puts the job: the client has asked for
 # changes, so the work reopens where changes are made (issue #9, raised
 # at the T6 walkthrough).
-REDO_STAGE = "Post"
+REDO_STAGE = "Post-production"
 
 # The last stage a revision may reopen. Past it the client has signed
-# the work off (nghiệm thu) and is being invoiced for it, so a change
+# the work off and is being invoiced for it, so a change
 # request is a new negotiation, not a redo: the round is still counted
 # and flagged chargeable, but a job nobody is working on any more is
 # not dragged back onto the board.
@@ -52,7 +53,7 @@ def redo_stage_for(stage):
     """The stage a job lands in when a revision is logged against it.
 
     A revision is only a *redo* between the two lines: after the client
-    has been shown a cut (Feedback) and before they have signed it off.
+    has been shown a cut (Client review) and before they sign it off.
     Outside that window the stage is left alone rather than shoved
     sideways by a note.
     """
@@ -78,6 +79,30 @@ CARRIED_FIELDS = (
     "quote_vat_amount",
     "quote_total",
 )
+
+# The frozen half of that: the money the deal was won at. Read-only
+# fields only stop the form, not the API, and the founder found the gap
+# on the preview — a carried line's numbers could still be typed over,
+# leaving the job quietly disagreeing with the deal it came from.
+# Everything production owns (title, client, owner, stage, links, files
+# location, revisions) stays editable.
+FROZEN_FIELDS = (
+    "deal",
+    "quote_mf_pct",
+    "vat_pct",
+    "quote_subtotal",
+    "quote_mf_amount",
+    "quote_vat_amount",
+    "quote_total",
+    "commission_pct",
+)
+
+FROZEN_TABLES = ("cost_lines", "packages")
+
+
+def table_snapshot(doc, table):
+    """Every data value in a child table, as a comparable structure."""
+    return carried_rows(doc.get(table) or [])
 
 
 def carried_rows(rows):
@@ -145,7 +170,37 @@ class Job(Document):
 
     def validate(self):
         self.validate_owner()
+        self.reject_snapshot_changes()
         self.number_revisions()
+
+    def reject_snapshot_changes(self):
+        """The carried breakdown is what was won — a record, not a draft.
+
+        Runs after Frappe has restored any permlevel field the session
+        may not write, so a producer's save is compared against what
+        they were actually allowed to send.
+        """
+        before = self.get_doc_before_save()
+        if not before:
+            return
+        for field in FROZEN_FIELDS:
+            if self.get(field) != before.get(field):
+                frappe.throw(
+                    _(
+                        "{0} is carried from deal {1} and cannot be edited on "
+                        "the job — re-price the deal instead."
+                    ).format(_(self.meta.get_label(field)), self.deal),
+                    frappe.ValidationError,
+                )
+        for table in FROZEN_TABLES:
+            if table_snapshot(self, table) != table_snapshot(before, table):
+                frappe.throw(
+                    _(
+                        "The {0} carried from deal {1} cannot be edited on the "
+                        "job — re-price the deal instead."
+                    ).format(_(self.meta.get_label(table)).lower(), self.deal),
+                    frappe.ValidationError,
+                )
 
     def validate_owner(self):
         if self.job_owner and not holds_operating_role(self.job_owner):
@@ -164,13 +219,23 @@ class Job(Document):
         write the job may delete a round and lower the count. That is a
         permission question, and the walkthrough asks it.
         """
+        included = self.included_rounds()
         for index, row in enumerate(self.revisions, start=1):
             row.round = index
-            row.chargeable = 1 if index > INCLUDED_REVISION_ROUNDS else 0
+            row.chargeable = 1 if index > included else 0
         self.revision_rounds = len(self.revisions)
-        self.change_order_due = (
-            1 if self.revision_rounds > INCLUDED_REVISION_ROUNDS else 0
-        )
+        self.change_order_due = 1 if self.revision_rounds > included else 0
+
+    def included_rounds(self):
+        """How many rounds this client gets at no charge.
+
+        Per job, not global: the founder negotiates it deal by deal
+        (walkthrough 3.4). The constant is only the starting point a new
+        job is created with.
+        """
+        if self.included_revision_rounds is None:
+            return INCLUDED_REVISION_ROUNDS
+        return int(self.included_revision_rounds)
 
     def before_save(self):
         # After validation, so a rejected transition is never logged.

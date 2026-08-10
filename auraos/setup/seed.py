@@ -246,22 +246,22 @@ def seed_t7_job_in_production(deal_name):
 
     job = create_from_deal(won)
     job.files_location = f"//nas/jobs/{job.name}"
-    job.stage = "Feedback"
+    job.stage = "Client review"
     job.save(ignore_permissions=True)
 
     # Each round the way it really happens: the job comes back to
-    # Feedback, the client asks again, the revision sends it to Post.
+    # Client review, the client asks again, the revision sends it back.
     for note in REVISION_NOTES:
         back_to_feedback(job.name)
         frappe.get_doc("Job", job.name).log_revision(note)
 
-    # Left sitting at Feedback: the next revision is the interesting one.
+    # Left sitting at Client review: the next revision is the interesting one.
     back_to_feedback(job.name)
 
 
 def back_to_feedback(job_name):
     job = frappe.get_doc("Job", job_name)
-    job.stage = "Feedback"
+    job.stage = "Client review"
     job.save(ignore_permissions=True)
 
 

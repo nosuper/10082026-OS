@@ -149,6 +149,53 @@ class TestJobConversion(FrappeTestCase):
         with self.assertRaises(frappe.PermissionError):
             frappe.get_doc("Job", job_name).check_permission("read")
 
+    # -- the carried snapshot is frozen (walkthrough 1.5) --
+
+    def test_a_carried_cost_line_cannot_be_edited_on_the_job(self):
+        """The founder found this on the preview: read-only fields still
+        let a line's numbers be typed over, which silently made the job
+        disagree with the deal it came from."""
+        job = frappe.get_doc("Job", create_job_from_deal(won_deal().name)["name"])
+        job.cost_lines[0].unit_price = 999_000
+
+        with self.assertRaises(frappe.ValidationError):
+            job.save()
+
+    def test_a_carried_package_price_cannot_be_edited_on_the_job(self):
+        job = frappe.get_doc("Job", create_job_from_deal(won_deal().name)["name"])
+        job.packages[0].price = 1
+
+        with self.assertRaises(frappe.ValidationError):
+            job.save()
+
+    def test_a_carried_line_cannot_be_added_or_dropped(self):
+        job = frappe.get_doc("Job", create_job_from_deal(won_deal().name)["name"])
+        job.cost_lines.pop()
+
+        with self.assertRaises(frappe.ValidationError):
+            job.save()
+
+    def test_the_carried_totals_cannot_be_edited_on_the_job(self):
+        job = frappe.get_doc("Job", create_job_from_deal(won_deal().name)["name"])
+        job.quote_total = 1
+
+        with self.assertRaises(frappe.ValidationError):
+            job.save()
+
+    def test_what_production_owns_is_still_editable(self):
+        """Freezing the snapshot must not freeze the job itself."""
+        job = frappe.get_doc("Job", create_job_from_deal(won_deal().name)["name"])
+        job.stage = "Production"
+        job.files_location = "//nas/jobs/" + job.name
+        job.title = "MV — bản dựng"
+        job.append("job_links", {"label": "Rushes", "url": "https://example.com/x"})
+        job.save()
+
+        reloaded = frappe.get_doc("Job", job.name)
+        self.assertEqual(reloaded.stage, "Production")
+        self.assertEqual(reloaded.title, "MV — bản dựng")
+        self.assertEqual(len(reloaded.job_links), 2)
+
     # -- files location (story 29) --
 
     def test_files_location_is_stored_on_the_job(self):
@@ -263,28 +310,28 @@ class TestJobStages(FrappeTestCase):
             STAGES,
             [
                 "Pre-production",
-                "Shoot",
-                "Post",
-                "Feedback",
+                "Production",
+                "Post-production",
+                "Client review",
                 "Delivery",
-                "Nghiệm thu",
-                "Chờ thanh toán",
-                "Done",
+                "Client sign-off",
+                "Awaiting payment",
+                "Complete",
             ],
         )
 
     def test_both_operating_roles_move_stages(self):
         frappe.set_user(PRODUCER)
         job = frappe.get_doc("Job", self.job.name)
-        job.stage = "Shoot"
+        job.stage = "Production"
         job.save()
 
         frappe.set_user(FOUNDER)
         job = frappe.get_doc("Job", job.name)
-        job.stage = "Post"
+        job.stage = "Post-production"
         job.save()
 
-        self.assertEqual(frappe.get_doc("Job", job.name).stage, "Post")
+        self.assertEqual(frappe.get_doc("Job", job.name).stage, "Post-production")
 
     def test_every_move_is_logged_with_who_and_when(self):
         for stage in STAGES[1:]:
@@ -318,7 +365,7 @@ class TestJobRevisions(FrappeTestCase):
         self.job = frappe.get_doc(
             "Job", create_job_from_deal(won_deal().name)["name"]
         )
-        self.job.stage = "Feedback"
+        self.job.stage = "Client review"
         self.job.save()
 
     def tearDown(self):
@@ -391,7 +438,7 @@ class TestJobRevisions(FrappeTestCase):
         history = frappe.get_doc("Job", self.job.name).stage_history
         self.assertEqual(
             (history[-1].from_stage, history[-1].to_stage),
-            ("Feedback", REDO_STAGE),
+            ("Client review", REDO_STAGE),
         )
         self.assertTrue(history[-1].changed_by and history[-1].changed_on)
 
@@ -404,7 +451,7 @@ class TestJobRevisions(FrappeTestCase):
         self.assertEqual(result["stage"], REDO_STAGE)
 
     def test_a_revision_after_sign_off_counts_but_does_not_reopen(self):
-        """Past nghiệm thu the work is signed off and being invoiced.
+        """Past sign-off the work is accepted and being invoiced.
 
         Dragging a finished job back onto the board would be a surprise;
         the round is still counted and still flagged chargeable.
@@ -444,13 +491,55 @@ class TestJobRevisions(FrappeTestCase):
     def test_the_reopened_job_still_counts_the_round(self):
         for i in range(INCLUDED_REVISION_ROUNDS + 1):
             job = frappe.get_doc("Job", self.job.name)
-            job.stage = "Feedback"
+            job.stage = "Client review"
             job.save()
             result = log_job_revision(self.job.name, f"Sửa lần {i + 1}")
 
         self.assertEqual(result["revision_rounds"], INCLUDED_REVISION_ROUNDS + 1)
         self.assertTrue(result["change_order_due"])
         self.assertEqual(result["stage"], REDO_STAGE)
+
+    def test_a_job_starts_with_the_standard_included_rounds(self):
+        self.assertEqual(
+            self.job.included_revision_rounds, INCLUDED_REVISION_ROUNDS
+        )
+
+    def test_a_job_can_include_a_different_number_of_rounds(self):
+        """The number is per job — it's negotiated deal by deal
+        (walkthrough 3.4)."""
+        job = frappe.get_doc("Job", self.job.name)
+        job.included_revision_rounds = 1
+        job.save()
+
+        first = log_job_revision(job.name, "Sửa lần 1")
+        self.assertFalse(first["chargeable"])
+
+        second = log_job_revision(job.name, "Sửa lần 2")
+        self.assertTrue(second["chargeable"])
+        self.assertTrue(second["change_order_due"])
+
+    def test_a_job_can_include_no_free_rounds_at_all(self):
+        job = frappe.get_doc("Job", self.job.name)
+        job.included_revision_rounds = 0
+        job.save()
+
+        self.assertTrue(log_job_revision(job.name, "Sửa ngay")["chargeable"])
+
+    def test_lowering_the_included_rounds_reflags_existing_ones(self):
+        """The flag is derived, so it follows the number both ways."""
+        for i in range(INCLUDED_REVISION_ROUNDS):
+            log_job_revision(self.job.name, f"Sửa lần {i + 1}")
+        self.assertFalse(frappe.get_doc("Job", self.job.name).change_order_due)
+
+        job = frappe.get_doc("Job", self.job.name)
+        job.included_revision_rounds = 1
+        job.save()
+
+        reloaded = frappe.get_doc("Job", self.job.name)
+        self.assertTrue(reloaded.change_order_due)
+        self.assertEqual(
+            [bool(row.chargeable) for row in reloaded.revisions], [False, True]
+        )
 
     def test_the_counter_survives_hand_edited_rows(self):
         """The rounds and the flag are derived, never trusted from input."""
