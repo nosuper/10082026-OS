@@ -32,7 +32,7 @@
           <input
             v-model="filesLocation"
             class="min-w-0 flex-1 rounded border-gray-200 px-2 py-1 text-sm"
-            placeholder="Shared folder for this job code — e.g. //nas/jobs/JOB-0007"
+            :placeholder="`Shared folder for this job code — e.g. //nas/jobs/${name}`"
           />
           <Button
             :disabled="filesLocation === (doc.files_location || '')"
@@ -238,6 +238,7 @@ import { ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
+import { vnd } from "../utils/money"
 import { STAGES, FREE_REVISION_ROUNDS } from "../data/jobStages"
 
 const route = useRoute()
@@ -327,10 +328,5 @@ const revision = createResource({
 function logRevision() {
   if (!revisionNote.value.trim()) return
   revision.submit({ job: name, note: revisionNote.value })
-}
-
-function vnd(amount) {
-  if (amount == null) return "—"
-  return new Intl.NumberFormat("vi-VN").format(amount)
 }
 </script>

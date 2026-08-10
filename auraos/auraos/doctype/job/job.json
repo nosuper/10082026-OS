@@ -81,7 +81,8 @@
    "fieldtype": "Link",
    "label": "Deal",
    "options": "Deal",
-   "read_only": 1
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "client_section",

@@ -401,6 +401,7 @@
 import { reactive, ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { vnd } from "../utils/money"
 
 // Must match the Deal Cost Line tax_type options. Internal work carries
 // no invoice — Không hoá đơn.
@@ -499,11 +500,6 @@ watch(
 
 function livePackage(title) {
   return (live.value?.packages || []).find((p) => p.title === title)
-}
-
-function vnd(amount) {
-  if (amount == null) return "—"
-  return new Intl.NumberFormat("vi-VN").format(amount)
 }
 
 // -- editing --

@@ -80,6 +80,8 @@ def create_from_deal(deal_name):
             ),
             frappe.ValidationError,
         )
+    # The friendly refusal; the unique index on Job.deal is what actually
+    # stops two conversions racing each other into two jobs.
     existing = frappe.db.exists("Job", {"deal": deal.name})
     if existing:
         frappe.throw(

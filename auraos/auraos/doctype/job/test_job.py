@@ -183,16 +183,39 @@ class TestJobConversion(FrappeTestCase):
             "PERMISSION LEAK: producer read commission_pct via the list API",
         )
 
-    def test_no_founder_only_job_field_is_in_global_search(self):
-        # Global search indexes whole fields; a permlevel-1 field that
-        # also asked to be indexed would leak past the document API.
-        meta = frappe.get_meta("Job")
-        leaked = [
-            df.fieldname
-            for df in meta.fields
-            if df.permlevel and df.get("in_global_search")
+    def test_commission_never_reaches_the_search_index(self):
+        # The third leg of the standing permission proof, in the
+        # spike-note pattern: index a job with a distinctive title and an
+        # unusual commission, then read what the search content holds.
+        from frappe.desk.doctype.global_search_settings.global_search_settings import (
+            update_global_search_doctypes,
+        )
+        from frappe.utils import global_search
+
+        # Register hook-declared doctypes in Global Search Settings —
+        # normally done by migrate, which CI's fresh site never runs.
+        update_global_search_doctypes()
+
+        marker = "congviecbimat4471"
+        deal = won_deal(title=f"Deal {marker}", commission_pct=41.77)
+        create_job_from_deal(deal.name)
+        global_search.sync_global_search()
+
+        frappe.set_user(PRODUCER)
+        results = [
+            row for row in global_search.search(marker)
+            if row.get("doctype") == "Job"
         ]
-        self.assertEqual(leaked, [])
+        self.assertTrue(
+            results,
+            "positive control failed: the job should be findable by title",
+        )
+        for row in results:
+            self.assertNotIn(
+                "41.77",
+                row.get("content") or "",
+                "PERMISSION LEAK: commission value found in global search content",
+            )
 
     def test_producer_conversion_still_carries_the_commission(self):
         """A producer's conversion must not silently reset the rate.
@@ -332,6 +355,10 @@ class TestJobRevisions(FrappeTestCase):
     def test_an_empty_revision_note_is_rejected(self):
         with self.assertRaises(frappe.ValidationError):
             log_job_revision(self.job.name, "   ")
+
+    def test_a_revision_on_a_missing_job_fails(self):
+        with self.assertRaises(frappe.DoesNotExistError):
+            log_job_revision("JOB-does-not-exist", "hello")
 
     def test_outsider_cannot_log_a_revision(self):
         frappe.set_user(OUTSIDER)

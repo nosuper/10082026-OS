@@ -56,6 +56,17 @@ def _check_deal_permission(deal, ptype):
     frappe.has_permission("Deal", ptype, doc=deal, throw=True)
 
 
+def _check_job_permission(job, ptype):
+    """Gate a job endpoint on the job itself — missing means missing.
+
+    Without the existence check a bad name reads as a permission
+    failure, which tells the caller the wrong thing.
+    """
+    if not frappe.db.exists("Job", job):
+        frappe.throw(_("Job {0} not found").format(job), frappe.DoesNotExistError)
+    frappe.has_permission("Job", ptype, doc=job, throw=True)
+
+
 COMMENT_FIELDS = ["name", "content", "comment_email", "comment_by", "creation"]
 
 
@@ -252,7 +263,7 @@ def create_job_from_deal(deal):
 
 @frappe.whitelist()
 def jobs_by_deal():
-    """{deal_name: job_name} for the deals this user may list.
+    """{deal_name: job_name} for the jobs this user may list.
 
     The board uses it to tell a won deal that still needs converting
     from one that already has a job.
@@ -274,7 +285,7 @@ def log_job_revision(job, note):
     The round number and the chargeable flag come back computed — the
     job derives both from row order (Job.number_revisions).
     """
-    frappe.has_permission("Job", "write", doc=job, throw=True)
+    _check_job_permission(job, "write")
     if not (note or "").strip():
         frappe.throw(_("A revision needs a note"), frappe.ValidationError)
     doc = frappe.get_doc("Job", job)
