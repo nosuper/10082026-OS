@@ -16,7 +16,7 @@ FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
 
 # Unique marker so global-search assertions cannot collide with other data.
-SECRET = "chi-phi-bi-mat-8823"
+SECRET = "chiphibimat8823"
 
 
 def make_test_user(email, role):
@@ -39,6 +39,14 @@ class TestFounderSpikeNote(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # Register hook-declared doctypes in Global Search Settings —
+        # normally done by migrate, which CI's fresh site never runs.
+        from frappe.desk.doctype.global_search_settings.global_search_settings import (
+            update_global_search_doctypes,
+        )
+
+        update_global_search_doctypes()
+
         make_test_user(FOUNDER, "Founder")
         make_test_user(PRODUCER, "Producer")
         note = frappe.get_doc(
