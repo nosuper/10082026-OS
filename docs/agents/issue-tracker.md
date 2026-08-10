@@ -13,7 +13,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
-> **Not wired up yet:** this directory is not a git repository and has no GitHub remote. Before any `gh` command will work, run `git init`, create the repo (`gh repo create`), and set the `origin` remote.
+The repo lives at `github.com/nosuper/10082026-OS` (private); `gh` commands work from any clone. On this Windows machine `gh` is not on PATH — invoke it as `& "C:\Program Files\GitHub CLI\gh.exe"`.
 
 ## Pull requests as a triage surface
 
