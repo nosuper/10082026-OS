@@ -16,3 +16,9 @@ auraos/www/aura.html
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Vite/unplugin artifacts
+frontend/vite.config.js.timestamp-*.mjs
+frontend/auto-imports.d.ts
+frontend/components.d.ts
+frontend/*.log
