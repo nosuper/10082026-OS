@@ -321,7 +321,10 @@ class TestDealBreakdown(FrappeTestCase):
 
         frappe.set_user(PRODUCER)
         fetched = get("Deal", name=deal.name)
-        self.assertIsNone(fetched.get("commission_pct"))
+        # Frappe masks unreadable permlevel fields to None/0 rather than
+        # dropping the key; the property that matters is that the stored
+        # value never comes through.
+        self.assertFalse(fetched.get("commission_pct"))
 
     def test_producer_cannot_read_commission_via_list_api(self):
         make_breakdown_deal(commission_pct=7)
