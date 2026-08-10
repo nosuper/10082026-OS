@@ -4,7 +4,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "margin_floor_pct"
+  "margin_floor_pct",
+  "quote_silence_days"
  ],
  "fields": [
   {
@@ -13,6 +14,14 @@
    "fieldname": "margin_floor_pct",
    "fieldtype": "Percent",
    "label": "Margin Floor %"
+  },
+  {
+   "default": "5",
+   "description": "Days of client silence after a quote is sent before it is nudged. 0 disables the nudge.",
+   "fieldname": "quote_silence_days",
+   "fieldtype": "Int",
+   "label": "Quote Silence Nudge (days)",
+   "non_negative": 1
   }
  ],
  "index_web_pages_for_search": 0,

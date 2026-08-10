@@ -1,0 +1,12 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_content %}
+<div style="padding: 2rem 1rem;">
+  <div style="max-width: 46rem; margin: 0 auto 1rem; text-align: right;">
+    <a href="{{ pdf_url }}" class="btn btn-default btn-sm">Download PDF</a>
+  </div>
+  {% include "auraos/templates/includes/quote_body.html" %}
+</div>
+{% endblock %}

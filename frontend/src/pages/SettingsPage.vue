@@ -27,6 +27,29 @@
         </Button>
         <span v-if="saved" class="text-xs text-green-700">Saved.</span>
       </div>
+      <hr class="my-5" />
+
+      <label class="block text-sm font-medium text-gray-800">
+        Quote silence nudge (days)
+      </label>
+      <p class="mt-1 text-xs text-gray-500">
+        A sent quote with no reply after this many days is flagged on the
+        deal board. 0 turns the nudge off.
+      </p>
+      <div class="mt-3 flex items-center gap-2">
+        <input
+          v-model.number="silenceDays"
+          type="number"
+          min="0"
+          step="1"
+          class="w-28 rounded border-gray-200 px-2 py-1 text-right text-sm"
+        />
+        <Button variant="solid" :loading="silenceSaver.loading" @click="saveSilence">
+          Save
+        </Button>
+        <span v-if="silenceSaved" class="text-xs text-green-700">Saved.</span>
+      </div>
+
       <ErrorMessage class="mt-2" :message="error" />
     </div>
   </div>
@@ -69,5 +92,37 @@ const saver = createResource({
 function save() {
   saved.value = false
   saver.submit({ pct: floorPct.value || 0 })
+}
+
+const silenceDays = ref(5)
+const silenceSaved = ref(false)
+
+createResource({
+  url: "auraos.api.get_quote_silence_days",
+  auto: true,
+  onSuccess(value) {
+    silenceDays.value = value
+  },
+  onError() {
+    denied.value = true
+  },
+})
+
+const silenceSaver = createResource({
+  url: "auraos.api.set_quote_silence_days",
+  onSuccess(value) {
+    silenceDays.value = value
+    silenceSaved.value = true
+    error.value = ""
+  },
+  onError(err) {
+    silenceSaved.value = false
+    error.value = err.messages?.join("\n") || err.message
+  },
+})
+
+function saveSilence() {
+  silenceSaved.value = false
+  silenceSaver.submit({ days: silenceDays.value || 0 })
 }
 </script>

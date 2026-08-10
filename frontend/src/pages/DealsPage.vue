@@ -67,6 +67,13 @@
               >
                 {{ deal.lost_reason }}
               </span>
+              <span
+                v-if="silentDeals[deal.name]"
+                class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} — no reply after ${silence.data?.silence_days} days`"
+              >
+                ⏰ Silent
+              </span>
               <button
                 class="ml-auto rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
                 title="Breakdown & Quote"
@@ -135,6 +142,15 @@
             </td>
             <td class="whitespace-nowrap px-3 py-2 text-gray-700">
               {{ deal.project_type }}
+            </td>
+            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
+              {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
+              <span
+                v-if="silentDeals[deal.name]"
+                class="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+              >
+                ⏰ Silent
+              </span>
             </td>
             <td class="px-3 py-2">
               <span
@@ -214,11 +230,26 @@ const deals = createListResource({
     "estimated_budget",
     "source",
     "project_type",
+    "quote_status",
+    "quote_sent_on",
     "modified",
   ],
   orderBy: "modified desc",
   pageLength: 500,
   auto: true,
+})
+
+// Quotes that have gone unanswered past the company's silence window
+// (spec #2, story 6) — the deal-killer the board is meant to surface.
+const silence = createResource({
+  url: "auraos.api.silent_quote_deals",
+  auto: true,
+})
+
+const silentDeals = computed(() => {
+  const map = {}
+  for (const deal of silence.data?.deals || []) map[deal.name] = deal
+  return map
 })
 
 const companies = createListResource({
@@ -260,6 +291,7 @@ const COLUMNS = [
   { key: "estimated_budget", label: "Budget (VND)" },
   { key: "source", label: "Source" },
   { key: "project_type", label: "Project Type" },
+  { key: "quote_status", label: "Quote" },
   { key: "tags", label: "Tags" },
   { key: "modified", label: "Updated" },
 ]

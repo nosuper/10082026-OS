@@ -1,0 +1,81 @@
+{#
+  The client-facing quote, in English (spec #2, story 50).
+
+  Rendered by both the public page (auraos/www/quote.html) and the PDF
+  export (auraos.api.quote_pdf) from the same context, so the two can
+  never drift. Every value here comes from auraos.lib.quote.client_view;
+  nothing else about the deal is in scope, so nothing else can leak.
+#}
+<style>
+  .aura-quote { max-width: 46rem; margin: 0 auto; color: #111827;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .aura-quote h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .aura-quote .aura-meta { color: #6b7280; font-size: .875rem; margin-bottom: 2rem; }
+  .aura-quote table { width: 100%; border-collapse: collapse; }
+  .aura-quote th { text-align: left; font-size: .75rem; text-transform: uppercase;
+    letter-spacing: .04em; color: #6b7280; border-bottom: 1px solid #e5e7eb;
+    padding: .5rem 0; }
+  .aura-quote td { padding: .75rem 0; border-bottom: 1px solid #f3f4f6;
+    vertical-align: top; }
+  .aura-quote td.aura-amount, .aura-quote th.aura-amount { text-align: right;
+    white-space: nowrap; }
+  .aura-quote .aura-package-title { font-weight: 600; }
+  .aura-quote .aura-package-desc { color: #4b5563; font-size: .875rem;
+    margin-top: .25rem; white-space: pre-line; }
+  .aura-quote .aura-totals { margin-top: 1.5rem; margin-left: auto; width: 20rem; }
+  .aura-quote .aura-totals div { display: flex; justify-content: space-between;
+    padding: .35rem 0; font-size: .9375rem; }
+  .aura-quote .aura-totals .aura-total { border-top: 1px solid #e5e7eb;
+    margin-top: .35rem; padding-top: .6rem; font-weight: 700; font-size: 1.05rem; }
+  .aura-quote .aura-notes { margin-top: 2.5rem; padding-top: 1rem;
+    border-top: 1px solid #f3f4f6; color: #4b5563; font-size: .875rem;
+    white-space: pre-line; }
+</style>
+
+<div class="aura-quote">
+  <h1>{{ title or "Quote" }}</h1>
+  <div class="aura-meta">
+    {% if client_name %}{{ client_name }} &middot; {% endif %}
+    Version {{ version }}
+    {% if published_display %} &middot; {{ published_display }}{% endif %}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Package</th>
+        <th class="aura-amount">Price (VND)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for package in packages %}
+      <tr>
+        <td>
+          <div class="aura-package-title">{{ package.title }}</div>
+          {% if package.description %}
+          <div class="aura-package-desc">{{ package.description }}</div>
+          {% endif %}
+        </td>
+        <td class="aura-amount">{{ money(package.price or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="aura-totals">
+    <div><span>Subtotal</span><span>{{ money(subtotal or 0) }}</span></div>
+    <div>
+      <span>Management fee{% if quote_mf_pct %} ({{ quote_mf_pct | int }}%){% endif %}</span>
+      <span>{{ money(mf_amount or 0) }}</span>
+    </div>
+    <div>
+      <span>VAT{% if vat_pct %} ({{ vat_pct | int }}%){% endif %}</span>
+      <span>{{ money(vat_amount or 0) }}</span>
+    </div>
+    <div class="aura-total"><span>Total</span><span>{{ money(total or 0) }} ₫</span></div>
+  </div>
+
+  {% if notes %}
+  <div class="aura-notes">{{ notes }}</div>
+  {% endif %}
+</div>

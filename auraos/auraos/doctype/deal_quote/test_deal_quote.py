@@ -1,0 +1,342 @@
+"""Seam tests for T6 (issue #8): hosted quote page.
+
+The four seams the ticket names:
+
+- **Token access** — a valid token renders the page for a guest; an
+  invalid one 404s; the token is random per version.
+- **Version immutability** — a published version's content cannot change;
+  publishing again makes a new version and leaves the old one alone.
+- **Guest serialization boundary** — the page and the PDF carry packages,
+  descriptions and totals, and nothing of cost, margin or commission;
+  Guest cannot reach Deal Quote through the document or list API either.
+- **Nudge condition** — a sent quote that stays quiet past the configured
+  window shows up in the nudge query; a confirmed one never does.
+
+Note: rendering the public page commits (the open event is the point of
+the request), so this module cleans up its own rows rather than relying
+on the test-case transaction rollback.
+
+Runs via: bench --site <site> run-tests --app auraos
+"""
+
+import re
+
+import frappe
+from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_to_date, set_request
+from frappe.website.serve import get_response
+
+from auraos.api import (
+    deal_quotes,
+    mark_quote_confirmed,
+    mark_quote_sent,
+    publish_quote,
+    quote_opens,
+    silent_quote_deals,
+)
+from auraos.auraos.doctype.deal.test_deal import make_company
+from auraos.auraos.doctype.deal_quote.deal_quote import (
+    client_context,
+    publish,
+    silent_deals,
+)
+from auraos.lib.money import format_vnd
+from auraos.tests.utils import make_test_user
+
+FOUNDER = "founder@test.auraos.local"
+PRODUCER = "producer@test.auraos.local"
+
+LINES = [
+    {
+        "description": "Đạo diễn",
+        "package": "Human resources",
+        "qty1": 1,
+        "qty2": 3,
+        "unit_price": 5_000_000,
+        "tax_type": "Cá nhân",
+        "markup_pct": 20,
+    },
+    {
+        "description": "Thuê thiết bị",
+        "package": "Equipment",
+        "qty1": 2,
+        "qty2": 3,
+        "unit_price": 8_000_000,
+        "tax_type": "Công ty",
+        "vendor_mf_pct": 5,
+        "markup_pct": 10,
+    },
+]
+
+PACKAGES = [
+    {"title": "Human resources", "description": "Director & crew, 3 shoot days"},
+    {"title": "Equipment", "description": "Camera, lighting and grip package"},
+]
+
+
+def make_quotable_deal(**overrides):
+    doc = frappe.get_doc(
+        {
+            "doctype": "Deal",
+            "title": "Brand film for Chungify",
+            "deal_owner": FOUNDER,
+            "company": make_company().name,
+            "cost_lines": overrides.pop("cost_lines", [dict(row) for row in LINES]),
+            "packages": overrides.pop("packages", [dict(row) for row in PACKAGES]),
+            **overrides,
+        }
+    )
+    doc.insert()
+    return doc
+
+
+def render_page(token):
+    set_request(method="GET", path=f"/quote/{token}")
+    return get_response()
+
+
+def squash(html):
+    """Collapse whitespace so template indentation can't fail a compare."""
+    return re.sub(r"\s+", " ", html)
+
+
+class TestDealQuote(FrappeTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+        frappe.db.set_single_value("AuraOS Settings", "quote_silence_days", 5)
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        for name in frappe.get_all("Deal Quote Open", pluck="name"):
+            frappe.delete_doc("Deal Quote Open", name, force=True)
+        super().tearDown()
+
+    # -- publishing & versions --
+
+    def test_publishing_freezes_the_deals_packages_and_totals(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        self.assertEqual(quote.version, 1)
+        self.assertEqual(quote.status, "Published")
+        self.assertEqual(quote.total, deal.quote_total)
+        self.assertEqual(
+            [(p.title, p.price) for p in quote.packages],
+            [(p.title, p.price) for p in deal.packages],
+        )
+
+    def test_each_version_gets_its_own_random_token(self):
+        deal = make_quotable_deal()
+        first = publish(deal.name)
+        second = publish(deal.name)
+        self.assertEqual(second.version, 2)
+        self.assertNotEqual(first.token, second.token)
+        self.assertEqual(len(first.token), 32)
+
+    def test_republishing_leaves_the_earlier_version_untouched(self):
+        deal = make_quotable_deal()
+        first = publish(deal.name)
+        frozen_total = first.total
+
+        deal.packages[0].price_override = 999_000_000
+        deal.save()
+        second = publish(deal.name)
+
+        reloaded = frappe.get_doc("Deal Quote", first.name)
+        self.assertEqual(reloaded.total, frozen_total)
+        self.assertNotEqual(second.total, frozen_total)
+
+    def test_publishing_without_packages_is_refused(self):
+        deal = make_quotable_deal(packages=[], cost_lines=[])
+        with self.assertRaises(frappe.ValidationError):
+            publish(deal.name)
+
+    # -- immutability --
+
+    def test_published_totals_cannot_be_edited(self):
+        quote = publish(make_quotable_deal().name)
+        quote.total = 1
+        with self.assertRaises(frappe.ValidationError):
+            quote.save()
+
+    def test_published_packages_cannot_be_edited(self):
+        quote = publish(make_quotable_deal().name)
+        quote.packages[0].price = 1
+        with self.assertRaises(frappe.ValidationError):
+            quote.save()
+
+    def test_published_token_cannot_be_swapped(self):
+        quote = publish(make_quotable_deal().name)
+        quote.token = "x" * 32
+        with self.assertRaises(frappe.ValidationError):
+            quote.save()
+
+    def test_delivery_status_stays_writable(self):
+        quote = publish(make_quotable_deal().name)
+        quote.mark_sent()
+        self.assertEqual(frappe.db.get_value("Deal Quote", quote.name, "status"), "Sent")
+
+    # -- the public page --
+
+    def test_valid_token_renders_the_packages_for_a_guest(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+
+        frappe.set_user("Guest")
+        response = render_page(quote.token)
+        html = response.get_data().decode()
+
+        self.assertEqual(response.status_code, 200)
+        for package in quote.packages:
+            self.assertIn(package.title, html)
+            self.assertIn(package.description, html)
+        self.assertIn(format_vnd(quote.total), html)
+
+    def test_invalid_token_404s(self):
+        frappe.set_user("Guest")
+        self.assertEqual(render_page("not-a-real-token").status_code, 404)
+
+    def test_page_never_serializes_internals_to_a_guest(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+
+        frappe.set_user("Guest")
+        html = render_page(quote.token).get_data().decode()
+
+        # The numbers the producer and the founder see on the breakdown.
+        # (A package price legitimately equals its single member line's
+        # quote price, so cost basis and margin are the honest probes.)
+        for internal in (
+            deal.quote_margin,
+            deal.cost_lines[0].cost_basis,
+            deal.cost_lines[1].cost_basis,
+        ):
+            self.assertNotIn(
+                format_vnd(internal), html, f"{internal} leaked to the client"
+            )
+        # ...and the line-level story behind the packages.
+        for row in deal.cost_lines:
+            self.assertNotIn(row.description, html)
+        self.assertNotIn("commission", html.lower())
+
+    def test_guest_cannot_reach_deal_quote_through_the_document_api(self):
+        quote = publish(make_quotable_deal().name)
+        frappe.set_user("Guest")
+        self.assertFalse(frappe.has_permission("Deal Quote", "read", doc=quote.name))
+        with self.assertRaises(frappe.PermissionError):
+            frappe.get_list("Deal Quote")
+
+    # -- open events --
+
+    def test_opening_the_page_records_an_open_event(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+
+        frappe.set_user("Guest")
+        render_page(quote.token)
+        render_page(quote.token)
+
+        frappe.set_user(FOUNDER)
+        self.assertEqual(deal_quotes(deal.name)[0]["opens"], 2)
+        self.assertEqual(len(quote_opens(quote.name)), 2)
+
+    def test_open_events_are_not_readable_by_guests(self):
+        quote = publish(make_quotable_deal().name)
+        frappe.set_user("Guest")
+        render_page(quote.token)
+        with self.assertRaises(frappe.PermissionError):
+            frappe.get_list("Deal Quote Open")
+
+    # -- PDF export --
+
+    def test_pdf_renders_the_same_body_as_the_page(self):
+        quote = publish(make_quotable_deal().name)
+        frappe.set_user("Guest")
+        html = render_page(quote.token).get_data().decode()
+        # The PDF endpoint renders exactly this, from the same builder.
+        body = frappe.render_template(
+            "auraos/templates/includes/quote_body.html", client_context(quote)
+        )
+        self.assertIn(squash(body), squash(html))
+
+    # -- delivery status on the deal --
+
+    def test_publishing_mirrors_the_status_onto_the_deal(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        reloaded = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(reloaded.quote_status, "Published")
+        self.assertEqual(reloaded.latest_quote, quote.name)
+
+    def test_marking_sent_moves_the_deal_to_quote_sent(self):
+        deal = make_quotable_deal(stage="Breakdown")
+        quote = publish(deal.name)
+        quote.mark_sent()
+        reloaded = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(reloaded.stage, "Quote Sent")
+        self.assertEqual(reloaded.quote_status, "Sent")
+        self.assertTrue(reloaded.quote_sent_on)
+
+    def test_marking_sent_does_not_drag_a_negotiating_deal_backwards(self):
+        deal = make_quotable_deal(stage="Negotiation")
+        publish(deal.name).mark_sent()
+        self.assertEqual(frappe.db.get_value("Deal", deal.name, "stage"), "Negotiation")
+
+    def test_confirming_records_the_status_on_the_deal(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        quote.mark_sent()
+        quote.mark_confirmed()
+        self.assertEqual(
+            frappe.db.get_value("Deal", deal.name, "quote_status"), "Confirmed"
+        )
+
+    def test_a_producer_can_publish_and_mark_a_quote(self):
+        deal = make_quotable_deal()
+        frappe.set_user(PRODUCER)
+        published = publish_quote(deal.name)
+        sent = mark_quote_sent(published["name"])
+        self.assertEqual(sent["status"], "Sent")
+        confirmed = mark_quote_confirmed(published["name"])
+        self.assertEqual(confirmed["status"], "Confirmed")
+
+    # -- the silence nudge --
+
+    def sent_quote_deal(self, days_ago, silence_days=5):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        quote.mark_sent()
+        sent_on = add_to_date(frappe.utils.now_datetime(), days=-days_ago)
+        frappe.db.set_value("Deal Quote", quote.name, "sent_on", sent_on)
+        frappe.db.set_value("Deal", deal.name, "quote_sent_on", sent_on)
+        frappe.db.set_single_value("AuraOS Settings", "quote_silence_days", silence_days)
+        return deal
+
+    def test_a_quiet_sent_quote_is_nudged_after_the_window(self):
+        deal = self.sent_quote_deal(days_ago=6)
+        self.assertIn(deal.name, [row.name for row in silent_deals()])
+
+    def test_a_fresh_sent_quote_is_not_nudged(self):
+        deal = self.sent_quote_deal(days_ago=1)
+        self.assertNotIn(deal.name, [row.name for row in silent_deals()])
+
+    def test_a_confirmed_quote_is_never_nudged(self):
+        deal = self.sent_quote_deal(days_ago=30)
+        frappe.get_doc("Deal Quote", frappe.db.get_value("Deal", deal.name, "latest_quote")).mark_confirmed()
+        self.assertNotIn(deal.name, [row.name for row in silent_deals()])
+
+    def test_zero_silence_days_turns_the_nudge_off(self):
+        deal = self.sent_quote_deal(days_ago=30, silence_days=0)
+        self.assertNotIn(deal.name, [row.name for row in silent_deals()])
+
+    def test_the_nudge_endpoint_reports_the_configured_window(self):
+        deal = self.sent_quote_deal(days_ago=6, silence_days=3)
+        frappe.set_user(PRODUCER)
+        payload = silent_quote_deals()
+        self.assertEqual(payload["silence_days"], 3)
+        self.assertIn(deal.name, [row.name for row in payload["deals"]])

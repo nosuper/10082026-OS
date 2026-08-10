@@ -2,6 +2,7 @@
 
 import frappe
 from frappe import _
+from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
     OPERATING_ROLES,
@@ -11,6 +12,7 @@ from auraos.auraos.doctype.deal.deal import (
     rate,
     to_engine_lines,
 )
+from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
 
@@ -241,6 +243,132 @@ def deal_profit(deal):
     return _founder_block(result, doc.commission_pct or 0)
 
 
+# -- quote delivery (T6, issue #8) --
+
+
+def _quote_url(token):
+    """The public page's absolute URL, on the company domain."""
+    return f"{frappe.utils.get_url()}/quote/{token}"
+
+
+def _quote_dict(quote, opens=None):
+    """A quote version as the producer's screen needs it.
+
+    The client's view is a different, narrower projection — see
+    auraos.lib.quote.client_view.
+    """
+    return {
+        "name": quote.name,
+        "version": quote.version,
+        "status": quote.status,
+        "total": quote.total,
+        "published_on": quote.published_on,
+        "sent_on": quote.sent_on,
+        "confirmed_on": quote.confirmed_on,
+        "url": _quote_url(quote.token),
+        "pdf_url": f"/api/method/auraos.api.quote_pdf?token={quote.token}",
+        "opens": opens if opens is not None else 0,
+    }
+
+
+@frappe.whitelist()
+def publish_quote(deal, notes=None):
+    """Freeze the deal's packages and totals as the next quote version."""
+    quote = deal_quote.publish(deal, notes)
+    return _quote_dict(quote)
+
+
+@frappe.whitelist()
+def deal_quotes(deal):
+    """Every published version of a deal, newest first, with open counts."""
+    _check_deal_permission(deal, "read")
+    quotes = frappe.get_all(
+        "Deal Quote",
+        filters={"deal": deal},
+        fields=[
+            "name", "version", "status", "total", "token",
+            "published_on", "sent_on", "confirmed_on",
+        ],
+        order_by="version desc",
+    )
+    counts = {}
+    if quotes:
+        for row in frappe.get_all(
+            "Deal Quote Open",
+            filters={"quote": ["in", [q.name for q in quotes]]},
+            fields=["quote", "count(name) as opens"],
+            group_by="quote",
+        ):
+            counts[row.quote] = row.opens
+    return [_quote_dict(quote, counts.get(quote.name, 0)) for quote in quotes]
+
+
+@frappe.whitelist()
+def quote_opens(quote):
+    """Open events of one version, newest first (spec #2, story 22)."""
+    deal = frappe.db.get_value("Deal Quote", quote, "deal")
+    if not deal:
+        frappe.throw(_("Quote {0} not found").format(quote), frappe.DoesNotExistError)
+    _check_deal_permission(deal, "read")
+    return frappe.get_all(
+        "Deal Quote Open",
+        filters={"quote": quote},
+        fields=["opened_on", "via", "ip_address"],
+        order_by="opened_on desc",
+        limit=50,
+    )
+
+
+def _quote_for_write(name):
+    quote = frappe.get_doc("Deal Quote", name)
+    _check_deal_permission(quote.deal, "write")
+    return quote
+
+
+@frappe.whitelist()
+def mark_quote_sent(quote):
+    doc = _quote_for_write(quote)
+    doc.mark_sent()
+    return _quote_dict(doc)
+
+
+@frappe.whitelist()
+def mark_quote_confirmed(quote):
+    doc = _quote_for_write(quote)
+    doc.mark_confirmed()
+    return _quote_dict(doc)
+
+
+@frappe.whitelist()
+def silent_quote_deals():
+    """Deals whose sent quote has gone unanswered past the nudge window."""
+    frappe.has_permission("Deal", "read", throw=True)
+    return {
+        "silence_days": deal_quote.silence_days(),
+        "deals": deal_quote.silent_deals(),
+    }
+
+
+@frappe.whitelist(allow_guest=True)
+def quote_pdf(token):
+    """The quote page as a PDF, for clients who want an attachment.
+
+    Guest-callable for the same reason the page is: the token is the
+    authorization. Rendered from the same template and context as the
+    page, so the two cannot say different things.
+    """
+    quote = deal_quote.resolve_token(token)
+    html = frappe.render_template(
+        "auraos/templates/includes/quote_body.html",
+        deal_quote.client_context(quote),
+    )
+    deal_quote.record_open(quote.name, via="PDF")
+
+    frappe.local.response.filename = f"{quote.name}.pdf"
+    frappe.local.response.filecontent = get_pdf(html)
+    frappe.local.response.type = "pdf"
+
+
 @frappe.whitelist()
 def get_margin_floor():
     frappe.has_permission("AuraOS Settings", "read", throw=True)
@@ -254,3 +382,18 @@ def set_margin_floor(pct):
     settings.margin_floor_pct = float(pct or 0)
     settings.save()
     return float(settings.margin_floor_pct)
+
+
+@frappe.whitelist()
+def get_quote_silence_days():
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return deal_quote.silence_days()
+
+
+@frappe.whitelist()
+def set_quote_silence_days(days):
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.quote_silence_days = int(days or 0)
+    settings.save()
+    return int(settings.quote_silence_days)

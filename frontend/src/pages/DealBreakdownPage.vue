@@ -389,6 +389,12 @@
               </router-link>
             </div>
           </div>
+
+          <QuotePanel
+            :deal="name"
+            :before-publish="save"
+            @changed="deal.reload()"
+          />
         </div>
       </div>
     </template>
@@ -401,6 +407,7 @@
 import { reactive, ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
+import QuotePanel from "../components/QuotePanel.vue"
 
 // Must match the Deal Cost Line tax_type options. Internal work carries
 // no invoice — Không hoá đơn.
@@ -594,7 +601,8 @@ function save() {
   if (live.value?.founder && state.commission_pct != null) {
     doc.commission_pct = state.commission_pct
   }
-  saveResource.submit({ doc })
+  // Returned so publishing can save first and freeze what's on screen.
+  return saveResource.submit({ doc })
 }
 
 </script>

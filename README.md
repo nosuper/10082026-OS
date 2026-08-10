@@ -24,6 +24,7 @@ Then:
 
 - Site: <http://localhost:8000> — login `Administrator` / `admin`
 - frappe-ui app (Contacts): <http://localhost:8000/aura>
+- A published quote: `http://localhost:8000/quote/<token>` — no login
 
 The repo is mounted into the container; the bench lives in a named
 volume, so `docker compose down` keeps the site and `docker compose up`
@@ -74,6 +75,24 @@ is the standing regression proof that a Producer-role session cannot
 read a founder-only DocType via the document API, list API, or global
 search. Any future founder-only DocType (overhead, commission fields)
 should copy that test pattern before real data enters it.
+
+### The guest boundary
+
+The client-facing quote page (`/quote/<token>`) is the only part of the
+system a guest can reach. Two rules hold it shut, and both are tested:
+
+- Guest has **no permission on any DocType** — the page reads the quote
+  with the token as its authorization, so `/api/resource/Deal Quote`
+  stays closed even with a valid token in hand.
+- What the page may show is a **whitelist**
+  (`auraos/lib/quote.py: CLIENT_QUOTE_FIELDS`), not a blocklist. A new
+  column on Deal Quote is invisible to clients until someone adds it
+  there deliberately. The page and the PDF export render the same
+  template from the same builder, so they cannot drift apart.
+
+Published quote versions are immutable: the controller refuses every
+content change and leaves only the delivery status (sent / confirmed)
+writable. Re-pricing means publishing a new version.
 
 ## Maintenance notes (evening-hobby budget)
 
