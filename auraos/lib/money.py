@@ -9,11 +9,16 @@ from decimal import ROUND_HALF_UP, Decimal
 from numbers import Number
 
 
+def to_decimal(amount: Number | Decimal | str) -> Decimal:
+    """Coerce to Decimal via str so floats keep their written value."""
+    if isinstance(amount, Decimal):
+        return amount
+    return Decimal(str(amount))
+
+
 def round_vnd(amount: Number | Decimal) -> int:
     """Round an amount to whole đồng, half away from zero."""
-    if not isinstance(amount, Decimal):
-        amount = Decimal(str(amount))
-    return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int(to_decimal(amount).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def format_vnd(amount: Number | Decimal) -> str:
