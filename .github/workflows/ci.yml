@@ -113,3 +113,24 @@ jobs:
           ln -sfn /home/runner/frappe-bench/apps/auraos/auraos/public sites/assets/auraos
           bench --site test_site set-config allow_tests true
           bench --site test_site run-tests --app auraos
+
+  browser-tests:
+    name: Playwright browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run disposable Chromium suite
+        run: ./scripts/e2e.sh
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-${{ github.run_id }}
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
