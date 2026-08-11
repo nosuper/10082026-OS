@@ -412,6 +412,19 @@ class TestOverdueNudge(MilestoneTestCase):
         self.assertEqual(page_row["days_overdue"], 3)
         self.assertEqual(overdue_milestones()["payment_terms_days"], TERMS_DAYS)
 
+    def test_the_producer_can_load_the_board_the_strip_sits_on(self):
+        """The strip lives on the Jobs board until T12 gives it a
+        founder-only home, so a Producer session reaches this endpoint
+        every time Linh opens the board. Reading the terms goes through
+        AuraOS Settings, which Producer cannot read — so the nudge has to
+        answer without that permission rather than break her board."""
+        fell_due(self.job.name, self.deposit.name, days_ago=TERMS_DAYS + 3)
+
+        frappe.set_user(PRODUCER)
+        nudge = overdue_milestones()
+        self.assertEqual(nudge["payment_terms_days"], TERMS_DAYS)
+        self.assertEqual(len(self.nudges_for_this_job()), 1)
+
     def test_a_paid_milestone_stops_nudging(self):
         fell_due(self.job.name, self.deposit.name, days_ago=TERMS_DAYS + 3)
         set_milestone_status(self.job.name, self.deposit.name, "Paid")
