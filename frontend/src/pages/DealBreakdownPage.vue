@@ -42,7 +42,7 @@
             <tr>
               <th class="px-2 py-2 font-medium">Description</th>
               <th class="px-2 py-2 font-medium">Item Category</th>
-              <th class="px-2 py-2 font-medium">Phase</th>
+              <th class="px-2 py-2 font-medium">Cost Phase</th>
               <th class="px-2 py-2 font-medium">Source Type</th>
               <th class="px-2 py-2 font-medium">Source Contact</th>
               <th class="px-2 py-2 font-medium">Package</th>
@@ -84,11 +84,15 @@
               </td>
               <td class="px-1 py-1">
                 <select
-                  v-model="line.phase"
+                  v-model="line.cost_phase"
                   class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
                 >
                   <option value=""></option>
-                  <option v-for="phase in PHASES" :key="phase" :value="phase">
+                  <option
+                    v-for="phase in COST_PHASES"
+                    :key="phase"
+                    :value="phase"
+                  >
                     {{ phase }}
                   </option>
                 </select>
@@ -475,7 +479,12 @@ import { vnd } from "../utils/money"
 // Must match the Deal Cost Line tax_type options. Internal work carries
 // no invoice — Không hoá đơn.
 const TAX_TYPES = ["Công ty", "Cá nhân", "Không hoá đơn"]
-const PHASES = ["Pre-production", "Production", "Post-production", "Appendix"]
+const COST_PHASES = [
+  "Pre-production",
+  "Production",
+  "Post-production",
+  "Appendix",
+]
 const SOURCE_TYPES = ["Internal", "Freelancer", "Vendor"]
 
 const route = useRoute()
@@ -497,7 +506,7 @@ const saving = ref(false)
 const LINE_FIELDS = [
   "description",
   "item_category",
-  "phase",
+  "cost_phase",
   "source_type",
   "source_contact",
   "package",
@@ -537,14 +546,14 @@ const deal = createResource({
     recompute()
   },
   onError(err) {
-    error.value = err.messages?.join("\n") || err.message
+    error.value = errorMessage(err)
   },
 })
 
 const compute = createResource({
   url: "auraos.api.compute_breakdown",
   onError(err) {
-    error.value = err.messages?.join("\n") || err.message
+    error.value = errorMessage(err)
   },
   onSuccess() {
     error.value = ""
@@ -629,7 +638,7 @@ function addLine() {
   state.lines.push({
     description: "",
     item_category: "",
-    phase: "",
+    cost_phase: "",
     source_type: "Internal",
     source_contact: "",
     package: "",
@@ -682,7 +691,7 @@ function removePackage(i) {
 
 function onSaveError(err) {
   saving.value = false
-  error.value = err.messages?.join("\n") || err.message
+  error.value = errorMessage(err)
 }
 
 const saveResource = createResource({

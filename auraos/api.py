@@ -28,7 +28,7 @@ DEFAULT_COMMISSION_PCT = 5
 # approved fields alongside the computed values so editing never drops them.
 LINE_METADATA_FIELDS = (
     "item_category",
-    "phase",
+    "cost_phase",
     "source_type",
     "source_contact",
 )

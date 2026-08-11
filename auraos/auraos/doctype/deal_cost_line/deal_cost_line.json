@@ -7,7 +7,7 @@
  "field_order": [
   "description",
   "item_category",
-  "phase",
+  "cost_phase",
   "source_type",
   "source_contact",
   "package",
@@ -42,9 +42,9 @@
    "options": "Cost Item Category"
   },
   {
-   "fieldname": "phase",
+   "fieldname": "cost_phase",
    "fieldtype": "Select",
-   "label": "Phase",
+   "label": "Cost Phase",
    "options": "\nPre-production\nProduction\nPost-production\nAppendix"
   },
   {

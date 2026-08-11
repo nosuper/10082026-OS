@@ -188,7 +188,7 @@ class TestDealBreakdown(FrappeTestCase):
         lines[0].update(
             {
                 "item_category": category.name,
-                "phase": "Pre-production",
+                "cost_phase": "Pre-production",
                 "source_type": "Freelancer",
                 "source_contact": contact.name,
             }
@@ -197,7 +197,7 @@ class TestDealBreakdown(FrappeTestCase):
         stored = make_breakdown_deal(cost_lines=lines).cost_lines[0]
 
         self.assertEqual(stored.item_category, "Crew")
-        self.assertEqual(stored.phase, "Pre-production")
+        self.assertEqual(stored.cost_phase, "Pre-production")
         self.assertEqual(stored.source_type, "Freelancer")
         self.assertEqual(stored.source_contact, contact.name)
 
@@ -544,7 +544,7 @@ class TestDealBreakdown(FrappeTestCase):
         lines = [dict(row) for row in LINES]
         metadata = {
             "item_category": "Crew",
-            "phase": "Appendix",
+            "cost_phase": "Appendix",
             "source_type": "Internal",
             "source_contact": "internal@example.com",
         }
