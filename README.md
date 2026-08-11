@@ -163,6 +163,28 @@ against a shoot.
 Both rules live framework-free in `auraos/lib/settlement.py` and are
 pinned by `tests/test_settlement.py`; the doctypes and API are adapters.
 
+## The board
+
+Where every ticket stands, what is waiting on you to click through, which
+preview stacks are up, and CI per branch — all read from GitHub, git and
+this box at build time, nothing typed in.
+
+    http://192.168.1.94:8200/
+
+It rebuilds every five minutes on a systemd timer. To manage it:
+
+    ./scripts/board-service.sh status      # serving? timer on? last build?
+    ./scripts/board-service.sh refresh     # rebuild now
+    ./scripts/board-service.sh install     # first time, or after a rebuild
+    ./scripts/board-service.sh uninstall
+
+`scripts/board.py` on its own writes `docs/board.html` and touches nothing
+else, so it is safe to run by hand at any time.
+
+A ticket reaches **Needs manual test** when its PR is open and CI is green,
+or when it is merged to main but nobody has closed the ticket yet — both
+are the point where the work is waiting on a human, not on an agent.
+
 ## Maintenance notes (evening-hobby budget)
 
 - Everything is one compose file and one custom app; no extra services.
