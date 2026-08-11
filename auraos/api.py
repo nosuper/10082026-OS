@@ -15,6 +15,7 @@ from auraos.auraos.doctype.deal.deal import (
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
+from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
@@ -558,19 +559,134 @@ def log_job_revision(job, note):
     }
 
 
+# -- payment milestones (T10, issue #12) --
+
+
+@frappe.whitelist()
+def job_milestones(job):
+    """A job's payment milestones, with the overdue call already made."""
+    _check_job_permission(job, "read")
+    terms = job_payment_milestone.payment_terms_days()
+    return {
+        "payment_terms_days": terms,
+        "milestones": [
+            job_payment_milestone.milestone_view(row, terms)
+            for row in frappe.get_doc("Job", job).payment_milestones
+        ],
+    }
+
+
+@frappe.whitelist()
+def save_job_milestones(job, milestones):
+    """Replace a job's milestone plan — names, shares and trigger stages.
+
+    Rows the caller sends back with their row name keep the collection
+    status and timestamps they have already earned; rows it leaves out
+    are dropped. Amounts are never accepted from the caller: the job
+    derives them from the quoted total on save.
+    """
+    _check_job_permission(job, "write")
+    rows = frappe.parse_json(milestones) or []
+    if not isinstance(rows, list):
+        frappe.throw(_("Milestones must be a list"), frappe.ValidationError)
+
+    doc = frappe.get_doc("Job", job)
+    existing = {row.name: row for row in doc.payment_milestones}
+    replacement = []
+    for row in rows:
+        if not (row.get("title") or "").strip():
+            frappe.throw(_("A milestone needs a name"), frappe.ValidationError)
+        # Checked here rather than on the stored row: Frappe fills an
+        # empty Select with its first option, so by the time the job
+        # validates, a plan that never said when the money falls due is
+        # indistinguishable from one that chose Pre-production. Guessing
+        # when a client owes us is not the system's call to make.
+        if not row.get("trigger_stage"):
+            frappe.throw(
+                _("Milestone {0} needs the stage that makes it due").format(
+                    row.get("title")
+                ),
+                frappe.ValidationError,
+            )
+        replacement.append(
+            job_payment_milestone.replanned(existing.get(row.get("name")), row)
+        )
+    doc.set("payment_milestones", replacement)
+    doc.save()
+    return job_milestones(job)
+
+
+@frappe.whitelist()
+def set_milestone_status(job, milestone, status):
+    """Move one milestone along (or back along) the collection flow.
+
+    Back along on purpose: a status set by mistake would otherwise be a
+    one-way door, which is exactly what the T6 walkthrough asked us to
+    stop building. The timestamps follow the status either way.
+    """
+    _check_job_permission(job, "write")
+    doc = frappe.get_doc("Job", job)
+    row = job_payment_milestone.find(doc, milestone)
+    row.status = status
+    doc.save()
+    # The save recomputed the row's stamps in place, so this is the
+    # stored milestone, not the one the caller described.
+    return job_payment_milestone.milestone_view(row)
+
+
+@frappe.whitelist()
+def milestone_invoice_request(job, milestone):
+    """The Zalo text asking the accountant to issue this milestone's invoice.
+
+    Read-only: pasting the message is a human act, and marking the
+    milestone requested is a separate, undoable decision.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    row = job_payment_milestone.find(doc, milestone)
+    return {"text": job_payment_milestone.request_text(doc, row)}
+
+
+@frappe.whitelist()
+def overdue_milestones():
+    """Money owed past the company's payment terms — the founder's nudge.
+
+    Lives here rather than on a dashboard page because the dashboard is
+    T12's ticket; the Jobs board carries it in the meantime, and the
+    dashboard will read the same endpoint.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    return {
+        "payment_terms_days": job_payment_milestone.payment_terms_days(),
+        "milestones": job_payment_milestone.overdue(),
+    }
+
+
 @frappe.whitelist()
 def get_margin_floor():
     frappe.has_permission("AuraOS Settings", "read", throw=True)
     return float(margin_floor_pct())
 
 
-@frappe.whitelist()
-def set_margin_floor(pct):
+def _save_setting(fieldname, value):
+    """Write one AuraOS Settings field and read back what was stored.
+
+    The three settings endpoints differ only in their field and its type,
+    so the permission check and the save live here rather than three
+    times over. Each caller still owns its own casting: a 0 typed into
+    either nudge is a deliberate 0, and only the caller knows whether the
+    field is a percentage or a count of days.
+    """
     frappe.has_permission("AuraOS Settings", "write", throw=True)
     settings = frappe.get_doc("AuraOS Settings")
-    settings.margin_floor_pct = float(pct or 0)
+    settings.set(fieldname, value)
     settings.save()
-    return float(settings.margin_floor_pct)
+    return settings.get(fieldname)
+
+
+@frappe.whitelist()
+def set_margin_floor(pct):
+    return float(_save_setting("margin_floor_pct", float(pct or 0)))
 
 
 @frappe.whitelist()
@@ -581,8 +697,15 @@ def get_quote_silence_days():
 
 @frappe.whitelist()
 def set_quote_silence_days(days):
-    frappe.has_permission("AuraOS Settings", "write", throw=True)
-    settings = frappe.get_doc("AuraOS Settings")
-    settings.quote_silence_days = int(days or 0)
-    settings.save()
-    return int(settings.quote_silence_days)
+    return int(_save_setting("quote_silence_days", int(days or 0)))
+
+
+@frappe.whitelist()
+def get_payment_terms_days():
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return job_payment_milestone.payment_terms_days()
+
+
+@frappe.whitelist()
+def set_payment_terms_days(days):
+    return int(_save_setting("payment_terms_days", int(days or 0)))
