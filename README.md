@@ -65,7 +65,25 @@ bench --site test_site set-config allow_tests true
 bench --site test_site run-tests --app auraos
 ```
 
-CI (`.github/workflows/ci.yml`) runs both harnesses plus the frontend
+**Browser tests** (`frontend/e2e/`) — authenticated Chromium scenarios
+against a fresh, disposable Docker site. Docker with Compose is the only
+local prerequisite; the version-pinned Playwright container carries its
+own browser and system dependencies. From the repo root:
+
+```bash
+./scripts/e2e.sh
+```
+
+The command uses an isolated Compose project on port 18000, waits for
+Frappe's HTTP readiness endpoint, seeds only disposable records, and removes
+the site volumes and browser authentication state when it finishes. Downloaded
+npm packages are retained in `.e2e-npm-cache/` to speed up repeat runs. A failed
+run leaves screenshots, traces and the HTML report under `frontend/test-results/`
+and `frontend/playwright-report/`. Password entry and authentication state files
+are not recorded in or uploaded with those artifacts. Traces keep the action
+timeline but disable network/DOM snapshots so session headers are not captured.
+
+CI (`.github/workflows/ci.yml`) runs all three harnesses plus the frontend
 build on every push.
 
 ### The permission proof
@@ -75,6 +93,24 @@ is the standing regression proof that a Producer-role session cannot
 read a founder-only DocType via the document API, list API, or global
 search. Any future founder-only DocType (overhead, commission fields)
 should copy that test pattern before real data enters it.
+
+### Attachments
+
+Core File permissions let any System User create a File and point it at
+any document, so every doctype here that accepts attachments is gated by
+`auraos/attachments.py`: you may attach to what you may write. Add a
+doctype to `GUARDED` there the moment anything starts hanging files on
+it — generated paperwork made that true for Job.
+
+### Paperwork templates
+
+The company signs on paper, so `auraos/lib/paperwork.py` fills the
+founder's own .docx rather than rendering a document of its own: the
+letterhead, clauses and signature block come out byte-for-byte as
+designed, with `{{client.tax_code}}` replaced. Two things it does that a
+string replace would not — it matches placeholders across the runs Word
+splits them into, and it never blanks a value it cannot fill, marking
+the gap on the page and reporting it to the caller.
 
 ### The guest boundary
 
@@ -99,6 +135,33 @@ that 404s its link rather than changing what a client already read.
 Publishing v2 does not un-send v1: the deal's quote status follows the
 newest *delivered* version, so re-pricing a quote the client is sitting
 on never makes it drop out of the silence nudge.
+
+### Money out on a job
+
+Two numbers that are easy to confuse are kept apart deliberately.
+
+**Whose money moved.** An advance puts company cash in one person's
+hands; every expense they pay *from that advance* hands part of it back
+as receipts. What is left is their **float**, and settling records the
+transfer that closes it — the holder returns the remainder, or the
+company tops them up. An expense the company paid the vendor itself is
+money out that moves nobody's float, which is why `paid_from` exists and
+why nothing defaults it on the founder's form.
+Settling does not end anything: the next advance opens a fresh float on
+the same job.
+
+**What it was spent against.** An expense's category is one of the
+entries the client was quoted — a package, or a cost line quoted on its
+own — so actual-vs-quoted per package needs no bookkeeping of its own.
+The quoted side is measured in what somebody actually hands over — a
+line's cost after the vendor management fee, plus VAT on an invoice —
+not the price the client pays, so both columns of that table are the
+same kind of money. A freelancer's PIT is deliberately left out: the
+company remits it later through its accountant, and nobody logs it
+against a shoot.
+
+Both rules live framework-free in `auraos/lib/settlement.py` and are
+pinned by `tests/test_settlement.py`; the doctypes and API are adapters.
 
 ## Maintenance notes (evening-hobby budget)
 

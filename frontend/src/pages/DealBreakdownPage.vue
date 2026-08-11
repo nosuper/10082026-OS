@@ -37,10 +37,14 @@
         <Button class="ml-auto" @click="addLine">Add line</Button>
       </div>
       <div class="overflow-x-auto rounded-lg border">
-        <table class="w-full min-w-[1100px] text-sm">
+        <table class="w-full min-w-[1700px] text-sm">
           <thead class="bg-gray-50 text-left text-xs text-gray-600">
             <tr>
               <th class="px-2 py-2 font-medium">Description</th>
+              <th class="px-2 py-2 font-medium">Item Category</th>
+              <th class="px-2 py-2 font-medium">Cost Phase</th>
+              <th class="px-2 py-2 font-medium">Source Type</th>
+              <th class="px-2 py-2 font-medium">Source Contact</th>
               <th class="px-2 py-2 font-medium">Package</th>
               <th class="px-2 py-2 font-medium">Qty</th>
               <th class="px-2 py-2 font-medium">Unit</th>
@@ -68,6 +72,56 @@
                   class="w-44 rounded border-gray-200 px-2 py-1 text-sm"
                   placeholder="Description"
                 />
+              </td>
+              <td class="px-1 py-1">
+                <input
+                  v-model="line.item_category"
+                  list="item-categories"
+                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
+                  placeholder="Select or add"
+                  @change="ensureItemCategory(line)"
+                />
+              </td>
+              <td class="px-1 py-1">
+                <select
+                  v-model="line.cost_phase"
+                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
+                >
+                  <option value=""></option>
+                  <option
+                    v-for="phase in COST_PHASES"
+                    :key="phase"
+                    :value="phase"
+                  >
+                    {{ phase }}
+                  </option>
+                </select>
+              </td>
+              <td class="px-1 py-1">
+                <select
+                  v-model="line.source_type"
+                  class="w-28 rounded border-gray-200 px-2 py-1 text-sm"
+                >
+                  <option value=""></option>
+                  <option v-for="type in SOURCE_TYPES" :key="type" :value="type">
+                    {{ type }}
+                  </option>
+                </select>
+              </td>
+              <td class="px-1 py-1">
+                <select
+                  v-model="line.source_contact"
+                  class="w-40 rounded border-gray-200 px-2 py-1 text-sm"
+                >
+                  <option value=""></option>
+                  <option
+                    v-for="contact in contacts.data || []"
+                    :key="contact.name"
+                    :value="contact.name"
+                  >
+                    {{ contact.full_name }}
+                  </option>
+                </select>
               </td>
               <td class="px-1 py-1">
                 <input
@@ -179,7 +233,7 @@
               </td>
             </tr>
             <tr v-if="!state.lines.length">
-              <td colspan="14" class="px-3 py-6 text-center text-gray-400">
+              <td colspan="18" class="px-3 py-6 text-center text-gray-400">
                 No cost lines yet — add the first one.
               </td>
             </tr>
@@ -189,6 +243,13 @@
 
       <datalist id="package-titles">
         <option v-for="p in state.packages" :key="p.title" :value="p.title" />
+      </datalist>
+      <datalist id="item-categories">
+        <option
+          v-for="category in categories.data || []"
+          :key="category.name"
+          :value="category.name"
+        />
       </datalist>
 
       <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -406,13 +467,25 @@
 <script setup>
 import { reactive, ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import {
+  Button,
+  ErrorMessage,
+  createListResource,
+  createResource,
+} from "frappe-ui"
 import QuotePanel from "../components/QuotePanel.vue"
 import { vnd } from "../utils/money"
 
 // Must match the Deal Cost Line tax_type options. Internal work carries
 // no invoice — Không hoá đơn.
 const TAX_TYPES = ["Công ty", "Cá nhân", "Không hoá đơn"]
+const COST_PHASES = [
+  "Pre-production",
+  "Production",
+  "Post-production",
+  "Appendix",
+]
+const SOURCE_TYPES = ["Internal", "Freelancer", "Vendor"]
 
 const route = useRoute()
 const name = route.params.name
@@ -432,6 +505,10 @@ const saving = ref(false)
 
 const LINE_FIELDS = [
   "description",
+  "item_category",
+  "cost_phase",
+  "source_type",
+  "source_contact",
   "package",
   "qty1",
   "qty1_unit",
@@ -469,14 +546,14 @@ const deal = createResource({
     recompute()
   },
   onError(err) {
-    error.value = err.messages?.join("\n") || err.message
+    error.value = errorMessage(err)
   },
 })
 
 const compute = createResource({
   url: "auraos.api.compute_breakdown",
   onError(err) {
-    error.value = err.messages?.join("\n") || err.message
+    error.value = errorMessage(err)
   },
   onSuccess() {
     error.value = ""
@@ -484,6 +561,51 @@ const compute = createResource({
 })
 
 const live = computed(() => compute.data)
+
+const categories = createListResource({
+  doctype: "Cost Item Category",
+  fields: ["name"],
+  orderBy: "name asc",
+  pageLength: 500,
+})
+
+const contacts = createListResource({
+  doctype: "Party Contact",
+  fields: ["name", "full_name"],
+  orderBy: "full_name asc",
+  pageLength: 500,
+})
+
+const categoryCreator = createResource({ url: "frappe.client.insert" })
+const categoryCreations = new Map()
+
+function errorMessage(err) {
+  return err.messages?.join("\n") || err.message || "Something went wrong"
+}
+
+async function ensureItemCategory(line) {
+  const value = (line.item_category || "").trim()
+  line.item_category = value
+  if (!value || (categories.data || []).some((row) => row.name === value)) return
+  if (!categoryCreations.has(value)) {
+    categoryCreations.set(
+      value,
+      categoryCreator
+        .submit({
+          doc: { doctype: "Cost Item Category", category_name: value },
+        })
+        .then(() => categories.reload())
+        .finally(() => categoryCreations.delete(value))
+    )
+  }
+  try {
+    await categoryCreations.get(value)
+    error.value = ""
+  } catch (err) {
+    error.value = errorMessage(err)
+    throw err
+  }
+}
 
 function recompute() {
   compute.submit({
@@ -515,13 +637,17 @@ function livePackage(title) {
 function addLine() {
   state.lines.push({
     description: "",
+    item_category: "",
+    cost_phase: "",
+    source_type: "Internal",
+    source_contact: "",
     package: "",
     qty1: 1,
     qty1_unit: "",
     qty2: 1,
     qty2_unit: "",
     unit_price: 0,
-    tax_type: "Công ty",
+    tax_type: "Không hoá đơn",
     vendor_mf_pct: 0,
     markup_pct: 0,
   })
@@ -565,7 +691,7 @@ function removePackage(i) {
 
 function onSaveError(err) {
   saving.value = false
-  error.value = err.messages?.join("\n") || err.message
+  error.value = errorMessage(err)
 }
 
 const saveResource = createResource({
@@ -578,9 +704,15 @@ const saveResource = createResource({
   onError: onSaveError,
 })
 
-function save() {
+async function save() {
   if (!serverDoc) return
   saving.value = true
+  try {
+    for (const line of state.lines) await ensureItemCategory(line)
+  } catch (err) {
+    saving.value = false
+    throw err
+  }
   const doc = {
     ...serverDoc,
     doctype: "Deal",

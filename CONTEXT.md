@@ -87,6 +87,75 @@ _Avoid_: extra, overage, out of scope
 The shared folder a job's material lives in, named after the job code.
 _Avoid_: path, directory, drive, storage
 
+## Money out
+
+**Advance**:
+Company cash handed to one person for one job, to spend on it and account for. Recorded with its recipient, because it is money the company is still owed until the receipts come back.
+_Avoid_: float (that's what it leaves behind), petty cash, loan, top-up
+
+**Float**:
+What an advance leaves in someone's hands: what they were advanced, less what they have spent out of it. Negative when they have covered a shortfall from their own pocket.
+_Avoid_: balance, outstanding, petty cash, running total
+
+**Expense**:
+One payment out on a job — amount, category, optionally a photo of the receipt. Actual money that left, as distinct from a cost line, which is what a deal was priced at.
+_Avoid_: cost, spend, purchase, receipt
+
+**Category**:
+The quote entry an expense belongs to: a package, or a cost line the deal quoted on its own. The categories a job offers are exactly what its client was quoted, which is what makes actual-vs-quoted free.
+_Avoid_: type, bucket, tag, cost centre
+
+**Direct payment**:
+An expense the company paid the vendor itself rather than out of anyone's float. It counts against the job's money out and settles nobody's float.
+_Avoid_: company expense, big item, direct cost
+
+**Settlement**:
+The transfer that closes a float, recorded with the direction it moved: the holder returns what is left, or the company tops them up. A job carries on paying for things afterwards, on a fresh float.
+_Avoid_: reconciliation, payout, clearing, closing
+
+**Quoted cost**:
+What a category was expected to pay out in cash — each line's cost after the vendor management fee, plus the VAT on an invoice-bearing one. What an expense is compared against, never the price the client is charged for it, and never the profit cost basis, which is grossed up by a freelancer's PIT that no shoot ever hands over.
+_Avoid_: budget, estimate, quoted price, allocation
+## Money in
+
+**Payment milestone**:
+A named share of a job's quoted total the client owes, carrying its own percentage and the production stage that makes it due. Amounts are always derived from the quote, never typed in.
+_Avoid_: instalment, payment term, tranche, invoice
+
+**Trigger stage**:
+The production stage that makes a payment milestone due. Reaching it, or passing it, starts the payment clock.
+_Avoid_: due stage, milestone stage, deadline
+
+**Collection status**:
+Where a milestone stands with the client's money: Not requested (chưa yêu cầu) → Requested (đã yêu cầu KT) → Invoiced (đã xuất HĐ) → Paid (đã thanh toán). Movable in both directions, like every status in this app.
+_Avoid_: payment status, invoice state, dunning stage
+
+**Payment terms**:
+The single global number of days a due milestone may stay uncollected before it nudges. 0 disables the nudge, as with the margin floor.
+_Avoid_: grace period, credit terms, net days
+
+**Invoice request**:
+The Vietnamese text handed to the external accountant on Zalo asking them to issue an invoice — client tax details and the amount split out of its VAT. Generating it changes nothing; marking the milestone Requested is a separate act.
+_Avoid_: invoice, billing request, hoá đơn (unqualified)
+
+## Paperwork
+
+**Paperwork template**:
+A .docx the founder designed in Word — letterhead, clauses, signature block, seal space — with placeholders typed where values belong. Generating from one never changes it; the company signs on paper, so the file is the design and the system only does the typing.
+_Avoid_: form, mail merge, boilerplate, document type
+
+**Placeholder**:
+`{{client.tax_code}}` typed into a template: a namespaced field the system fills from the job and the parties a paper names. A name outside the vocabulary is not a placeholder anything can fill, and says so on the page.
+_Avoid_: variable, merge field, token, tag
+
+**Gap marker**:
+What a placeholder becomes when it cannot be filled — «thiếu: client.tax_code» where the record holds nothing, «không có trường: …» where no such placeholder exists — printed where the value belongs and reported by name to whoever generated it. Distinct from a blank, which is invisible exactly where it costs most.
+_Avoid_: default, fallback, empty value, placeholder (unqualified)
+
+**Paper**:
+A paperwork template filled for one job and attached to it — printed, signed by hand and sealed. Generating one never changes the template it came from.
+_Avoid_: output, export, contract (unqualified), attachment
+
 ## Environments
 
 **Preview stack**:

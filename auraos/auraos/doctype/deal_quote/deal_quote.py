@@ -23,6 +23,7 @@ from auraos.lib.quote import (
     quote_totals,
 )
 from auraos.lib.quote import client_entries as quote_client_entries
+from auraos.settings import setting
 
 # Delivery status is the only thing that moves after publishing;
 # everything else is the frozen snapshot the client may already have
@@ -237,8 +238,8 @@ def advance_deal_stage(deal_name):
 
 
 def silence_days():
-    value = frappe.db.get_single_value("AuraOS Settings", "quote_silence_days")
-    return DEFAULT_SILENCE_DAYS if value is None else int(value)
+    """Days of client silence after a send before a quote is nudged."""
+    return int(setting("quote_silence_days", DEFAULT_SILENCE_DAYS))
 
 
 def silent_deals():

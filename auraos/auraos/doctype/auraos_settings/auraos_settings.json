@@ -6,6 +6,7 @@
  "field_order": [
   "margin_floor_pct",
   "quote_silence_days",
+  "payment_terms_days",
   "company_section",
   "logo",
   "company_name",
@@ -129,6 +130,14 @@
    "fieldname": "signatory_title",
    "fieldtype": "Data",
    "label": "Signatory Title"
+  },
+  {
+   "default": "7",
+   "description": "Days a payment milestone may stay uncollected after it falls due before it nudges. 0 disables the nudge.",
+   "fieldname": "payment_terms_days",
+   "fieldtype": "Int",
+   "label": "Payment Terms (days)",
+   "non_negative": 1
   }
  ],
  "index_web_pages_for_search": 0,

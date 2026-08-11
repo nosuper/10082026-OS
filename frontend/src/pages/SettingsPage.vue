@@ -49,6 +49,28 @@
         </Button>
         <span v-if="silenceSaved" class="text-xs text-green-700">Saved.</span>
       </div>
+      <hr class="my-5" />
+
+      <label class="block text-sm font-medium text-gray-800">
+        Payment terms (days)
+      </label>
+      <p class="mt-1 text-xs text-gray-500">
+        A payment milestone still uncollected this many days after it falls
+        due is flagged on the jobs board. 0 turns the nudge off.
+      </p>
+      <div class="mt-3 flex items-center gap-2">
+        <input
+          v-model.number="paymentTermsDays"
+          type="number"
+          min="0"
+          step="1"
+          class="w-28 rounded border-gray-200 px-2 py-1 text-right text-sm"
+        />
+        <Button variant="solid" :loading="termsSaver.loading" @click="saveTerms">
+          Save
+        </Button>
+        <span v-if="termsSaved" class="text-xs text-green-700">Saved.</span>
+      </div>
 
       <ErrorMessage class="mt-2" :message="error" />
     </div>
@@ -215,6 +237,20 @@ function saveSilence() {
   silenceSaver.submit({ days: silenceDays.value || 0 })
 }
 
+const paymentTermsDays = ref(7)
+const termsSaved = ref(false)
+
+createResource({
+  url: "auraos.api.get_payment_terms_days",
+  auto: true,
+  onSuccess(value) {
+    paymentTermsDays.value = value
+  },
+  onError() {
+    denied.value = true
+  },
+})
+
 // -- company identity (T6.1a) --
 
 const company = reactive({ logo: null })
@@ -231,6 +267,19 @@ createResource({
   },
 })
 
+const termsSaver = createResource({
+  url: "auraos.api.set_payment_terms_days",
+  onSuccess(value) {
+    paymentTermsDays.value = value
+    termsSaved.value = true
+    error.value = ""
+  },
+  onError(err) {
+    termsSaved.value = false
+    error.value = frappeErrorMessage(err)
+  },
+})
+
 const companySaver = createResource({
   url: "auraos.api.set_company_identity",
   onSuccess(stored) {
@@ -243,6 +292,11 @@ const companySaver = createResource({
     error.value = frappeErrorMessage(err)
   },
 })
+
+function saveTerms() {
+  termsSaved.value = false
+  termsSaver.submit({ days: paymentTermsDays.value || 0 })
+}
 
 function onLogo(file) {
   error.value = ""

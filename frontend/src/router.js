@@ -25,9 +25,21 @@ const routes = [
     component: () => import("./pages/JobPage.vue"),
   },
   {
+    // The phone screen: one thing, big enough to hit while holding a
+    // receipt in the other hand.
+    path: "/jobs/:name/expense",
+    name: "JobExpense",
+    component: () => import("./pages/JobExpensePage.vue"),
+  },
+  {
     path: "/contacts",
     name: "Contacts",
     component: () => import("./pages/ContactsPage.vue"),
+  },
+  {
+    path: "/paperwork",
+    name: "Paperwork",
+    component: () => import("./pages/PaperworkPage.vue"),
   },
   {
     path: "/settings",

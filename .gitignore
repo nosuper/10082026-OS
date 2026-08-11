@@ -22,12 +22,17 @@ frontend/vite.config.js.timestamp-*.mjs
 frontend/auto-imports.d.ts
 frontend/components.d.ts
 frontend/*.log
+frontend/.playwright-auth/
+frontend/playwright-report/
+frontend/test-results/
+.e2e-npm-cache/
 ~$*
 
-# Test-run and agent-tooling artifacts — reproducible and machine-local.
+# Test-run and agent-tooling artifacts — reproducible, machine-local,
+# and large. A T10 branch once carried 700 of these into its PR.
 .e2e-npm-cache/
 .playwright-mcp/
-.worktrees/
 frontend/playwright-report/
 frontend/test-results/
 .agents/
+.worktrees/

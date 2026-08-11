@@ -15,7 +15,9 @@ from auraos.auraos.doctype.deal.deal import (
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
-from auraos.lib import pricing
+from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
+from auraos.auraos.doctype.paperwork_template import paperwork_template
+from auraos.lib import paperwork, pricing, settlement
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import COMPANY_FIELDS, quote_chain
@@ -23,6 +25,15 @@ from auraos.lib.quote import COMPANY_FIELDS, quote_chain
 # The company's standing commission practice (spec #2, story 14); the
 # Deal field carries the same default.
 DEFAULT_COMMISSION_PCT = 5
+
+# Pricing ignores line metadata, but the live endpoint returns these
+# approved fields alongside the computed values so editing never drops them.
+LINE_METADATA_FIELDS = (
+    "item_category",
+    "cost_phase",
+    "source_type",
+    "source_contact",
+)
 
 # The table is deliberately a narrow editing surface. Quote delivery,
 # breakdown values and audit fields still belong to their dedicated flows.
@@ -296,13 +307,14 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     out = {
         "lines": [
             {
+                **{field: row.get(field) for field in LINE_METADATA_FIELDS},
                 "subtotal": round_vnd(line.subtotal_int_net),
                 "cost_basis": round_vnd(line.profit_cost_basis),
                 "input_vat": round_vnd(line.input_vat),
                 "quote_price": round_vnd(line.budget),
                 "margin": round_vnd(line.margin),
             }
-            for line in result.lines
+            for row, line in zip(line_rows, result.lines)
         ],
         "packages": packages,
         "subtotal": round_vnd(chain.subtotal),
@@ -558,19 +570,482 @@ def log_job_revision(job, note):
     }
 
 
+# -- money out on a job (T8, issue #10) --
+
+ADVANCE_FIELDS = ["name", "recipient", "amount", "transferred_on", "note"]
+EXPENSE_FIELDS = [
+    "name", "spent_on", "amount", "category", "description",
+    "paid_by", "paid_from", "photo", "creation",
+]
+SETTLEMENT_FIELDS = [
+    "name", "recipient", "amount", "direction", "advanced", "spent",
+    "settled_on", "settled_by", "note",
+]
+
+
+def _money_rows(job):
+    """The job's whole money-out ledger, in reading order.
+
+    Read with get_all, which skips row-level permissions — the caller's
+    check on the Job itself is the entire authorization for these rows,
+    exactly as it is for a deal's comments and files.
+    """
+    return (
+        frappe.get_all(
+            "Job Advance",
+            filters={"job": job},
+            fields=ADVANCE_FIELDS,
+            order_by="transferred_on asc, creation asc",
+        ),
+        frappe.get_all(
+            "Job Expense",
+            filters={"job": job},
+            fields=EXPENSE_FIELDS,
+            order_by="spent_on desc, creation desc",
+        ),
+        frappe.get_all(
+            "Job Settlement",
+            filters={"job": job},
+            fields=SETTLEMENT_FIELDS,
+            order_by="settled_on asc",
+        ),
+    )
+
+
+def _float_dict(held):
+    return {
+        "holder": held.holder,
+        "advanced": round_vnd(held.advanced),
+        "spent": round_vnd(held.spent),
+        "settled": round_vnd(held.settled),
+        "amount": round_vnd(held.amount),
+        "direction": held.direction,
+    }
+
+
+@frappe.whitelist()
+def job_money(job):
+    """Every đồng out on a job: the ledger, the floats, actual-vs-quoted.
+
+    One call because the job's money screen is one question — "where has
+    the money gone, and who is holding what?" — and the three answers
+    are computed from the same rows.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    advances, expenses, settlements = _money_rows(job)
+
+    categories = settlement.category_actuals(doc.packages, doc.cost_lines, expenses)
+    sums = settlement.totals(advances, expenses, categories)
+    return {
+        "advances": advances,
+        "expenses": expenses,
+        "settlements": settlements,
+        "floats": [
+            _float_dict(held)
+            for held in settlement.floats(advances, expenses, settlements)
+        ],
+        "categories": [
+            {
+                "title": row.title,
+                "quoted": round_vnd(row.quoted),
+                "actual": round_vnd(row.actual),
+                "variance": round_vnd(row.variance),
+            }
+            for row in categories
+        ],
+        "advanced_total": round_vnd(sums.advanced),
+        "spent_total": round_vnd(sums.spent),
+        "quoted_total": round_vnd(sums.quoted),
+        # What this session may do with money, asked of the permissions
+        # themselves rather than of the role — the screen hides what the
+        # server would refuse anyway.
+        "may_advance": bool(frappe.has_permission("Job Advance", "create")),
+        "may_settle": bool(frappe.has_permission("Job Settlement", "create")),
+    }
+
+
+@frappe.whitelist()
+def job_expense_categories(job):
+    """The categories an expense on this job may carry, in quote order."""
+    _check_job_permission(job, "read")
+    return frappe.get_doc("Job", job).expense_categories()
+
+
+@frappe.whitelist()
+def record_job_advance(job, recipient, amount, transferred_on=None, note=None):
+    """Record cash handed to someone for this job.
+
+    Create permission on Job Advance is what keeps this the founder's
+    move; the job check is what stops it landing on a job they cannot
+    touch.
+    """
+    _check_job_permission(job, "write")
+    advance = frappe.get_doc(
+        {
+            "doctype": "Job Advance",
+            "job": job,
+            "recipient": recipient,
+            "amount": amount,
+            "transferred_on": transferred_on or frappe.utils.today(),
+            "note": note,
+        }
+    ).insert()
+    return {"name": advance.name, "float": _holder_float(job, recipient)}
+
+
+@frappe.whitelist()
+def log_job_expense(
+    job,
+    amount,
+    category=None,
+    description=None,
+    spent_on=None,
+    paid_by=None,
+    paid_from=None,
+    photo=None,
+):
+    """Log one payment out, the way it happens on a shoot: fast.
+
+    Everything but the amount has a default that is right often enough
+    not to be typed — today, whoever is logging it, out of their float.
+    `paid_by` exists for the case that isn't: money Linh spent that the
+    founder is entering from a Zalo message, which has to land on her
+    float rather than his.
+
+    Returns the payer's float, so the phone can answer the only
+    follow-up question there is — how much of the advance is left.
+    """
+    _check_job_permission(job, "write")
+    expense = frappe.get_doc(
+        {
+            "doctype": "Job Expense",
+            "job": job,
+            "amount": amount,
+            "category": category or None,
+            "description": description,
+            "spent_on": spent_on or frappe.utils.today(),
+            "paid_by": paid_by or frappe.session.user,
+            "paid_from": paid_from or settlement.FROM_ADVANCE,
+        }
+    )
+    expense.insert()
+    if photo:
+        _attach_photo(expense, photo)
+    return {
+        "name": expense.name,
+        "amount": round_vnd(expense.amount),
+        "category": expense.category,
+        "photo": expense.photo,
+        "float": _holder_float(job, expense.paid_by),
+    }
+
+
+def _attach_photo(expense, file_url):
+    """Point a just-uploaded receipt at the expense it documents.
+
+    The photo is taken before the expense exists — that is the whole
+    point of the phone flow — so it arrives as a private file attached
+    to nothing, readable only by whoever uploaded it. Re-parenting it
+    onto the expense hands it the expense's own permissions, which is
+    how the founder gets to see the producer's receipts.
+
+    Only an unattached file the caller uploaded themselves qualifies:
+    otherwise this endpoint would re-parent someone else's private file
+    and read it back through the expense.
+    """
+    photo = frappe.db.get_value(
+        "File",
+        {"file_url": file_url, "attached_to_name": ["is", "not set"]},
+        ["name", "owner"],
+        as_dict=True,
+    )
+    if not photo or photo.owner != frappe.session.user:
+        frappe.throw(
+            _("The photo must be a file you just uploaded"), frappe.ValidationError
+        )
+    file_doc = frappe.get_doc("File", photo.name)
+    file_doc.attached_to_doctype = "Job Expense"
+    file_doc.attached_to_name = expense.name
+    file_doc.attached_to_field = "photo"
+    file_doc.save()
+    expense.db_set("photo", file_url)
+
+
+def _holder_float(job, holder):
+    """One person's float on a job, as the screens want to read it."""
+    return _float_dict(settlement.float_for(holder, *_money_rows(job)))
+
+
+@frappe.whitelist()
+def settle_job(job, holder, note=None):
+    """Close one person's float: the one click of story 34.
+
+    The settlement is the transfer, recorded — so the float goes to zero
+    and a job that carries on paying for things opens a fresh one.
+    """
+    _check_job_permission(job, "write")
+    held = _holder_float(job, holder)
+    if not held["amount"]:
+        frappe.throw(
+            _("{0}'s float on {1} is already even").format(holder, job),
+            frappe.ValidationError,
+        )
+    settled = frappe.get_doc(
+        {
+            "doctype": "Job Settlement",
+            "job": job,
+            "recipient": holder,
+            "amount": held["amount"],
+            "advanced": held["advanced"],
+            "spent": held["spent"],
+            "note": note,
+        }
+    ).insert()
+    return {
+        "name": settled.name,
+        "recipient": settled.recipient,
+        "amount": settled.amount,
+        "direction": settled.direction,
+        "settled_on": settled.settled_on,
+        "float": _holder_float(job, holder),
+    }
+
+
+# -- payment milestones (T10, issue #12) --
+
+
+@frappe.whitelist()
+def job_milestones(job):
+    """A job's payment milestones, with the overdue call already made."""
+    _check_job_permission(job, "read")
+    terms = job_payment_milestone.payment_terms_days()
+    return {
+        "payment_terms_days": terms,
+        "milestones": [
+            job_payment_milestone.milestone_view(row, terms)
+            for row in frappe.get_doc("Job", job).payment_milestones
+        ],
+    }
+
+
+@frappe.whitelist()
+def save_job_milestones(job, milestones):
+    """Replace a job's milestone plan — names, shares and trigger stages.
+
+    Rows the caller sends back with their row name keep the collection
+    status and timestamps they have already earned; rows it leaves out
+    are dropped. Amounts are never accepted from the caller: the job
+    derives them from the quoted total on save.
+    """
+    _check_job_permission(job, "write")
+    rows = frappe.parse_json(milestones) or []
+    if not isinstance(rows, list):
+        frappe.throw(_("Milestones must be a list"), frappe.ValidationError)
+
+    doc = frappe.get_doc("Job", job)
+    existing = {row.name: row for row in doc.payment_milestones}
+    replacement = []
+    for row in rows:
+        if not (row.get("title") or "").strip():
+            frappe.throw(_("A milestone needs a name"), frappe.ValidationError)
+        # Checked here rather than on the stored row: Frappe fills an
+        # empty Select with its first option, so by the time the job
+        # validates, a plan that never said when the money falls due is
+        # indistinguishable from one that chose Pre-production. Guessing
+        # when a client owes us is not the system's call to make.
+        if not row.get("trigger_stage"):
+            frappe.throw(
+                _("Milestone {0} needs the stage that makes it due").format(
+                    row.get("title")
+                ),
+                frappe.ValidationError,
+            )
+        replacement.append(
+            job_payment_milestone.replanned(existing.get(row.get("name")), row)
+        )
+    doc.set("payment_milestones", replacement)
+    doc.save()
+    return job_milestones(job)
+
+
+@frappe.whitelist()
+def set_milestone_status(job, milestone, status):
+    """Move one milestone along (or back along) the collection flow.
+
+    Back along on purpose: a status set by mistake would otherwise be a
+    one-way door, which is exactly what the T6 walkthrough asked us to
+    stop building. The timestamps follow the status either way.
+    """
+    _check_job_permission(job, "write")
+    doc = frappe.get_doc("Job", job)
+    row = job_payment_milestone.find(doc, milestone)
+    row.status = status
+    doc.save()
+    # The save recomputed the row's stamps in place, so this is the
+    # stored milestone, not the one the caller described.
+    return job_payment_milestone.milestone_view(row)
+
+
+@frappe.whitelist()
+def milestone_invoice_request(job, milestone):
+    """The Zalo text asking the accountant to issue this milestone's invoice.
+
+    Read-only: pasting the message is a human act, and marking the
+    milestone requested is a separate, undoable decision.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    row = job_payment_milestone.find(doc, milestone)
+    return {"text": job_payment_milestone.request_text(doc, row)}
+
+
+@frappe.whitelist()
+def overdue_milestones():
+    """Money owed past the company's payment terms — the founder's nudge.
+
+    Lives here rather than on a dashboard page because the dashboard is
+    T12's ticket; the Jobs board carries it in the meantime, and the
+    dashboard will read the same endpoint.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    return {
+        "payment_terms_days": job_payment_milestone.payment_terms_days(),
+        "milestones": job_payment_milestone.overdue(),
+    }
+
+
+# -- paperwork (T11, issue #13) --
+
+
+PAPERWORK_TEMPLATE_FIELDS = [
+    "name",
+    "template_name",
+    "template_file",
+    "notes",
+    "disabled",
+    "placeholders",
+]
+
+
+def _paperwork_rows(filters=None):
+    """Template rows with their stored placeholder list read back out.
+
+    `unknown_placeholders` is why this is more than a list query: a
+    template asking for `{{clint.tax_code}}` is broken, and the founder
+    should meet that on a screen — where the fix is to edit the docx —
+    rather than on a contract already coming off the printer.
+    """
+    known = set(paperwork.document_values())
+    rows = frappe.get_list(
+        "Paperwork Template",
+        fields=PAPERWORK_TEMPLATE_FIELDS,
+        filters=filters or {},
+        order_by="template_name asc",
+        limit_page_length=0,
+    )
+    for row in rows:
+        names = paperwork_template.stored_placeholders(row)
+        row["placeholders"] = names
+        row["unknown_placeholders"] = [n for n in names if n not in known]
+        # Which extra record this paper is about, if any — the screen
+        # asks for exactly the parties the template mentions.
+        row["needs_vendor"] = any(n.startswith("vendor.") for n in names)
+        row["needs_freelancer"] = any(n.startswith("freelancer.") for n in names)
+    return rows
+
+
+@frappe.whitelist()
+def paperwork_templates():
+    """The templates a job can be papered from — the retired ones hidden."""
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    return _paperwork_rows(filters={"disabled": 0})
+
+
+@frappe.whitelist()
+def paperwork_library():
+    """The whole library, for the screen that maintains it.
+
+    Distinct from `paperwork_templates`, which answers "what can I
+    generate for this job" and so hides the retired ones. This answers
+    "what is in the library and may I change it", which needs the
+    retired ones and the cheat sheet of placeholders a template may use.
+    """
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    return {
+        # Producers generate paperwork; the founder owns the templates.
+        # The server enforces it either way — this only decides whether
+        # the screen offers controls that would be refused.
+        "can_manage": bool(frappe.has_permission("Paperwork Template", "create")),
+        "placeholders": paperwork.fillable_placeholders(),
+        "templates": _paperwork_rows(),
+    }
+
+
+@frappe.whitelist()
+def generate_job_paperwork(job, template, vendor=None, freelancer=None):
+    """Fill a template for this job and attach the result to it.
+
+    Write permission on the job, not read: generating leaves a document
+    hanging off the job, and whoever may not change a job may not add
+    paperwork to it either.
+
+    What could not be filled comes back with the file rather than
+    instead of it. The document exists — it is printable, and the gaps
+    are marked on the page — but the caller is told about them, because
+    the founder is the only one who can close them.
+    """
+    _check_job_permission(job, "write")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    document, filled = paperwork_template.generate(
+        template, job, vendor=vendor, freelancer=freelancer
+    )
+    return {
+        "name": document.name,
+        "file_name": document.file_name,
+        "file_url": document.file_url,
+        "missing": list(filled.missing),
+        "unknown": list(filled.unknown),
+    }
+
+
+@frappe.whitelist()
+def job_paperwork(job):
+    """Documents hanging off this job, newest first."""
+    _check_job_permission(job, "read")
+    return frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Job", "attached_to_name": job},
+        fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
+        order_by="creation desc",
+    )
+
+
 @frappe.whitelist()
 def get_margin_floor():
     frappe.has_permission("AuraOS Settings", "read", throw=True)
     return float(margin_floor_pct())
 
 
-@frappe.whitelist()
-def set_margin_floor(pct):
+def _save_setting(fieldname, value):
+    """Write one AuraOS Settings field and read back what was stored.
+
+    The three settings endpoints differ only in their field and its type,
+    so the permission check and the save live here rather than three
+    times over. Each caller still owns its own casting: a 0 typed into
+    either nudge is a deliberate 0, and only the caller knows whether the
+    field is a percentage or a count of days.
+    """
     frappe.has_permission("AuraOS Settings", "write", throw=True)
     settings = frappe.get_doc("AuraOS Settings")
-    settings.margin_floor_pct = float(pct or 0)
+    settings.set(fieldname, value)
     settings.save()
-    return float(settings.margin_floor_pct)
+    return settings.get(fieldname)
+
+
+@frappe.whitelist()
+def set_margin_floor(pct):
+    return float(_save_setting("margin_floor_pct", float(pct or 0)))
 
 
 @frappe.whitelist()
@@ -581,11 +1056,18 @@ def get_quote_silence_days():
 
 @frappe.whitelist()
 def set_quote_silence_days(days):
-    frappe.has_permission("AuraOS Settings", "write", throw=True)
-    settings = frappe.get_doc("AuraOS Settings")
-    settings.quote_silence_days = int(days or 0)
-    settings.save()
-    return int(settings.quote_silence_days)
+    return int(_save_setting("quote_silence_days", int(days or 0)))
+
+
+@frappe.whitelist()
+def get_payment_terms_days():
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return job_payment_milestone.payment_terms_days()
+
+
+@frappe.whitelist()
+def set_payment_terms_days(days):
+    return int(_save_setting("payment_terms_days", int(days or 0)))
 
 
 # -- company identity on the quote (T6.1a, issue #42) --
