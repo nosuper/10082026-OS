@@ -22,4 +22,8 @@ frontend/vite.config.js.timestamp-*.mjs
 frontend/auto-imports.d.ts
 frontend/components.d.ts
 frontend/*.log
+frontend/.playwright-auth/
+frontend/playwright-report/
+frontend/test-results/
+.e2e-npm-cache/
 ~$*
