@@ -1,0 +1,108 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:PWT-{####}",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "template_file",
+  "disabled",
+  "notes",
+  "placeholders_section",
+  "placeholders"
+ ],
+ "fields": [
+  {
+   "description": "What the founder calls this paper — Hợp đồng dịch vụ, Biên bản nghiệm thu, Phụ lục",
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Template Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "The .docx as designed in Word, with {{client.tax_code}} typed where a value belongs",
+   "fieldname": "template_file",
+   "fieldtype": "Attach",
+   "label": "Template File",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Kept for the record but no longer offered when generating paperwork",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "placeholders_section",
+   "fieldtype": "Section Break",
+   "label": "Placeholders This Template Asks For"
+  },
+  {
+   "description": "Read from the file every time it is saved — edit the docx, not this",
+   "fieldname": "placeholders",
+   "fieldtype": "Small Text",
+   "label": "Placeholders",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Paperwork Template",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Founder",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Producer"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "template_name",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "template_name",
+ "track_changes": 1
+}

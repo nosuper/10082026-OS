@@ -366,9 +366,76 @@ def seed_t10_payment_milestones(deal_name):
     )
 
 
+# T11: a contract template with a hole in it on purpose.
+#
+# The walkthrough has to see the thing this ticket is about — a field
+# that could not be filled, marked on the page — and a template where
+# everything resolves would show only the happy half. `client.address`
+# is the gap: the seeded company has a tax code but no address, so the
+# founder can watch the marker disappear by filling the record in,
+# rather than being told it would.
+STARTER_CONTRACT = [
+    "HỢP ĐỒNG DỊCH VỤ SẢN XUẤT",
+    "",
+    "Hôm nay, ngày {{today.day}} tháng {{today.month}} năm {{today.year}},",
+    "chúng tôi gồm:",
+    "",
+    "BÊN A (Bên thuê dịch vụ): {{client.company_name}}",
+    "Mã số thuế: {{client.tax_code}}",
+    "Địa chỉ: {{client.address}}",
+    "Người liên hệ: {{contact.full_name}} — {{contact.phone}}",
+    "",
+    "Điều 1. Nội dung công việc",
+    "Bên B thực hiện: {{job.title}} (mã công việc {{job.code}}).",
+    "",
+    "Điều 2. Giá trị hợp đồng",
+    "Tổng giá trị: {{quote.total}} đồng (đã bao gồm VAT {{quote.vat_pct}}).",
+    "",
+    "Điều 3. Ký kết",
+    "Hợp đồng được lập thành 02 bản, mỗi bên giữ 01 bản.",
+    "",
+    "ĐẠI DIỆN BÊN A                    ĐẠI DIỆN BÊN B",
+]
+
+STARTER_TEMPLATE = "Hợp đồng dịch vụ (mẫu)"
+
+
+def seed_t11_paperwork(deal_name):
+    """T11: a starter contract in the library, ready to generate from.
+
+    Written here rather than committed as a .docx so the sample is
+    reviewable text in a diff instead of an opaque blob — and so the
+    walkthrough can compare what the template asks for with what comes
+    out the other side.
+    """
+    from auraos.lib.paperwork import build_docx
+
+    if frappe.db.exists("Paperwork Template", {"template_name": STARTER_TEMPLATE}):
+        return
+
+    uploaded = frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": "hop-dong-dich-vu-mau.docx",
+            "is_private": 1,
+            "content": build_docx(STARTER_CONTRACT),
+        }
+    ).insert(ignore_permissions=True)
+
+    frappe.get_doc(
+        {
+            "doctype": "Paperwork Template",
+            "template_name": STARTER_TEMPLATE,
+            "template_file": uploaded.file_url,
+            "notes": "Starter sample — replace with the company's real contract.",
+        }
+    ).insert(ignore_permissions=True)
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T7 job in production": seed_t7_job_in_production,
     "T8 money out": seed_t8_money_out,
     "T10 payment milestones": seed_t10_payment_milestones,
+    "T11 paperwork templates": seed_t11_paperwork,
 }

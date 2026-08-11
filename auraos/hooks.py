@@ -13,9 +13,7 @@ after_migrate = "auraos.setup.install.after_migrate"
 
 doc_events = {
     "File": {
-        "before_insert": (
-            "auraos.auraos.doctype.deal.deal.check_attachment_permission"
-        ),
+        "before_insert": "auraos.attachments.check_attachment_permission",
     },
 }
 

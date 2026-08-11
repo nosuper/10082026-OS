@@ -94,6 +94,24 @@ read a founder-only DocType via the document API, list API, or global
 search. Any future founder-only DocType (overhead, commission fields)
 should copy that test pattern before real data enters it.
 
+### Attachments
+
+Core File permissions let any System User create a File and point it at
+any document, so every doctype here that accepts attachments is gated by
+`auraos/attachments.py`: you may attach to what you may write. Add a
+doctype to `GUARDED` there the moment anything starts hanging files on
+it — generated paperwork made that true for Job.
+
+### Paperwork templates
+
+The company signs on paper, so `auraos/lib/paperwork.py` fills the
+founder's own .docx rather than rendering a document of its own: the
+letterhead, clauses and signature block come out byte-for-byte as
+designed, with `{{client.tax_code}}` replaced. Two things it does that a
+string replace would not — it matches placeholders across the runs Word
+splits them into, and it never blanks a value it cannot fill, marking
+the gap on the page and reporting it to the caller.
+
 ### The guest boundary
 
 The client-facing quote page (`/quote/<token>`) is the only part of the

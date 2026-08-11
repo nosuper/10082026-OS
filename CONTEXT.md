@@ -126,6 +126,24 @@ _Avoid_: grace period, credit terms, net days
 The Vietnamese text handed to the external accountant on Zalo asking them to issue an invoice — client tax details and the amount split out of its VAT. Generating it changes nothing; marking the milestone Requested is a separate act.
 _Avoid_: invoice, billing request, hoá đơn (unqualified)
 
+## Paperwork
+
+**Paperwork template**:
+A .docx the founder designed in Word — letterhead, clauses, signature block, seal space — with placeholders typed where values belong. Generating from one never changes it; the company signs on paper, so the file is the design and the system only does the typing.
+_Avoid_: form, mail merge, boilerplate, document type
+
+**Placeholder**:
+`{{client.tax_code}}` typed into a template: a namespaced field the system fills from the job and the parties a paper names. A name outside the vocabulary is not a placeholder anything can fill, and says so on the page.
+_Avoid_: variable, merge field, token, tag
+
+**Gap marker**:
+What a placeholder becomes when it cannot be filled — «thiếu: client.tax_code» where the record holds nothing, «không có trường: …» where no such placeholder exists — printed where the value belongs and reported by name to whoever generated it. Distinct from a blank, which is invisible exactly where it costs most.
+_Avoid_: default, fallback, empty value, placeholder (unqualified)
+
+**Paper**:
+A paperwork template filled for one job and attached to it — printed, signed by hand and sealed. Generating one never changes the template it came from.
+_Avoid_: output, export, contract (unqualified), attachment
+
 ## Environments
 
 **Preview stack**:
