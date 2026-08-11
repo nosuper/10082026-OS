@@ -125,6 +125,7 @@
               <input
                 type="checkbox"
                 :checked="visibleColumnKeys.includes(col.key)"
+                :disabled="col.required"
                 @change="toggleColumn(col.key)"
               />
               {{ col.label }}
@@ -480,8 +481,20 @@ const sortKey = ref("modified")
 const sortDir = ref("desc")
 
 const COLUMNS = [
-  { key: "title", label: "Title", editable: true, type: "text" },
-  { key: "company", label: "Company", editable: true, type: "select" },
+  {
+    key: "title",
+    label: "Title",
+    editable: true,
+    required: true,
+    type: "text",
+  },
+  {
+    key: "company",
+    label: "Company",
+    editable: true,
+    required: true,
+    type: "select",
+  },
   { key: "stage", label: "Stage", editable: true, type: "select" },
   { key: "deal_owner", label: "Owner", editable: true, type: "select" },
   {
@@ -503,10 +516,16 @@ const COLUMNS = [
 ]
 
 const allColumnKeys = COLUMNS.map((col) => col.key)
+const requiredColumnKeys = COLUMNS.filter((col) => col.required).map(
+  (col) => col.key
+)
 const savedColumns = Array.isArray(savedPreferences.columns)
   ? savedPreferences.columns.filter((key) => allColumnKeys.includes(key))
   : allColumnKeys
-const visibleColumnKeys = ref(savedColumns.length ? savedColumns : allColumnKeys)
+const initialColumnKeys = savedColumns.length ? savedColumns : allColumnKeys
+const visibleColumnKeys = ref(
+  [...new Set([...requiredColumnKeys, ...initialColumnKeys])]
+)
 const visibleColumns = computed(() =>
   COLUMNS.filter((col) => visibleColumnKeys.value.includes(col.key))
 )
@@ -529,6 +548,7 @@ function setView(mode) {
 }
 
 function toggleColumn(key) {
+  if (requiredColumnKeys.includes(key)) return
   if (visibleColumnKeys.value.includes(key)) {
     if (visibleColumnKeys.value.length === 1) return
     visibleColumnKeys.value = visibleColumnKeys.value.filter((item) => item !== key)

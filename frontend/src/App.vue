@@ -1,14 +1,21 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <header class="border-b bg-white">
-      <div class="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
+      <!-- Wraps on a phone rather than pushing the whole page sideways:
+           the expense screen is used one-handed on a shoot, and a page
+           that pans left and right reads as broken. Unchanged from `sm`
+           up, where the row has always fitted. -->
+      <div
+        class="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 gap-y-1
+               px-3 py-2 sm:h-14 sm:flex-nowrap sm:gap-x-6 sm:px-4 sm:py-0"
+      >
         <span class="text-lg font-semibold text-gray-900">AuraOS</span>
-        <nav class="flex gap-1">
+        <nav class="flex flex-wrap gap-1">
           <router-link
             v-for="item in nav"
             :key="item.route"
             :to="item.route"
-            class="rounded px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
+            class="rounded px-2 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 sm:px-3"
             active-class="bg-gray-100 text-gray-900"
           >
             {{ item.label }}

@@ -7,6 +7,43 @@
       </span>
     </div>
 
+    <!-- Money owed past the company's payment terms. Unpaid milestones
+         should chase the founder, not the reverse (spec #2, story 39);
+         this strip carries the nudge until T12 builds the dashboard. -->
+    <div
+      v-if="overdue.length"
+      class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3"
+    >
+      <div class="mb-1 flex flex-wrap items-baseline gap-2">
+        <span class="text-sm font-semibold text-red-900">
+          ⚠ {{ vnd(overdueTotal) }} ₫ uncollected
+        </span>
+        <span class="text-xs text-red-800">
+          {{ overdue.length }} milestone{{ overdue.length > 1 ? "s" : "" }}
+          past the {{ nudges.data?.payment_terms_days }}-day payment terms
+        </span>
+      </div>
+      <ul class="space-y-0.5 text-sm">
+        <li
+          v-for="row in overdue"
+          :key="row.name"
+          class="flex flex-wrap items-baseline gap-2"
+        >
+          <router-link
+            :to="`/jobs/${row.job}`"
+            class="font-medium text-red-900 hover:underline"
+          >
+            {{ row.job_title || row.job }}
+          </router-link>
+          <span class="text-red-800">{{ row.title }}</span>
+          <span class="tabular-nums text-red-900">{{ vnd(row.amount) }} ₫</span>
+          <span class="text-xs text-red-700">
+            {{ overdueLabel(row.days_overdue) }} · {{ row.status }}
+          </span>
+        </li>
+      </ul>
+    </div>
+
     <div class="flex gap-3 overflow-x-auto pb-4">
       <div
         v-for="stage in STAGES"
@@ -84,7 +121,22 @@ import { ref, computed } from "vue"
 import { useRouter } from "vue-router"
 import { ErrorMessage, createResource, createListResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
+import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
+import { overdueLabel } from "../data/milestones"
+
+// Overdue money, oldest debt first — the server decides what counts as
+// overdue, so the board and a future dashboard cannot disagree.
+const nudges = createResource({
+  url: "auraos.api.overdue_milestones",
+  auto: true,
+})
+
+const overdue = computed(() => nudges.data?.milestones || [])
+
+const overdueTotal = computed(() =>
+  overdue.value.reduce((sum, row) => sum + (row.amount || 0), 0)
+)
 
 const jobs = createListResource({
   doctype: "Job",
