@@ -10,8 +10,8 @@
   "template_file",
   "disabled",
   "notes",
-  "fields_section",
-  "fields_used"
+  "placeholders_section",
+  "placeholders"
  ],
  "fields": [
   {
@@ -46,15 +46,15 @@
   },
   {
    "collapsible": 1,
-   "fieldname": "fields_section",
+   "fieldname": "placeholders_section",
    "fieldtype": "Section Break",
-   "label": "Fields This Template Asks For"
+   "label": "Placeholders This Template Asks For"
   },
   {
    "description": "Read from the file every time it is saved — edit the docx, not this",
-   "fieldname": "fields_used",
+   "fieldname": "placeholders",
    "fieldtype": "Small Text",
-   "label": "Fields Used",
+   "label": "Placeholders",
    "read_only": 1
   }
  ],

@@ -86,8 +86,12 @@ _Avoid_: form, mail merge, boilerplate, document type
 _Avoid_: variable, merge field, token, tag
 
 **Gap marker**:
-What a placeholder becomes when there is nothing to fill it with — «thiếu: client.tax_code» printed where the value belongs, and the same name reported to whoever generated it. Distinct from a blank, which is invisible exactly where it costs most.
+What a placeholder becomes when it cannot be filled — «thiếu: client.tax_code» where the record holds nothing, «không có trường: …» where no such placeholder exists — printed where the value belongs and reported by name to whoever generated it. Distinct from a blank, which is invisible exactly where it costs most.
 _Avoid_: default, fallback, empty value, placeholder (unqualified)
+
+**Paper**:
+A paperwork template filled for one job and attached to it — printed, signed by hand and sealed. Generating one never changes the template it came from.
+_Avoid_: output, export, contract (unqualified), attachment
 
 ## Environments
 

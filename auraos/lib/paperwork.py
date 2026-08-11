@@ -41,15 +41,17 @@ from xml.sax.saxutils import escape, unescape
 
 from auraos.lib.money import format_vnd
 
-# What a placeholder looks like in the founder's template. Dotted names
-# only — the vocabulary below is namespaced, and a pattern this narrow
-# cannot mistake a stray brace in the prose for a field.
+# What a placeholder looks like in the founder's template. Narrow on
+# purpose — a brace around prose, an unclosed pair or anything with a
+# space in it is not a placeholder, so ordinary writing is safe. An
+# undotted name still matches: `{{TODO}}` is a placeholder nothing can
+# fill, which the founder should be told rather than left to print.
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\s*\}\}")
 
 # What lands on the page where a value could not be filled. Vietnamese,
 # because the person proofreading the printout is: the English-UI
 # decision is about the app's chrome, not about the paperwork.
-BLANK_MARKER = "«thiếu: {name}»"
+MISSING_MARKER = "«thiếu: {name}»"
 UNKNOWN_MARKER = "«không có trường: {name}»"
 
 # The parts of a docx that hold text a template author can type into.
@@ -65,33 +67,33 @@ _TEXT = re.compile(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", re.DOTALL)
 
 @dataclass(frozen=True)
 class Filled:
-    """A generated document and everything it could not fill.
+    """A generated paper and every placeholder it could not fill.
 
-    `blank` and `unknown` are kept apart because they ask the reader for
-    different things: a blank is fixed by opening the client (or picking
-    the freelancer) and filling the field in; an unknown is a name no
-    version of this system will ever fill, so the template is what needs
-    editing.
+    `missing` and `unknown` are kept apart because they ask the reader
+    for different things: a missing value is fixed by opening the client
+    (or picking the freelancer) and filling the field in; an unknown name
+    is one no version of this system will ever fill, so the template is
+    what needs editing.
     """
 
     document: bytes
-    blank: tuple[str, ...] = ()
+    missing: tuple[str, ...] = ()
     unknown: tuple[str, ...] = ()
 
     @property
     def complete(self) -> bool:
-        return not self.blank and not self.unknown
+        return not self.missing and not self.unknown
 
 
 @dataclass
 class _Report:
     """Names that could not be filled, in the order they were met."""
 
-    blank: list[str] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)
     unknown: list[str] = field(default_factory=list)
 
     def note(self, name: str, known: bool) -> None:
-        target = self.blank if known else self.unknown
+        target = self.missing if known else self.unknown
         if name not in target:
             target.append(name)
 
@@ -110,7 +112,7 @@ def _archive(data: bytes) -> zipfile.ZipFile:
 
 
 def placeholders_in_docx(data: bytes) -> list[str]:
-    """Every field a template asks for, in reading order, once each."""
+    """Every placeholder a template asks for, in reading order, once each."""
     archive = _archive(data)
     names: list[str] = []
     for part in archive.namelist():
@@ -157,21 +159,20 @@ def fill_docx(data: bytes, values: Mapping[str, Any]) -> Filled:
         for item in archive.infolist():
             content = archive.read(item.filename)
             if _FILLABLE_PART.match(item.filename):
-                content = fill_xml(
+                content = _fill_xml(
                     content.decode("utf-8"), values, report
                 ).encode("utf-8")
             written.writestr(item, content)
 
     return Filled(
         document=out.getvalue(),
-        blank=tuple(report.blank),
+        missing=tuple(report.missing),
         unknown=tuple(report.unknown),
     )
 
 
-def fill_xml(xml: str, values: Mapping[str, Any], report: _Report | None = None) -> str:
-    """One document part, filled. Paragraphs without fields are untouched."""
-    report = report if report is not None else _Report()
+def _fill_xml(xml: str, values: Mapping[str, Any], report: _Report) -> str:
+    """One document part, filled. Paragraphs with no placeholder are untouched."""
     return _PARAGRAPH.sub(lambda m: _fill_paragraph(m.group(0), values, report), xml)
 
 
@@ -241,7 +242,7 @@ def _replacement(name: str, values: Mapping[str, Any], report: _Report) -> str:
     # `0` and `0.0` are answers; only None and the empty string are gaps.
     if value is None or value == "":
         report.note(name, known)
-        marker = BLANK_MARKER if known else UNKNOWN_MARKER
+        marker = MISSING_MARKER if known else UNKNOWN_MARKER
         return marker.format(name=name)
     return str(value)
 
@@ -328,6 +329,12 @@ def document_values(
     Our own company's name, tax code and address are deliberately absent:
     they are the same on every document, so they are typed into the
     template once rather than filled in a thousand times.
+
+    So is the deal. A job carries the deal's title, client and quoted
+    totals already, and the rest of a Deal is where the founder-only
+    numbers live — commission, the profit chain. Opening that record to
+    templates would put a permlevel behind a placeholder, where the one
+    thing nobody can see is who is about to read the printout.
     """
     values: dict[str, str | None] = {}
     job = job or {}
@@ -355,7 +362,7 @@ def document_values(
     return values
 
 
-def value_names() -> list[str]:
+def fillable_placeholders() -> list[str]:
     """Every placeholder name the system can fill — the founder's cheat sheet."""
     return sorted(document_values())
 

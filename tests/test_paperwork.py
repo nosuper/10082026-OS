@@ -91,7 +91,7 @@ def test_fills_a_placeholder_that_sits_in_one_run():
     filled = fill_docx(data, {"client.company_name": "Công ty Chungify"})
 
     assert text_of(filled.document) == "Khách hàng: Công ty Chungify"
-    assert filled.blank == ()
+    assert filled.missing == ()
     assert filled.unknown == ()
 
 
@@ -265,7 +265,7 @@ def test_a_known_field_with_no_data_is_marked_in_the_document():
     filled = fill_docx(data, {"client.tax_code": None})
 
     assert text_of(filled.document) == "Mã số thuế: «thiếu: client.tax_code»"
-    assert filled.blank == ("client.tax_code",)
+    assert filled.missing == ("client.tax_code",)
     assert filled.unknown == ()
 
 
@@ -274,7 +274,7 @@ def test_an_empty_string_counts_as_missing_not_as_filled():
 
     filled = fill_docx(data, {"client.address": ""})
 
-    assert filled.blank == ("client.address",)
+    assert filled.missing == ("client.address",)
 
 
 def test_a_placeholder_the_system_has_never_heard_of_is_marked_apart():
@@ -288,7 +288,7 @@ def test_a_placeholder_the_system_has_never_heard_of_is_marked_apart():
 
     assert text_of(filled.document) == UNKNOWN_MARKER.format(name="clint.tax_code")
     assert filled.unknown == ("clint.tax_code",)
-    assert filled.blank == ()
+    assert filled.missing == ()
 
 
 def test_missing_names_are_reported_once_each_in_the_order_they_appear():
@@ -301,7 +301,7 @@ def test_missing_names_are_reported_once_each_in_the_order_they_appear():
 
     filled = fill_docx(data, {"client.tax_code": None, "client.address": None})
 
-    assert filled.blank == ("client.tax_code", "client.address")
+    assert filled.missing == ("client.tax_code", "client.address")
     assert filled.unknown == ("clint.name",)
 
 
@@ -312,7 +312,7 @@ def test_a_zero_is_a_value_not_a_blank():
     filled = fill_docx(data, {"quote.vat_amount": 0})
 
     assert text_of(filled.document) == "0"
-    assert filled.blank == ()
+    assert filled.missing == ()
 
 
 # -- reading a template --

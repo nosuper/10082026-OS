@@ -61,10 +61,10 @@
         </Button>
       </div>
 
-      <p v-if="template?.unknown_fields?.length" class="mt-2 text-xs text-amber-700">
+      <p v-if="template?.unknown_placeholders?.length" class="mt-2 text-xs text-amber-700">
         ⚠ This template asks for
-        {{ template.unknown_fields.join(", ") }} — no such field exists, so
-        it will print as a marker. Fix the docx in the
+        {{ template.unknown_placeholders.join(", ") }} — no such placeholder
+        exists, so it will print as a gap marker. Fix the docx in the
         <router-link to="/paperwork" class="underline">library</router-link>.
       </p>
 
@@ -82,20 +82,20 @@
           {{ generated.file_name }}
         </a>
         <p v-if="!gaps.length" class="mt-1 text-xs text-green-800">
-          Every field filled — ready to print.
+          Every placeholder filled — ready to print.
         </p>
         <template v-else>
           <p class="mt-1 text-xs text-amber-900">
             Printed with {{ gaps.length }}
-            {{ gaps.length === 1 ? "gap" : "gaps" }} marked «thiếu» on the
-            page — fill these in and generate again:
+            {{ gaps.length === 1 ? "gap" : "gaps" }} marked on the page —
+            fill these in and generate again:
           </p>
           <ul class="mt-1 space-y-0.5 text-xs text-amber-900">
-            <li v-for="name in generated.blank" :key="name">
+            <li v-for="name in generated.missing" :key="name">
               · <code>{{ name }}</code> — no data on the record
             </li>
             <li v-for="name in generated.unknown" :key="name">
-              · <code>{{ name }}</code> — not a field this system has
+              · <code>{{ name }}</code> — not a placeholder this system has
             </li>
           </ul>
         </template>
@@ -105,8 +105,8 @@
     <table v-if="documents.data?.length" class="mt-3 w-full text-sm">
       <thead class="text-left text-xs text-gray-600">
         <tr>
-          <th class="py-1 font-medium">Document</th>
-          <th class="py-1 font-medium">Generated</th>
+          <th class="py-1 font-medium">Document on this job</th>
+          <th class="py-1 font-medium">Added</th>
           <th class="py-1 font-medium">By</th>
         </tr>
       </thead>
@@ -203,7 +203,7 @@ watch(
 )
 
 const gaps = computed(() => [
-  ...(generated.value?.blank || []),
+  ...(generated.value?.missing || []),
   ...(generated.value?.unknown || []),
 ])
 

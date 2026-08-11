@@ -7,8 +7,8 @@ wiring around it:
 1. **The template library is the founder's.** A producer may read the
    templates so they can generate from them, and may not upload, edit,
    rename or delete one.
-2. **A template is read from its own file.** Save it and the fields it
-   asks for follow the docx; hand it something that is not a docx and
+2. **A template is read from its own file.** Save it and the placeholders
+   it asks for follow the docx; hand it something that is not a docx and
    it is refused with a sentence, not a stack trace.
 3. **Generating reaches the real records.** The client's tax code comes
    off the Party Company, the amount off the job's carried quote, and a
@@ -128,11 +128,11 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
         frappe.set_user("Administrator")
         super().tearDown()
 
-    def test_a_template_lists_the_fields_its_own_file_asks_for(self):
+    def test_a_template_lists_the_placeholders_its_own_file_asks_for(self):
         template = make_template()
 
         self.assertEqual(
-            template.fields_used.split("\n"),
+            template.placeholders.split("\n"),
             [
                 "today.day",
                 "today.month",
@@ -145,7 +145,7 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
             ],
         )
 
-    def test_replacing_the_file_moves_the_fields_with_it(self):
+    def test_replacing_the_file_moves_the_placeholders_with_it(self):
         """The list follows the docx — there is no second step to forget."""
         template = make_template()
 
@@ -154,7 +154,7 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
         ).file_url
         template.save(ignore_permissions=True)
 
-        self.assertEqual(template.fields_used, "job.code")
+        self.assertEqual(template.placeholders, "job.code")
 
     def test_a_file_that_is_not_a_docx_is_refused_in_words(self):
         """The real mistake: an old .doc, renamed rather than re-saved."""
@@ -182,10 +182,10 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
         listed = {row["template_name"]: row for row in paperwork_templates()}
 
         self.assertEqual(
-            listed["Hợp đồng có lỗi chính tả"]["unknown_fields"],
+            listed["Hợp đồng có lỗi chính tả"]["unknown_placeholders"],
             ["clint.company_name"],
         )
-        self.assertEqual(listed["Hợp đồng dịch vụ"]["unknown_fields"], [])
+        self.assertEqual(listed["Hợp đồng dịch vụ"]["unknown_placeholders"], [])
 
     def test_the_library_says_which_paper_needs_which_extra_party(self):
         make_template(FREELANCER_PAPER, template_name="Hợp đồng cộng tác viên")
@@ -219,7 +219,7 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
 
     def test_the_cheat_sheet_names_every_field_a_template_may_use(self):
         frappe.set_user(PRODUCER)
-        names = paperwork_library()["fields"]
+        names = paperwork_library()["placeholders"]
 
         for expected in (
             "client.tax_code",
@@ -293,7 +293,7 @@ class TestGeneratingPaperwork(FrappeTestCase):
         self.assertIn("Mã số thuế: 0312345678", text)
         self.assertIn(f"({job.name})", text)
         self.assertIn(job.title, text)
-        self.assertEqual(result["blank"], [])
+        self.assertEqual(result["missing"], [])
         self.assertEqual(result["unknown"], [])
 
     def test_the_amount_comes_off_the_quote_the_job_carries(self):
@@ -316,7 +316,7 @@ class TestGeneratingPaperwork(FrappeTestCase):
         frappe.set_user(FOUNDER)
         result = generate_job_paperwork(job=job.name, template=template.name)
 
-        self.assertEqual(result["blank"], ["client.tax_code"])
+        self.assertEqual(result["missing"], ["client.tax_code"])
         self.assertIn("«thiếu: client.tax_code»", read_text(result["file_url"]))
 
     def test_a_freelancers_details_come_from_the_person_picked(self):
@@ -341,7 +341,7 @@ class TestGeneratingPaperwork(FrappeTestCase):
 
         self.assertIn("Ông/Bà: Nguyễn Văn A", text)
         self.assertIn("CCCD: 079090001234", text)
-        self.assertEqual(result["blank"], [])
+        self.assertEqual(result["missing"], [])
 
     def test_a_freelancer_paper_with_nobody_picked_says_so(self):
         """Nobody selected is missing data, not a broken template."""
@@ -354,7 +354,7 @@ class TestGeneratingPaperwork(FrappeTestCase):
         result = generate_job_paperwork(job=job.name, template=template.name)
 
         self.assertEqual(
-            result["blank"], ["freelancer.full_name", "freelancer.id_number"]
+            result["missing"], ["freelancer.full_name", "freelancer.id_number"]
         )
         self.assertEqual(result["unknown"], [])
 

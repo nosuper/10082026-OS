@@ -83,18 +83,19 @@
         </span>
       </div>
 
-      <p v-if="row.unknown_fields.length" class="mt-1 text-xs text-amber-700">
-        ⚠ Asks for {{ row.unknown_fields.join(", ") }} — no such field, so it
-        prints as a marker. Fix the docx and upload it again.
+      <p v-if="row.unknown_placeholders.length" class="mt-1 text-xs text-amber-700">
+        ⚠ Asks for {{ row.unknown_placeholders.join(", ") }} — no such
+        placeholder, so it prints as a gap marker. Fix the docx and upload
+        it again.
       </p>
 
-      <p v-if="row.fields.length" class="mt-1 text-xs text-gray-500">
+      <p v-if="row.placeholders.length" class="mt-1 text-xs text-gray-500">
         Fills:
         <code
-          v-for="field in row.fields"
+          v-for="field in row.placeholders"
           :key="field"
           class="mr-1"
-          :class="row.unknown_fields.includes(field) ? 'text-amber-700' : ''"
+          :class="row.unknown_placeholders.includes(field) ? 'text-amber-700' : ''"
         >
           {{ field }}
         </code>
@@ -114,10 +115,10 @@
     <!-- The cheat sheet: what a template may ask for -->
     <details v-if="library.data" class="mt-6 rounded-lg border bg-white p-3">
       <summary class="cursor-pointer text-sm font-semibold text-gray-800">
-        Fields a template can use ({{ library.data.fields.length }})
+        Placeholders a template can use ({{ library.data.placeholders.length }})
       </summary>
       <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-3">
-        <code v-for="field in library.data.fields" :key="field" class="text-xs">
+        <code v-for="field in library.data.placeholders" :key="field" class="text-xs">
           {{ braced(field) }}
         </code>
       </div>

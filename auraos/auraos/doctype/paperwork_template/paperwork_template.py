@@ -25,18 +25,28 @@ STAMP_FORMAT = "%Y%m%d-%H%M"
 
 class PaperworkTemplate(Document):
     def validate(self):
-        # Reading the file on every save is what keeps `fields_used`
+        # Reading the file on every save is what keeps `placeholders`
         # honest: replace the docx and the list follows, with no second
         # step for anyone to forget.
-        self.fields_used = "\n".join(placeholders(self))
+        self.placeholders = "\n".join(placeholders(self))
 
 
 def placeholders(template):
-    """The fields a template asks for, read from the file itself."""
+    """The placeholders a template asks for, read from the file itself."""
     try:
         return paperwork.placeholders_in_docx(content(template))
     except ValueError as error:
         frappe.throw(str(error), frappe.ValidationError)
+
+
+def stored_placeholders(template):
+    """The list `validate` wrote, back as names.
+
+    Lives beside the line that encodes it so the two cannot drift: a
+    reader that split on the wrong character would be a bug nothing
+    catches until a screen quietly shows no placeholders at all.
+    """
+    return [name for name in (template.get("placeholders") or "").split("\n") if name]
 
 
 def content(template) -> bytes:
@@ -58,9 +68,18 @@ def content(template) -> bytes:
 
 
 def party(doctype, name):
-    """One client, vendor or freelancer as a plain dict — or nothing."""
+    """One client, vendor or freelancer as a plain dict — or nothing.
+
+    Permission-checked even though both operating roles read the party
+    doctypes today: a template can pull a bank account and an ID number
+    onto a page, and "whoever may write the job" is not the same
+    sentence as "whoever may read this person".
+    """
     if not name:
         return None
+    frappe.has_permission(doctype, "read", doc=name, throw=True)
+    # get_value skips permissions by design; the check above is the
+    # entire authorization for this read.
     return frappe.db.get_value(doctype, name, "*", as_dict=True)
 
 
