@@ -298,6 +298,42 @@ def back_to_feedback(job_name):
     job.save(ignore_permissions=True)
 
 
+# T6.1a: who the quote says it is from.
+#
+# No logo — a seeded image would be a binary blob in the repo for a
+# walkthrough that is better served by the founder uploading the real
+# one and watching the letterhead change. Every text field is filled so
+# the empty-field rules can be checked by *clearing* one on the preview,
+# which is the direction that actually needs seeing.
+COMPANY_IDENTITY = {
+    "company_name": "Aura Productions",
+    "tax_code": "0312345678",
+    "address": "12 Nguyễn Huệ, Quận 1, TP.HCM",
+    "phone": "028 3822 1234",
+    "email": "hello@auraproductions.example",
+    "website": "auraproductions.example",
+    "bank_name": "Vietcombank",
+    "bank_account_number": "0071000123456",
+    "bank_account_name": "CONG TY TNHH AURA PRODUCTIONS",
+    "signatory_name": "Nguyễn Anh Chung",
+    "signatory_title": "Giám đốc",
+}
+
+
+def seed_t6_1a_company_identity(deal_name):
+    """T6.1a: a letterhead on the quote page and PDF.
+
+    Written only where nothing is set: a preview where the founder has
+    typed their real details in must not have them overwritten by the
+    next boot.
+    """
+    settings = frappe.get_doc("AuraOS Settings")
+    for field, value in COMPANY_IDENTITY.items():
+        if not settings.get(field):
+            settings.set(field, value)
+    settings.save(ignore_permissions=True)
+
+
 def seed_t8_money_out(deal_name):
     """T8: the same job mid-shoot, holding a float nobody has settled.
 
@@ -330,6 +366,8 @@ def seed_t8_money_out(deal_name):
                 **expense,
             }
         ).insert(ignore_permissions=True)
+
+
 def seed_t10_payment_milestones(deal_name):
     """T10: a three-stage collection with one payment gone quiet.
 
@@ -434,6 +472,7 @@ def seed_t11_paperwork(deal_name):
 
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
+    "T6.1a company identity": seed_t6_1a_company_identity,
     "T7 job in production": seed_t7_job_in_production,
     "T8 money out": seed_t8_money_out,
     "T10 payment milestones": seed_t10_payment_milestones,

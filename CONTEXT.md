@@ -45,6 +45,18 @@ _Avoid_: accepted, approved, signed
 The flag raised on a deal whose sent version has gone unanswered past the configured window.
 _Avoid_: reminder, follow-up, alert
 
+**Quote number**:
+What a printed quote calls itself — the version's record identifier with its version appended, `DQ-0007-v2`. The identifier alone stops being an answer the moment a second version exists, so a page detached from its PDF is matched back by this.
+_Avoid_: reference, quote ID, document number
+
+**Letterhead**:
+The company's own identity at the top of a quote — logo, name, tax code and contact block, read live from settings rather than frozen into the version. Distinct from the offer below it: changing the letterhead never re-issues a quote.
+_Avoid_: header, branding, masthead, company block
+
+**Signature block**:
+The two columns at the end of a quote PDF, ours filled from settings and the client's left blank, with room for a wet signature and the seal. On the PDF only — the web page never shows it, because nothing is signed on a screen.
+_Avoid_: sign-off, signing area, e-signature
+
 **Margin floor**:
 The single global margin percentage below which any quote warns, without revealing where the number comes from.
 _Avoid_: minimum margin, threshold, floor price
