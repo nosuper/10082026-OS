@@ -173,6 +173,58 @@ class TestDealBreakdown(FrappeTestCase):
         )
         self.assertAgreesWithEngine(reloaded.quote_total, round_vnd(result.total))
 
+    def test_cost_line_metadata_is_persisted_untouched(self):
+        category = frappe.get_doc(
+            {"doctype": "Cost Item Category", "category_name": "Crew"}
+        ).insert()
+        contact = frappe.get_doc(
+            {
+                "doctype": "Party Contact",
+                "full_name": "Nguyễn Quay Phim",
+                "phone": "0907654321",
+            }
+        ).insert()
+        lines = [dict(row) for row in LINES]
+        lines[0].update(
+            {
+                "item_category": category.name,
+                "phase": "Pre-production",
+                "source_type": "Freelancer",
+                "source_contact": contact.name,
+            }
+        )
+
+        stored = make_breakdown_deal(cost_lines=lines).cost_lines[0]
+
+        self.assertEqual(stored.item_category, "Crew")
+        self.assertEqual(stored.phase, "Pre-production")
+        self.assertEqual(stored.source_type, "Freelancer")
+        self.assertEqual(stored.source_contact, contact.name)
+
+    def test_producer_can_extend_the_item_category_vocabulary(self):
+        frappe.set_user(PRODUCER)
+
+        category = frappe.get_doc(
+            {"doctype": "Cost Item Category", "category_name": "Location"}
+        ).insert()
+
+        self.assertEqual(category.name, "Location")
+
+    def test_new_internal_line_defaults_to_no_invoice_tax(self):
+        deal = make_breakdown_deal(
+            cost_lines=[
+                {
+                    "description": "In-house producer",
+                    "qty1": 1,
+                    "qty2": 1,
+                    "unit_price": 1_000_000,
+                }
+            ]
+        )
+
+        self.assertEqual(deal.cost_lines[0].source_type, "Internal")
+        self.assertEqual(deal.cost_lines[0].tax_type, "Không hoá đơn")
+
     def test_line_order_is_persisted(self):
         deal = make_breakdown_deal()
         reordered = [deal.cost_lines[2], deal.cost_lines[0], deal.cost_lines[1], deal.cost_lines[3]]
@@ -486,6 +538,23 @@ class TestDealBreakdown(FrappeTestCase):
         self.assertEqual(
             [line["quote_price"] for line in out["lines"]],
             [row.quote_price for row in deal.cost_lines],
+        )
+
+    def test_compute_breakdown_returns_line_metadata_untouched(self):
+        lines = [dict(row) for row in LINES]
+        metadata = {
+            "item_category": "Crew",
+            "phase": "Appendix",
+            "source_type": "Internal",
+            "source_contact": "internal@example.com",
+        }
+        lines[0].update(metadata)
+
+        out = compute_breakdown(lines=lines)
+
+        self.assertEqual(
+            {key: out["lines"][0][key] for key in metadata},
+            metadata,
         )
 
     def test_compute_breakdown_hides_founder_block_from_producer(self):

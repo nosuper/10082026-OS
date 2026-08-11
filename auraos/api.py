@@ -24,6 +24,15 @@ from auraos.lib.quote import quote_chain
 # Deal field carries the same default.
 DEFAULT_COMMISSION_PCT = 5
 
+# Pricing ignores line metadata, but the live endpoint returns these
+# approved fields alongside the computed values so editing never drops them.
+LINE_METADATA_FIELDS = (
+    "item_category",
+    "phase",
+    "source_type",
+    "source_contact",
+)
+
 # The table is deliberately a narrow editing surface. Quote delivery,
 # breakdown values and audit fields still belong to their dedicated flows.
 DEAL_TABLE_EDITABLE_FIELDS = {
@@ -296,13 +305,14 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     out = {
         "lines": [
             {
+                **{field: row.get(field) for field in LINE_METADATA_FIELDS},
                 "subtotal": round_vnd(line.subtotal_int_net),
                 "cost_basis": round_vnd(line.profit_cost_basis),
                 "input_vat": round_vnd(line.input_vat),
                 "quote_price": round_vnd(line.budget),
                 "margin": round_vnd(line.margin),
             }
-            for line in result.lines
+            for row, line in zip(line_rows, result.lines)
         ],
         "packages": packages,
         "subtotal": round_vnd(chain.subtotal),

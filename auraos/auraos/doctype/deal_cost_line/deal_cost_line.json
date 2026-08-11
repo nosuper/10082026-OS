@@ -6,6 +6,10 @@
  "engine": "InnoDB",
  "field_order": [
   "description",
+  "item_category",
+  "phase",
+  "source_type",
+  "source_contact",
   "package",
   "qty1",
   "qty1_unit",
@@ -29,6 +33,33 @@
    "in_list_view": 1,
    "label": "Description",
    "reqd": 1
+  },
+  {
+   "description": "Reusable breakdown vocabulary; new values can be added while editing a breakdown",
+   "fieldname": "item_category",
+   "fieldtype": "Link",
+   "label": "Item Category",
+   "options": "Cost Item Category"
+  },
+  {
+   "fieldname": "phase",
+   "fieldtype": "Select",
+   "label": "Phase",
+   "options": "\nPre-production\nProduction\nPost-production\nAppendix"
+  },
+  {
+   "default": "Internal",
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "label": "Source Type",
+   "options": "\nInternal\nFreelancer\nVendor"
+  },
+  {
+   "description": "Optional person who supplies this cost item",
+   "fieldname": "source_contact",
+   "fieldtype": "Link",
+   "label": "Source Contact",
+   "options": "Party Contact"
   },
   {
    "description": "Title of a package on this deal; empty = ungrouped",
@@ -69,7 +100,7 @@
    "label": "Unit Price"
   },
   {
-   "default": "Công ty",
+   "default": "Không hoá đơn",
    "description": "T5 walkthrough: the company only charges 8% VAT, so Cty 10% is not offered here though the engine still knows it (the xlsx stays the math authority). Internal work carries no invoice - use Không hoá đơn.",
    "fieldname": "tax_type",
    "fieldtype": "Select",
