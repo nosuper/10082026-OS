@@ -75,6 +75,20 @@ _Avoid_: extra, overage, out of scope
 The shared folder a job's material lives in, named after the job code.
 _Avoid_: path, directory, drive, storage
 
+## Paperwork
+
+**Paperwork template**:
+A .docx the founder designed in Word — letterhead, clauses, signature block, seal space — with placeholders typed where values belong. Generating from one never changes it; the company signs on paper, so the file is the design and the system only does the typing.
+_Avoid_: form, mail merge, boilerplate, document type
+
+**Placeholder**:
+`{{client.tax_code}}` typed into a template: a namespaced field the system fills from the job and the parties a paper names. A name outside the vocabulary is not a placeholder anything can fill, and says so on the page.
+_Avoid_: variable, merge field, token, tag
+
+**Gap marker**:
+What a placeholder becomes when there is nothing to fill it with — «thiếu: client.tax_code» printed where the value belongs, and the same name reported to whoever generated it. Distinct from a blank, which is invisible exactly where it costs most.
+_Avoid_: default, fallback, empty value, placeholder (unqualified)
+
 ## Environments
 
 **Preview stack**:

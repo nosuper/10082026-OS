@@ -137,6 +137,8 @@
             </p>
           </div>
 
+          <PaperworkPanel :job="name" />
+
           <!-- Carried packages -->
           <div class="rounded-lg border bg-white p-3">
             <h2 class="mb-2 text-sm font-semibold text-gray-800">
@@ -254,6 +256,7 @@
 import { ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
+import PaperworkPanel from "../components/PaperworkPanel.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
 import {

@@ -30,6 +30,11 @@ const routes = [
     component: () => import("./pages/ContactsPage.vue"),
   },
   {
+    path: "/paperwork",
+    name: "Paperwork",
+    component: () => import("./pages/PaperworkPage.vue"),
+  },
+  {
     path: "/settings",
     name: "Settings",
     component: () => import("./pages/SettingsPage.vue"),

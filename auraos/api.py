@@ -15,7 +15,8 @@ from auraos.auraos.doctype.deal.deal import (
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
-from auraos.lib import pricing
+from auraos.auraos.doctype.paperwork_template import paperwork_template
+from auraos.lib import paperwork, pricing
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import quote_chain
@@ -556,6 +557,112 @@ def log_job_revision(job, note):
         "stage": doc.stage,
         "reopened": doc.stage != stage_before,
     }
+
+
+# -- paperwork (T11, issue #13) --
+
+
+@frappe.whitelist()
+def paperwork_templates():
+    """The template library, each with the fields its docx asks for.
+
+    `unknown_fields` is the reason this returns more than a list of
+    names: a template asking for `{{clint.tax_code}}` is broken, and the
+    founder should meet that in the library — where the fix is to edit
+    the docx — rather than on a contract already coming off the printer.
+    """
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    known = set(paperwork.document_values())
+    rows = frappe.get_list(
+        "Paperwork Template",
+        fields=["name", "template_name", "template_file", "notes", "fields_used"],
+        filters={"disabled": 0},
+        order_by="template_name asc",
+        limit_page_length=0,
+    )
+    for row in rows:
+        fields = (row.pop("fields_used") or "").split("\n")
+        fields = [name for name in fields if name]
+        row["fields"] = fields
+        row["unknown_fields"] = [name for name in fields if name not in known]
+        # Which extra record this paper is about, if any — the screen
+        # asks for exactly the parties the template mentions.
+        row["needs_vendor"] = any(name.startswith("vendor.") for name in fields)
+        row["needs_freelancer"] = any(
+            name.startswith("freelancer.") for name in fields
+        )
+    return rows
+
+
+@frappe.whitelist()
+def paperwork_library():
+    """The whole library, for the screen that maintains it.
+
+    Distinct from `paperwork_templates`, which answers "what can I
+    generate for this job" and so hides the retired ones. This answers
+    "what is in the library and may I change it", which needs the
+    retired ones and the cheat sheet of fields a template may use.
+    """
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    known = set(paperwork.document_values())
+    templates = frappe.get_list(
+        "Paperwork Template",
+        fields=["name", "template_name", "template_file", "notes", "disabled",
+                "fields_used", "modified"],
+        order_by="template_name asc",
+        limit_page_length=0,
+    )
+    for row in templates:
+        fields = [name for name in (row.pop("fields_used") or "").split("\n") if name]
+        row["fields"] = fields
+        row["unknown_fields"] = [name for name in fields if name not in known]
+    return {
+        # Producers generate paperwork; the founder owns the templates.
+        # The server enforces it either way — this only decides whether
+        # the screen offers controls that would be refused.
+        "can_manage": bool(frappe.has_permission("Paperwork Template", "create")),
+        "fields": paperwork.value_names(),
+        "templates": templates,
+    }
+
+
+@frappe.whitelist()
+def generate_job_paperwork(job, template, vendor=None, freelancer=None):
+    """Fill a template for this job and attach the result to it.
+
+    Write permission on the job, not read: generating leaves a document
+    hanging off the job, and whoever may not change a job may not add
+    paperwork to it either.
+
+    What could not be filled comes back with the file rather than
+    instead of it. The document exists — it is printable, and the gaps
+    are marked on the page — but the caller is told about them, because
+    the founder is the only one who can close them.
+    """
+    _check_job_permission(job, "write")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    document, filled = paperwork_template.generate(
+        template, job, vendor=vendor, freelancer=freelancer
+    )
+    return {
+        "name": document.name,
+        "file_name": document.file_name,
+        "file_url": document.file_url,
+        "blank": list(filled.blank),
+        "unknown": list(filled.unknown),
+    }
+
+
+@frappe.whitelist()
+def job_paperwork(job):
+    """Documents hanging off this job, newest first."""
+    _check_job_permission(job, "read")
+    return frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Job", "attached_to_name": job},
+        fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
+        order_by="creation desc",
+    )
 
 
 @frappe.whitelist()
