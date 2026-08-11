@@ -52,7 +52,12 @@ const nav = computed(() => [
   { label: "Deals", route: "/deals" },
   { label: "Jobs", route: "/jobs" },
   { label: "Contacts", route: "/contacts" },
-  ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
+  ...(isFounder.value
+    ? [
+        { label: "Overhead", route: "/overhead" },
+        { label: "Settings", route: "/settings" },
+      ]
+    : []),
 ])
 
 // Log out via the API, then land on a login page that returns here —

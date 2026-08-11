@@ -90,6 +90,7 @@ CARRIED_FIELDS = (
     "quote_mf_amount",
     "quote_vat_amount",
     "quote_total",
+    "quote_margin",
 )
 
 # The frozen half of that: the money the deal was won at. Read-only
@@ -106,6 +107,7 @@ FROZEN_FIELDS = (
     "quote_mf_amount",
     "quote_vat_amount",
     "quote_total",
+    "quote_margin",
     "commission_pct",
 )
 

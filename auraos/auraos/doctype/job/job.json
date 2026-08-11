@@ -38,6 +38,7 @@
   "column_break_quote",
   "quote_vat_amount",
   "quote_total",
+  "quote_margin",
   "history_section",
   "stage_history"
  ],
@@ -252,6 +253,12 @@
    "fieldname": "quote_total",
    "fieldtype": "Currency",
    "label": "Quote Total",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quote_margin",
+   "fieldtype": "Currency",
+   "label": "Margin",
    "read_only": 1
   },
   {

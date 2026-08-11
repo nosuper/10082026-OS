@@ -41,6 +41,11 @@ const routes = [
     name: "Settings",
     component: () => import("./pages/SettingsPage.vue"),
   },
+  {
+    path: "/overhead",
+    name: "Overhead",
+    component: () => import("./pages/OverheadPage.vue"),
+  },
 ]
 
 // Frappe serves the SPA at /aura (website_route_rules in hooks.py).

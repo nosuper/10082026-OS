@@ -330,6 +330,8 @@ def seed_t8_money_out(deal_name):
                 **expense,
             }
         ).insert(ignore_permissions=True)
+
+
 def seed_t10_payment_milestones(deal_name):
     """T10: a three-stage collection with one payment gone quiet.
 
@@ -366,9 +368,43 @@ def seed_t10_payment_milestones(deal_name):
     )
 
 
+def seed_t12_overhead(_deal_name):
+    """T12: a realistic current month for the founder dashboard."""
+    month = frappe.utils.get_first_day(frappe.utils.today())
+    if frappe.db.exists("Monthly Overhead", {"month": month}):
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Monthly Overhead",
+            "month": month,
+            "items": [
+                {"kind": "Recurring", "category": "Rent", "amount": 12_000_000},
+                {
+                    "kind": "Recurring",
+                    "category": "Salaries",
+                    "amount": 45_000_000,
+                },
+                {
+                    "kind": "Recurring",
+                    "category": "Subscriptions",
+                    "description": "Adobe, Google Workspace and Frame.io",
+                    "amount": 4_200_000,
+                },
+                {
+                    "kind": "One-off",
+                    "category": "Other",
+                    "description": "Office air-conditioner repair",
+                    "amount": 2_500_000,
+                },
+            ],
+        }
+    ).insert(ignore_permissions=True)
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T7 job in production": seed_t7_job_in_production,
     "T8 money out": seed_t8_money_out,
     "T10 payment milestones": seed_t10_payment_milestones,
+    "T12 overhead": seed_t12_overhead,
 }

@@ -104,6 +104,7 @@ _Avoid_: reconciliation, payout, clearing, closing
 **Quoted cost**:
 What a category was expected to pay out in cash — each line's cost after the vendor management fee, plus the VAT on an invoice-bearing one. What an expense is compared against, never the price the client is charged for it, and never the profit cost basis, which is grossed up by a freelancer's PIT that no shoot ever hands over.
 _Avoid_: budget, estimate, quoted price, allocation
+
 ## Money in
 
 **Payment milestone**:
@@ -125,6 +126,24 @@ _Avoid_: grace period, credit terms, net days
 **Invoice request**:
 The Vietnamese text handed to the external accountant on Zalo asking them to issue an invoice — client tax details and the amount split out of its VAT. Generating it changes nothing; marking the milestone Requested is a separate act.
 _Avoid_: invoice, billing request, hoá đơn (unqualified)
+
+## Overhead
+
+**Monthly overhead**:
+The company's non-job costs assigned to one calendar month: recurring rent, salaries, utilities and subscriptions, plus one-off entries. Distinct from the direct costs carried by a deal or job.
+_Avoid_: job costs, expenses (unqualified), operating-cost estimate
+
+**Booked margin**:
+The sum of the frozen quote margins on jobs created in a calendar month. Job creation is the booking boundary; later edits to the originating deal never rewrite it.
+_Avoid_: forecast margin, pipeline value, revenue
+
+**Break-even dashboard**:
+The founder-only monthly view of overhead, booked margin and their contribution. It shows what happened and never sets or recommends the margin floor.
+_Avoid_: pricing recommendation, floor calculator, forecast
+
+**Contribution**:
+Booked margin minus monthly overhead, shown as a positive surplus, a positive shortfall, or exact break-even.
+_Avoid_: profit, recommended floor, required markup
 
 ## Environments
 

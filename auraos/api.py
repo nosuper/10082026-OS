@@ -2,6 +2,7 @@
 
 import frappe
 from frappe import _
+from frappe.utils import add_months, getdate, today
 from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
@@ -664,6 +665,65 @@ def job_money(job):
     }
 
 
+def _month_start(month=None):
+    return getdate(month or today()).replace(day=1)
+
+
+@frappe.whitelist()
+def break_even_dashboard(month=None):
+    """One month's booked margin against founder-entered overhead.
+
+    A Job is a booked piece of work, and its creation timestamp is the
+    booking boundary. Its margin is the frozen value carried from the won
+    deal, so later deal edits cannot rewrite a past month's picture.
+    """
+    frappe.has_permission("Monthly Overhead", "read", throw=True)
+    month_start = _month_start(month)
+    next_month = add_months(month_start, 1)
+
+    overhead = frappe.db.get_value(
+        "Monthly Overhead", {"month": month_start}, "total"
+    ) or 0
+    booked = frappe.get_all(
+        "Job",
+        filters=[
+            ["Job", "creation", ">=", month_start],
+            ["Job", "creation", "<", next_month],
+        ],
+        fields=["count(name) as job_count", "sum(quote_margin) as booked_margin"],
+    )[0]
+
+    overhead = round_vnd(overhead)
+    booked_margin = round_vnd(booked.booked_margin or 0)
+    contribution = booked_margin - overhead
+    return {
+        "month": month_start.isoformat(),
+        "overhead": overhead,
+        "booked_margin": booked_margin,
+        "contribution": contribution,
+        "shortfall": max(-contribution, 0),
+        "surplus": max(contribution, 0),
+        "job_count": int(booked.job_count or 0),
+    }
+
+
+def _overhead_dict(doc):
+    return {
+        "name": doc.name,
+        "month": getdate(doc.month).isoformat(),
+        "items": [
+            {
+                "kind": row.kind,
+                "category": row.category,
+                "description": row.description or "",
+                "amount": round_vnd(row.amount),
+            }
+            for row in doc.items
+        ],
+        "total": round_vnd(doc.total),
+    }
+
+
 @frappe.whitelist()
 def job_expense_categories(job):
     """The categories an expense on this job may carry, in quote order."""
@@ -912,6 +972,49 @@ def overdue_milestones():
         "payment_terms_days": job_payment_milestone.payment_terms_days(),
         "milestones": job_payment_milestone.overdue(),
     }
+
+
+@frappe.whitelist()
+def get_overhead_month(month=None):
+    frappe.has_permission("Monthly Overhead", "read", throw=True)
+    month_start = _month_start(month)
+    name = frappe.db.exists("Monthly Overhead", {"month": month_start})
+    if not name:
+        return {"name": None, "month": month_start.isoformat(), "items": [], "total": 0}
+    return _overhead_dict(frappe.get_doc("Monthly Overhead", name))
+
+
+@frappe.whitelist()
+def save_overhead_month(month, items):
+    """Create or replace one month's lines from the founder page."""
+    month_start = _month_start(month)
+    name = frappe.db.exists("Monthly Overhead", {"month": month_start})
+    if name:
+        frappe.has_permission("Monthly Overhead", "write", doc=name, throw=True)
+        doc = frappe.get_doc("Monthly Overhead", name)
+    else:
+        frappe.has_permission("Monthly Overhead", "create", throw=True)
+        doc = frappe.new_doc("Monthly Overhead")
+        doc.month = month_start
+
+    items = frappe.parse_json(items) or []
+    if not isinstance(items, list):
+        frappe.throw(_("Overhead items must be a list"), frappe.ValidationError)
+    doc.set(
+        "items",
+        [
+            {
+                field: item.get(field)
+                for field in ("kind", "category", "description", "amount")
+            }
+            for item in items
+        ],
+    )
+    if doc.is_new():
+        doc.insert()
+    else:
+        doc.save()
+    return _overhead_dict(doc)
 
 
 @frappe.whitelist()

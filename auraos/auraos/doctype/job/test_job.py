@@ -104,6 +104,7 @@ class TestJobConversion(FrappeTestCase):
         self.assertEqual(job.vat_pct, deal.vat_pct)
         self.assertEqual(job.quote_total, deal.quote_total)
         self.assertEqual(job.quote_subtotal, deal.quote_subtotal)
+        self.assertEqual(job.quote_margin, deal.quote_margin)
 
     def test_job_carries_the_client_contact(self):
         contact = frappe.get_doc(
@@ -117,6 +118,22 @@ class TestJobConversion(FrappeTestCase):
         deal = won_deal(contact=contact.name)
         job = frappe.get_doc("Job", create_job_from_deal(deal.name)["name"])
         self.assertEqual(job.contact, contact.name)
+
+    def test_migration_backfills_existing_jobs_margin_from_their_snapshot(self):
+        from auraos.patches.v1_0.backfill_job_quote_margin import execute
+
+        deal = won_deal()
+        job = frappe.get_doc("Job", create_job_from_deal(deal.name)["name"])
+        frappe.db.set_value(
+            "Job", job.name, "quote_margin", 0, update_modified=False
+        )
+
+        execute()
+
+        self.assertEqual(
+            frappe.db.get_value("Job", job.name, "quote_margin"),
+            deal.quote_margin,
+        )
 
     def test_conversion_refuses_a_deal_that_is_not_won(self):
         deal = make_breakdown_deal()
