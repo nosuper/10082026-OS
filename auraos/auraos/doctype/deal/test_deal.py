@@ -441,3 +441,85 @@ class TestDealDetailsFields(FrappeTestCase):
         frappe.set_user(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):
             deal_tags_map()
+
+
+class TestDealTableEditing(FrappeTestCase):
+    """T3.3 (#27): the table saves through the Deal validation seam."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
+        make_test_user(OUTSIDER)
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def test_inline_edit_persists(self):
+        from auraos.api import update_deal_table_row
+
+        deal = make_deal(title="Before inline edit")
+        frappe.set_user(PRODUCER)
+        row = update_deal_table_row(
+            deal.name,
+            {"title": "After inline edit", "estimated_budget": 125_000_000},
+        )
+
+        saved = frappe.get_doc("Deal", deal.name)
+        self.assertEqual(saved.title, "After inline edit")
+        self.assertEqual(saved.estimated_budget, 125_000_000)
+        self.assertEqual(row["title"], "After inline edit")
+
+    def test_inline_edit_uses_deal_validation_and_preserves_saved_value(self):
+        from auraos.api import update_deal_table_row
+
+        deal = make_deal(estimated_budget=10_000_000)
+        frappe.set_user(PRODUCER)
+
+        with self.assertRaises(frappe.ValidationError):
+            update_deal_table_row(deal.name, {"estimated_budget": -1})
+
+        self.assertEqual(
+            frappe.db.get_value("Deal", deal.name, "estimated_budget"), 10_000_000
+        )
+
+    def test_blank_table_row_creates_deal_with_user_as_owner(self):
+        from auraos.api import create_deal_table_row
+
+        company = make_company("Blank row client")
+        frappe.set_user(PRODUCER)
+        row = create_deal_table_row(
+            {"title": "Created in table", "company": company.name}
+        )
+
+        saved = frappe.get_doc("Deal", row["name"])
+        self.assertEqual(saved.title, "Created in table")
+        self.assertEqual(saved.company, company.name)
+        self.assertEqual(saved.deal_owner, PRODUCER)
+        self.assertEqual(saved.stage, "Brief Received")
+
+    def test_table_endpoint_rejects_fields_that_are_not_editable(self):
+        from auraos.api import update_deal_table_row
+
+        deal = make_deal()
+        frappe.set_user(PRODUCER)
+        with self.assertRaises(frappe.ValidationError):
+            update_deal_table_row(deal.name, {"quote_status": "Confirmed"})
+
+    def test_table_endpoints_deny_user_without_deal_access(self):
+        from auraos.api import create_deal_table_row, update_deal_table_row
+
+        deal = make_deal()
+        company = make_company()
+        frappe.set_user(OUTSIDER)
+        with self.assertRaises(frappe.PermissionError):
+            update_deal_table_row(deal.name, {"title": "Forbidden"})
+        with self.assertRaises(frappe.PermissionError):
+            create_deal_table_row(
+                {"title": "Forbidden", "company": company.name}
+            )

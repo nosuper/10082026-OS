@@ -65,7 +65,25 @@ bench --site test_site set-config allow_tests true
 bench --site test_site run-tests --app auraos
 ```
 
-CI (`.github/workflows/ci.yml`) runs both harnesses plus the frontend
+**Browser tests** (`frontend/e2e/`) — authenticated Chromium scenarios
+against a fresh, disposable Docker site. Docker with Compose is the only
+local prerequisite; the version-pinned Playwright container carries its
+own browser and system dependencies. From the repo root:
+
+```bash
+./scripts/e2e.sh
+```
+
+The command uses an isolated Compose project on port 18000, waits for
+Frappe's HTTP readiness endpoint, seeds only disposable records, and removes
+the site volumes and browser authentication state when it finishes. Downloaded
+npm packages are retained in `.e2e-npm-cache/` to speed up repeat runs. A failed
+run leaves screenshots, traces and the HTML report under `frontend/test-results/`
+and `frontend/playwright-report/`. Password entry and authentication state files
+are not recorded in or uploaded with those artifacts. Traces keep the action
+timeline but disable network/DOM snapshots so session headers are not captured.
+
+CI (`.github/workflows/ci.yml`) runs all three harnesses plus the frontend
 build on every push.
 
 ### The permission proof

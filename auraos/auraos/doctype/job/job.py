@@ -18,6 +18,7 @@ from auraos.auraos.doctype.deal.deal import (
     append_stage_change,
     holds_operating_role,
 )
+from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.lib import settlement
 
 # The agreed production flow (spec #2, story 27), in board order.
@@ -41,6 +42,16 @@ INCLUDED_REVISION_ROUNDS = 2
 # changes, so the work reopens where changes are made (issue #9, raised
 # at the T6 walkthrough).
 REDO_STAGE = "Post-production"
+
+# How the company gets paid unless a deal says otherwise: half on
+# signing, half once the client has accepted the work (spec #2, story
+# 37). Written onto every new job so money-in is tracked from the moment
+# a deal is won rather than whenever someone remembers to set it up;
+# both the split and the stages are editable per job.
+DEFAULT_MILESTONES = (
+    {"title": "Deposit", "pct": 50, "trigger_stage": "Pre-production"},
+    {"title": "Final", "pct": 50, "trigger_stage": "Client sign-off"},
+)
 
 # The last stage a revision may reopen. Past it the client has signed
 # the work off and is being invoiced for it, so a change
@@ -154,6 +165,7 @@ def create_from_deal(deal_name):
             "cost_lines": carried_rows(deal.cost_lines),
             "packages": carried_rows(deal.packages),
             "job_links": carried_rows(deal.deal_links),
+            "payment_milestones": [dict(row) for row in DEFAULT_MILESTONES],
             **{field: deal.get(field) for field in CARRIED_FIELDS},
         }
     )
@@ -173,6 +185,7 @@ class Job(Document):
         self.validate_owner()
         self.reject_snapshot_changes()
         self.number_revisions()
+        job_payment_milestone.apply_to(self, STAGES)
 
     def reject_snapshot_changes(self):
         """The carried breakdown is what was won — a record, not a draft.

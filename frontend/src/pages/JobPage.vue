@@ -137,6 +137,9 @@
             </p>
           </div>
 
+          <!-- Money in: what the client owes, and where it has got to -->
+          <MilestonesPanel ref="milestones" :job="name" />
+
           <!-- Carried packages -->
           <div class="rounded-lg border bg-white p-3">
             <h2 class="mb-2 text-sm font-semibold text-gray-800">
@@ -260,6 +263,7 @@ import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
 import JobMoneyPanel from "../components/JobMoneyPanel.vue"
+import MilestonesPanel from "../components/MilestonesPanel.vue"
 import {
   STAGES,
   INCLUDED_REVISION_ROUNDS,
@@ -327,11 +331,16 @@ const reopensOnLog = computed(() => {
   )
 })
 
+// Moving a stage can make a payment fall due, so the milestones panel
+// is told to refresh whenever the job itself is written.
+const milestones = ref(null)
+
 const setValue = createResource({
   url: "frappe.client.set_value",
   onSuccess() {
     error.value = ""
     job.reload()
+    milestones.value?.reload()
   },
   onError(err) {
     error.value = frappeErrorMessage(err)
