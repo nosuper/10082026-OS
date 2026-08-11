@@ -608,21 +608,9 @@ def save_job_milestones(job, milestones):
                 ),
                 frappe.ValidationError,
             )
-        current = existing.get(row.get("name"))
-        # Carrying the whole existing row keeps its identity, its status
-        # and its stamps; only the three planning fields are taken from
-        # the caller. `idx` is dropped on purpose — the caller's order is
-        # the new order, and a carried idx from before a deletion would
-        # collide with a surviving row's.
-        values = current.as_dict() if current else {}
-        values.pop("idx", None)
-        values.update(
-            {
-                field: row.get(field)
-                for field in job_payment_milestone.EDITABLE_FIELDS
-            }
+        replacement.append(
+            job_payment_milestone.replanned(existing.get(row.get("name")), row)
         )
-        replacement.append(values)
     doc.set("payment_milestones", replacement)
     doc.save()
     return job_milestones(job)
@@ -680,13 +668,25 @@ def get_margin_floor():
     return float(margin_floor_pct())
 
 
-@frappe.whitelist()
-def set_margin_floor(pct):
+def _save_setting(fieldname, value):
+    """Write one AuraOS Settings field and read back what was stored.
+
+    The three settings endpoints differ only in their field and its type,
+    so the permission check and the save live here rather than three
+    times over. Each caller still owns its own casting: a 0 typed into
+    either nudge is a deliberate 0, and only the caller knows whether the
+    field is a percentage or a count of days.
+    """
     frappe.has_permission("AuraOS Settings", "write", throw=True)
     settings = frappe.get_doc("AuraOS Settings")
-    settings.margin_floor_pct = float(pct or 0)
+    settings.set(fieldname, value)
     settings.save()
-    return float(settings.margin_floor_pct)
+    return settings.get(fieldname)
+
+
+@frappe.whitelist()
+def set_margin_floor(pct):
+    return float(_save_setting("margin_floor_pct", float(pct or 0)))
 
 
 @frappe.whitelist()
@@ -697,11 +697,7 @@ def get_quote_silence_days():
 
 @frappe.whitelist()
 def set_quote_silence_days(days):
-    frappe.has_permission("AuraOS Settings", "write", throw=True)
-    settings = frappe.get_doc("AuraOS Settings")
-    settings.quote_silence_days = int(days or 0)
-    settings.save()
-    return int(settings.quote_silence_days)
+    return int(_save_setting("quote_silence_days", int(days or 0)))
 
 
 @frappe.whitelist()
@@ -712,8 +708,4 @@ def get_payment_terms_days():
 
 @frappe.whitelist()
 def set_payment_terms_days(days):
-    frappe.has_permission("AuraOS Settings", "write", throw=True)
-    settings = frappe.get_doc("AuraOS Settings")
-    settings.payment_terms_days = int(days or 0)
-    settings.save()
-    return int(settings.payment_terms_days)
+    return int(_save_setting("payment_terms_days", int(days or 0)))

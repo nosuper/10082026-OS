@@ -49,6 +49,24 @@ def payment_terms_days():
     return int(setting("payment_terms_days", DEFAULT_PAYMENT_TERMS_DAYS))
 
 
+def replanned(current, planned):
+    """One row of a saved plan: the stored row, re-planned.
+
+    Carrying the whole stored row keeps its identity, its collection
+    status and the stamps it has already earned; only the editable
+    planning fields are taken from the caller. `idx` is dropped on
+    purpose — the caller's order is the new order, and an idx carried
+    from before a deletion would collide with a surviving row's.
+
+    A row the caller invented has nothing stored to carry, so it starts
+    from the planning fields alone.
+    """
+    values = current.as_dict() if current else {}
+    values.pop("idx", None)
+    values.update({field: planned.get(field) for field in EDITABLE_FIELDS})
+    return values
+
+
 def apply_to(job, stages):
     """Derive every milestone number on a job about to be saved.
 

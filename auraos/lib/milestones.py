@@ -5,7 +5,7 @@ Money-in is four rules, none of which needs Frappe to be true:
 **Shares of the quoted total.** A milestone bills a percentage of what
 the client was quoted, never a number typed in. The shares are rounded
 cumulatively so that whatever we chase adds up to the total on the quote
-the client agreed to — the last invoice can't be a đồng off.
+the client agreed to — the last milestone can't be a đồng off.
 
 **The collection flow.** ``chưa yêu cầu → đã yêu cầu KT → đã xuất HĐ →
 đã thanh toán``, in English on the enum and Vietnamese wherever a human
@@ -74,8 +74,8 @@ def milestone_amounts(total, percents: Sequence) -> list[int]:
     Rounded against the running total rather than one share at a time, so
     the shares of a fully-allocated job add up to the job's quoted total
     exactly. Rounding each share on its own would leave the sum a đồng or
-    two adrift from the quote the client signed, and the last invoice is
-    where that shows up.
+    two adrift from the quote the client signed, and the last milestone
+    is where that shows up.
     """
     total = to_decimal(total or 0)
     amounts = []
@@ -165,7 +165,7 @@ def is_overdue(
         return False
     if due_on is None or status == PAID:
         return False
-    return (now - due_on).total_seconds() >= terms_days * 86400
+    return days_overdue(due_on=due_on, now=now, terms_days=terms_days) >= 1
 
 
 def days_overdue(due_on: datetime | None, now: datetime, terms_days: int | None) -> int:
@@ -173,6 +173,11 @@ def days_overdue(due_on: datetime | None, now: datetime, terms_days: int | None)
 
     "Eight days late" is what the founder chases on; "fifteen days old"
     counts a week they were never owed anything for.
+
+    Whole days only, and `is_overdue` is defined in terms of this count
+    so the flag and the number cannot disagree: a milestone the terms ran
+    out on nine hours ago is not yet a day late, and saying so out loud
+    beats flagging it red beside the words "0 days overdue".
     """
     if due_on is None:
         return 0
@@ -218,7 +223,12 @@ def format_pct(pct) -> str:
     return text.replace(".", ",") + "%"
 
 
-def money(amount) -> str:
+def vnd_with_symbol(amount) -> str:
+    """An amount as the accountant reads it: grouped digits, then ₫.
+
+    Distinct from `format_vnd`, which leaves the symbol off for screens
+    that carry it in a column header instead.
+    """
     return f"{format_vnd(amount)} ₫"
 
 
@@ -253,11 +263,11 @@ def invoice_request_text(
     ]
     if split.vat:
         lines += [
-            f"Số tiền: {money(amount)} (đã gồm VAT {format_pct(vat_pct)})",
-            f"Chưa VAT: {money(split.net)}",
-            f"VAT {format_pct(vat_pct)}: {money(split.vat)}",
+            f"Số tiền: {vnd_with_symbol(amount)} (đã gồm VAT {format_pct(vat_pct)})",
+            f"Chưa VAT: {vnd_with_symbol(split.net)}",
+            f"VAT {format_pct(vat_pct)}: {vnd_with_symbol(split.vat)}",
         ]
     else:
-        lines.append(f"Số tiền: {money(amount)}")
+        lines.append(f"Số tiền: {vnd_with_symbol(amount)}")
     lines += ["", "Em cảm ơn chị!"]
     return "\n".join(lines)

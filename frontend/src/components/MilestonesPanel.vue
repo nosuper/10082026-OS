@@ -64,8 +64,7 @@
           <td class="py-1 pr-2 text-right tabular-nums text-gray-800">
             {{ vnd(row.amount) }}
             <div v-if="row.overdue" class="whitespace-nowrap text-xs text-red-700">
-              {{ row.days_overdue }} day{{ row.days_overdue === 1 ? "" : "s" }}
-              overdue
+              {{ overdueLabel(row.days_overdue) }}
             </div>
             <div
               v-else-if="row.due_on"
@@ -174,7 +173,7 @@ import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
-import { COLLECTION_STATUSES, PAID } from "../data/milestones"
+import { COLLECTION_STATUSES, PAID, overdueLabel } from "../data/milestones"
 
 const props = defineProps({ job: { type: String, required: true } })
 

@@ -273,6 +273,20 @@ def test_a_milestone_that_never_fell_due_is_not_late():
     assert days_overdue(due_on=None, now=NOW, terms_days=7) == 0
 
 
+def test_the_overdue_flag_and_the_day_count_never_disagree():
+    """A row flagged red beside the words "0 days overdue" is the bug
+    this guards. Lateness is counted in whole days, so the flag waits for
+    the first whole day rather than tripping the moment the terms lapse.
+    """
+    hours_past = NOW - timedelta(days=7, hours=9)
+    assert days_overdue(due_on=hours_past, now=NOW, terms_days=7) == 0
+    assert not is_overdue(status=REQUESTED, due_on=hours_past, now=NOW, terms_days=7)
+
+    a_day_past = NOW - timedelta(days=8, hours=9)
+    assert days_overdue(due_on=a_day_past, now=NOW, terms_days=7) == 1
+    assert is_overdue(status=REQUESTED, due_on=a_day_past, now=NOW, terms_days=7)
+
+
 def test_an_unrequested_milestone_past_its_terms_is_overdue_too():
     """Nobody has even asked the accountant — that is the worst case, not
     an exempt one."""

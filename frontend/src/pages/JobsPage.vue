@@ -7,7 +7,7 @@
       </span>
     </div>
 
-    <!-- Money owed past the company's payment terms. Unpaid invoices
+    <!-- Money owed past the company's payment terms. Unpaid milestones
          should chase the founder, not the reverse (spec #2, story 39);
          this strip carries the nudge until T12 builds the dashboard. -->
     <div
@@ -38,8 +38,7 @@
           <span class="text-red-800">{{ row.title }}</span>
           <span class="tabular-nums text-red-900">{{ vnd(row.amount) }} ₫</span>
           <span class="text-xs text-red-700">
-            {{ row.days_overdue }} day{{ row.days_overdue === 1 ? "" : "s" }}
-            overdue · {{ row.status }}
+            {{ overdueLabel(row.days_overdue) }} · {{ row.status }}
           </span>
         </li>
       </ul>
@@ -124,6 +123,7 @@ import { ErrorMessage, createResource, createListResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
+import { overdueLabel } from "../data/milestones"
 
 // Overdue money, oldest debt first — the server decides what counts as
 // overdue, so the board and a future dashboard cannot disagree.
