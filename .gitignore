@@ -23,3 +23,12 @@ frontend/auto-imports.d.ts
 frontend/components.d.ts
 frontend/*.log
 ~$*
+
+# Test-run and agent-tooling artifacts — reproducible, machine-local,
+# and large. A T10 branch once carried 700 of these into its PR.
+.e2e-npm-cache/
+.playwright-mcp/
+frontend/playwright-report/
+frontend/test-results/
+.agents/
+.worktrees/
