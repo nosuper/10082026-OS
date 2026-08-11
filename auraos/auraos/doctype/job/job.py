@@ -19,6 +19,7 @@ from auraos.auraos.doctype.deal.deal import (
     holds_operating_role,
 )
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
+from auraos.lib import settlement
 
 # The agreed production flow (spec #2, story 27), in board order.
 STAGES = [
@@ -274,6 +275,16 @@ class Job(Document):
         self.stage = redo_stage_for(self.stage)
         self.save()
         return self.revisions[-1]
+
+    def expense_categories(self):
+        """What an expense on this job may be categorised as.
+
+        Exactly the entries the client was quoted — the packages, plus
+        any cost line quoted on its own — which is what makes
+        actual-vs-quoted per package fall out of ordinary expense
+        logging (T8, story 32).
+        """
+        return settlement.categories(self.packages, self.cost_lines)
 
     def carry_commission(self, deal):
         """Copy the deal's commission rate onto the job after the insert.

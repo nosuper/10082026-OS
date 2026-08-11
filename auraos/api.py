@@ -16,7 +16,7 @@ from auraos.auraos.doctype.deal.deal import (
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
-from auraos.lib import pricing
+from auraos.lib import pricing, settlement
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import quote_chain
@@ -556,6 +556,248 @@ def log_job_revision(job, note):
         "chargeable": bool(latest.chargeable),
         "stage": doc.stage,
         "reopened": doc.stage != stage_before,
+    }
+
+
+# -- money out on a job (T8, issue #10) --
+
+ADVANCE_FIELDS = ["name", "recipient", "amount", "transferred_on", "note"]
+EXPENSE_FIELDS = [
+    "name", "spent_on", "amount", "category", "description",
+    "paid_by", "paid_from", "photo", "creation",
+]
+SETTLEMENT_FIELDS = [
+    "name", "recipient", "amount", "direction", "advanced", "spent",
+    "settled_on", "settled_by", "note",
+]
+
+
+def _money_rows(job):
+    """The job's whole money-out ledger, in reading order.
+
+    Read with get_all, which skips row-level permissions — the caller's
+    check on the Job itself is the entire authorization for these rows,
+    exactly as it is for a deal's comments and files.
+    """
+    return (
+        frappe.get_all(
+            "Job Advance",
+            filters={"job": job},
+            fields=ADVANCE_FIELDS,
+            order_by="transferred_on asc, creation asc",
+        ),
+        frappe.get_all(
+            "Job Expense",
+            filters={"job": job},
+            fields=EXPENSE_FIELDS,
+            order_by="spent_on desc, creation desc",
+        ),
+        frappe.get_all(
+            "Job Settlement",
+            filters={"job": job},
+            fields=SETTLEMENT_FIELDS,
+            order_by="settled_on asc",
+        ),
+    )
+
+
+def _float_dict(held):
+    return {
+        "holder": held.holder,
+        "advanced": round_vnd(held.advanced),
+        "spent": round_vnd(held.spent),
+        "settled": round_vnd(held.settled),
+        "amount": round_vnd(held.amount),
+        "direction": held.direction,
+    }
+
+
+@frappe.whitelist()
+def job_money(job):
+    """Every đồng out on a job: the ledger, the floats, actual-vs-quoted.
+
+    One call because the job's money screen is one question — "where has
+    the money gone, and who is holding what?" — and the three answers
+    are computed from the same rows.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    advances, expenses, settlements = _money_rows(job)
+
+    categories = settlement.category_actuals(doc.packages, doc.cost_lines, expenses)
+    sums = settlement.totals(advances, expenses, categories)
+    return {
+        "advances": advances,
+        "expenses": expenses,
+        "settlements": settlements,
+        "floats": [
+            _float_dict(held)
+            for held in settlement.floats(advances, expenses, settlements)
+        ],
+        "categories": [
+            {
+                "title": row.title,
+                "quoted": round_vnd(row.quoted),
+                "actual": round_vnd(row.actual),
+                "variance": round_vnd(row.variance),
+            }
+            for row in categories
+        ],
+        "advanced_total": round_vnd(sums.advanced),
+        "spent_total": round_vnd(sums.spent),
+        "quoted_total": round_vnd(sums.quoted),
+        # What this session may do with money, asked of the permissions
+        # themselves rather than of the role — the screen hides what the
+        # server would refuse anyway.
+        "may_advance": bool(frappe.has_permission("Job Advance", "create")),
+        "may_settle": bool(frappe.has_permission("Job Settlement", "create")),
+    }
+
+
+@frappe.whitelist()
+def job_expense_categories(job):
+    """The categories an expense on this job may carry, in quote order."""
+    _check_job_permission(job, "read")
+    return frappe.get_doc("Job", job).expense_categories()
+
+
+@frappe.whitelist()
+def record_job_advance(job, recipient, amount, transferred_on=None, note=None):
+    """Record cash handed to someone for this job.
+
+    Create permission on Job Advance is what keeps this the founder's
+    move; the job check is what stops it landing on a job they cannot
+    touch.
+    """
+    _check_job_permission(job, "write")
+    advance = frappe.get_doc(
+        {
+            "doctype": "Job Advance",
+            "job": job,
+            "recipient": recipient,
+            "amount": amount,
+            "transferred_on": transferred_on or frappe.utils.today(),
+            "note": note,
+        }
+    ).insert()
+    return {"name": advance.name, "float": _holder_float(job, recipient)}
+
+
+@frappe.whitelist()
+def log_job_expense(
+    job,
+    amount,
+    category=None,
+    description=None,
+    spent_on=None,
+    paid_by=None,
+    paid_from=None,
+    photo=None,
+):
+    """Log one payment out, the way it happens on a shoot: fast.
+
+    Everything but the amount has a default that is right often enough
+    not to be typed — today, whoever is logging it, out of their float.
+    `paid_by` exists for the case that isn't: money Linh spent that the
+    founder is entering from a Zalo message, which has to land on her
+    float rather than his.
+
+    Returns the payer's float, so the phone can answer the only
+    follow-up question there is — how much of the advance is left.
+    """
+    _check_job_permission(job, "write")
+    expense = frappe.get_doc(
+        {
+            "doctype": "Job Expense",
+            "job": job,
+            "amount": amount,
+            "category": category or None,
+            "description": description,
+            "spent_on": spent_on or frappe.utils.today(),
+            "paid_by": paid_by or frappe.session.user,
+            "paid_from": paid_from or settlement.FROM_ADVANCE,
+        }
+    )
+    expense.insert()
+    if photo:
+        _attach_photo(expense, photo)
+    return {
+        "name": expense.name,
+        "amount": round_vnd(expense.amount),
+        "category": expense.category,
+        "photo": expense.photo,
+        "float": _holder_float(job, expense.paid_by),
+    }
+
+
+def _attach_photo(expense, file_url):
+    """Point a just-uploaded receipt at the expense it documents.
+
+    The photo is taken before the expense exists — that is the whole
+    point of the phone flow — so it arrives as a private file attached
+    to nothing, readable only by whoever uploaded it. Re-parenting it
+    onto the expense hands it the expense's own permissions, which is
+    how the founder gets to see the producer's receipts.
+
+    Only an unattached file the caller uploaded themselves qualifies:
+    otherwise this endpoint would re-parent someone else's private file
+    and read it back through the expense.
+    """
+    photo = frappe.db.get_value(
+        "File",
+        {"file_url": file_url, "attached_to_name": ["is", "not set"]},
+        ["name", "owner"],
+        as_dict=True,
+    )
+    if not photo or photo.owner != frappe.session.user:
+        frappe.throw(
+            _("The photo must be a file you just uploaded"), frappe.ValidationError
+        )
+    file_doc = frappe.get_doc("File", photo.name)
+    file_doc.attached_to_doctype = "Job Expense"
+    file_doc.attached_to_name = expense.name
+    file_doc.attached_to_field = "photo"
+    file_doc.save()
+    expense.db_set("photo", file_url)
+
+
+def _holder_float(job, holder):
+    """One person's float on a job, as the screens want to read it."""
+    return _float_dict(settlement.float_for(holder, *_money_rows(job)))
+
+
+@frappe.whitelist()
+def settle_job(job, holder, note=None):
+    """Close one person's float: the one click of story 34.
+
+    The settlement is the transfer, recorded — so the float goes to zero
+    and a job that carries on paying for things opens a fresh one.
+    """
+    _check_job_permission(job, "write")
+    held = _holder_float(job, holder)
+    if not held["amount"]:
+        frappe.throw(
+            _("{0}'s float on {1} is already even").format(holder, job),
+            frappe.ValidationError,
+        )
+    settled = frappe.get_doc(
+        {
+            "doctype": "Job Settlement",
+            "job": job,
+            "recipient": holder,
+            "amount": held["amount"],
+            "advanced": held["advanced"],
+            "spent": held["spent"],
+            "note": note,
+        }
+    ).insert()
+    return {
+        "name": settled.name,
+        "recipient": settled.recipient,
+        "amount": settled.amount,
+        "direction": settled.direction,
+        "settled_on": settled.settled_on,
+        "float": _holder_float(job, holder),
     }
 
 
