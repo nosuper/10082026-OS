@@ -18,7 +18,7 @@ from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.lib import pricing
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
-from auraos.lib.quote import quote_chain
+from auraos.lib.quote import COMPANY_FIELDS, quote_chain
 
 # The company's standing commission practice (spec #2, story 14); the
 # Deal field carries the same default.
@@ -586,3 +586,48 @@ def set_quote_silence_days(days):
     settings.quote_silence_days = int(days or 0)
     settings.save()
     return int(settings.quote_silence_days)
+
+
+# -- company identity on the quote (T6.1a, issue #42) --
+
+
+@frappe.whitelist()
+def get_company_identity():
+    """The company block as stored, for the screen that edits it.
+
+    Not `company_view`: that is the client-facing projection, where an
+    empty field is None so a line can be dropped. An editor needs the
+    values themselves.
+    """
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return {
+        field: frappe.db.get_single_value("AuraOS Settings", field)
+        for field in COMPANY_FIELDS
+    }
+
+
+@frappe.whitelist()
+def set_company_identity(values):
+    """Save the company block — and only the company block.
+
+    The same narrow-surface rule as the deals table: a settings screen
+    that can write any field on this Single is one bug away from setting
+    the margin floor. Anything outside the whitelist is refused by name
+    rather than ignored quietly.
+    """
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("Company identity must be an object"), frappe.ValidationError)
+    unknown = set(values) - set(COMPANY_FIELDS)
+    if unknown:
+        frappe.throw(
+            _("Not part of the company identity: {0}").format(
+                ", ".join(sorted(unknown))
+            ),
+            frappe.ValidationError,
+        )
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.update(values)
+    settings.save()
+    return get_company_identity()

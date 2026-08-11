@@ -14,9 +14,12 @@ from frappe.model.document import Document
 
 from auraos.lib.money import format_vnd, round_vnd, to_decimal
 from auraos.lib.quote import (
+    COMPANY_FIELDS,
     client_view,
+    company_view,
     delivery_state,
     needs_nudge,
+    quote_number,
     quote_totals,
 )
 from auraos.lib.quote import client_entries as quote_client_entries
@@ -308,6 +311,11 @@ def client_context(quote):
     whitelist doesn't name.
     """
     context = client_view(quote.as_dict())
+    # Who is making the offer — read live, through its own whitelist,
+    # off a different document (issue #42, ADR 0002). Never merged into
+    # the quote's own keys: two documents, two boundaries.
+    context["company"] = company_identity()
+    context["quote_number"] = quote_number(quote.name, quote.version)
     # Presentation helpers on top of the whitelist, never new data.
     context["money"] = format_vnd
     context["published_display"] = (
@@ -316,6 +324,25 @@ def client_context(quote):
         else None
     )
     return context
+
+
+def stored_company_identity():
+    """The company block as stored, field by field.
+
+    Fetched per named field rather than as a document: `get_single_value`
+    over the whitelist cannot pick up a setting nobody meant to publish,
+    which matters more here than the round trips — the same Single holds
+    the margin floor.
+    """
+    return {
+        field: frappe.db.get_single_value("AuraOS Settings", field)
+        for field in COMPANY_FIELDS
+    }
+
+
+def company_identity():
+    """The company block a client sees, read at render time not at publish."""
+    return company_view(stored_company_identity())
 
 
 def request_header(name):

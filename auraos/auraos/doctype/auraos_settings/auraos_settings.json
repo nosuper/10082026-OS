@@ -5,7 +5,24 @@
  "engine": "InnoDB",
  "field_order": [
   "margin_floor_pct",
-  "quote_silence_days"
+  "quote_silence_days",
+  "company_section",
+  "logo",
+  "company_name",
+  "tax_code",
+  "address",
+  "column_break_company",
+  "phone",
+  "email",
+  "website",
+  "bank_section",
+  "bank_name",
+  "bank_account_number",
+  "column_break_bank",
+  "bank_account_name",
+  "signature_section",
+  "signatory_name",
+  "signatory_title"
  ],
  "fields": [
   {
@@ -22,12 +39,102 @@
    "fieldtype": "Int",
    "label": "Quote Silence Nudge (days)",
    "non_negative": 1
+  },
+  {
+   "description": "What a client reads at the top of a quote. Read live at render time, so editing it changes every quote already sent — see docs/adr/0002-quote-branding-renders-live.md. Leave a field empty and its line does not print.",
+   "fieldname": "company_section",
+   "fieldtype": "Section Break",
+   "label": "Company Identity"
+  },
+  {
+   "description": "Public, not private — a client with no account has to be able to load it",
+   "fieldname": "logo",
+   "fieldtype": "Attach Image",
+   "label": "Logo"
+  },
+  {
+   "fieldname": "company_name",
+   "fieldtype": "Data",
+   "label": "Company Name"
+  },
+  {
+   "fieldname": "tax_code",
+   "fieldtype": "Data",
+   "label": "Tax Code"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Small Text",
+   "label": "Address"
+  },
+  {
+   "fieldname": "column_break_company",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "website",
+   "fieldtype": "Data",
+   "label": "Website"
+  },
+  {
+   "description": "Printed on the quote so a client knows where to pay. The whole block disappears when none of it is filled in.",
+   "fieldname": "bank_section",
+   "fieldtype": "Section Break",
+   "label": "Bank"
+  },
+  {
+   "description": "Free text rather than the bank list on Party Company — one vocabulary copied a third time is worse than typing it once",
+   "fieldname": "bank_name",
+   "fieldtype": "Data",
+   "label": "Bank Name"
+  },
+  {
+   "fieldname": "bank_account_number",
+   "fieldtype": "Data",
+   "label": "Bank Account Number"
+  },
+  {
+   "fieldname": "column_break_bank",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bank_account_name",
+   "fieldtype": "Data",
+   "label": "Bank Account Name"
+  },
+  {
+   "description": "Printed on the PDF only, above the space left for the seal. The client's column is left blank for hand-completion.",
+   "fieldname": "signature_section",
+   "fieldtype": "Section Break",
+   "label": "Signature Block"
+  },
+  {
+   "fieldname": "signatory_name",
+   "fieldtype": "Data",
+   "label": "Signatory Name"
+  },
+  {
+   "fieldname": "signatory_title",
+   "fieldtype": "Data",
+   "label": "Signatory Title"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-10 00:00:00.000000",
+ "modified": "2026-08-11 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "AuraOS",
  "name": "AuraOS Settings",

@@ -23,3 +23,11 @@ frontend/auto-imports.d.ts
 frontend/components.d.ts
 frontend/*.log
 ~$*
+
+# Test-run and agent-tooling artifacts — reproducible and machine-local.
+.e2e-npm-cache/
+.playwright-mcp/
+.worktrees/
+frontend/playwright-report/
+frontend/test-results/
+.agents/

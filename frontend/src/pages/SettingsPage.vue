@@ -52,13 +52,101 @@
 
       <ErrorMessage class="mt-2" :message="error" />
     </div>
+
+    <!--
+      What a client reads at the top of every quote. Rendered live, so
+      editing this changes quotes already sent — see
+      docs/adr/0002-quote-branding-renders-live.md.
+    -->
+    <div v-if="!denied" class="mt-4 rounded-lg border bg-white p-4">
+      <h2 class="text-sm font-semibold text-gray-800">Company identity</h2>
+      <p class="mt-1 text-xs text-gray-500">
+        Printed on every quote page and PDF. These render live — changing
+        one updates quotes already sent, without making a new version. An
+        empty field prints nothing at all.
+      </p>
+
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <img
+          v-if="company.logo"
+          :src="company.logo"
+          alt="Logo"
+          class="max-h-12 max-w-40 rounded border bg-white p-1"
+        />
+        <!-- Public on purpose: a client with no account has to load it,
+             and a private file would 404 on the quote page. -->
+        <FileUploader
+          :file-types="'image/*'"
+          :upload-args="{ private: false }"
+          @success="onLogo"
+          @failure="onFail"
+        >
+          <template #default="{ openFileSelector, uploading }">
+            <Button :loading="uploading" @click="openFileSelector">
+              {{ company.logo ? "Replace logo" : "Upload logo" }}
+            </Button>
+          </template>
+        </FileUploader>
+        <button
+          v-if="company.logo"
+          class="text-xs text-gray-500 underline"
+          @click="company.logo = null"
+        >
+          Remove
+        </button>
+      </div>
+      <p class="mt-1 text-xs text-gray-500">
+        Uploaded public, because a client with no account has to be able to
+        load it.
+      </p>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <label v-for="field in IDENTITY_FIELDS" :key="field.name" class="text-xs text-gray-600">
+          {{ field.label }}
+          <input
+            v-model="company[field.name]"
+            class="mt-0.5 block w-full rounded border-gray-200 px-2 py-1 text-sm"
+            :placeholder="field.placeholder || ''"
+          />
+        </label>
+      </div>
+
+      <div class="mt-4 flex items-center gap-2">
+        <Button variant="solid" :loading="companySaver.loading" @click="saveCompany">
+          Save
+        </Button>
+        <span v-if="companySaved" class="text-xs text-green-700">Saved.</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { reactive, ref } from "vue"
+import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
+
+// Mirrors auraos.lib.quote.COMPANY_FIELDS, minus the logo, which has its
+// own uploader. Drift is only caught in one direction: a field added
+// here and not there is refused by name on save, but a field added there
+// and not here is simply uneditable from this screen.
+const IDENTITY_FIELDS = [
+  { name: "company_name", label: "Company name" },
+  { name: "tax_code", label: "Tax code" },
+  { name: "address", label: "Address" },
+  { name: "phone", label: "Phone" },
+  { name: "email", label: "Email" },
+  { name: "website", label: "Website" },
+  { name: "bank_name", label: "Bank" },
+  { name: "bank_account_number", label: "Bank account number" },
+  { name: "bank_account_name", label: "Bank account holder" },
+  {
+    name: "signatory_name",
+    label: "Signatory name",
+    placeholder: "Printed on the PDF signature block",
+  },
+  { name: "signatory_title", label: "Signatory title" },
+]
 
 const floorPct = ref(0)
 const denied = ref(false)
@@ -125,5 +213,49 @@ const silenceSaver = createResource({
 function saveSilence() {
   silenceSaved.value = false
   silenceSaver.submit({ days: silenceDays.value || 0 })
+}
+
+// -- company identity (T6.1a) --
+
+const company = reactive({ logo: null })
+const companySaved = ref(false)
+
+createResource({
+  url: "auraos.api.get_company_identity",
+  auto: true,
+  onSuccess(stored) {
+    Object.assign(company, stored)
+  },
+  onError() {
+    denied.value = true
+  },
+})
+
+const companySaver = createResource({
+  url: "auraos.api.set_company_identity",
+  onSuccess(stored) {
+    Object.assign(company, stored)
+    companySaved.value = true
+    error.value = ""
+  },
+  onError(err) {
+    companySaved.value = false
+    error.value = frappeErrorMessage(err)
+  },
+})
+
+function onLogo(file) {
+  error.value = ""
+  company.logo = file.file_url
+  companySaved.value = false
+}
+
+function onFail(err) {
+  error.value = frappeErrorMessage(err) || String(err)
+}
+
+function saveCompany() {
+  companySaved.value = false
+  companySaver.submit({ values: { ...company } })
 }
 </script>

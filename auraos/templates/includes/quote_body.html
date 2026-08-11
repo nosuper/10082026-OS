@@ -3,8 +3,18 @@
 
   Rendered by both the public page (auraos/www/quote.html) and the PDF
   export (auraos.api.quote_pdf) from the same context, so the two can
-  never drift. Every value here comes from auraos.lib.quote.client_view;
-  nothing else about the deal is in scope, so nothing else can leak.
+  never drift. Every value here comes from auraos.lib.quote: the offer
+  through `client_view`, the company through `company_view`. Nothing
+  else about the deal or the settings is in scope, so nothing else can
+  leak.
+
+  Print chrome rides along in this same file rather than in a second
+  template. Frappe's PDF pipeline (frappe.utils.pdf) extracts the
+  elements with id="header-html" and id="footer-html", renders them as
+  wkhtmltopdf's running header and footer, and strips them from the
+  body — so the page never shows them. `visible-pdf` is the same
+  mechanism in reverse: hidden on the page, unhidden in the PDF. That is
+  how the signature block reaches the printout and not the browser.
 #}
 <style>
   .aura-quote { max-width: 46rem; margin: 0 auto; color: #111827;
@@ -30,13 +40,132 @@
   .aura-quote .aura-notes { margin-top: 2.5rem; padding-top: 1rem;
     border-top: 1px solid #f3f4f6; color: #4b5563; font-size: .875rem;
     white-space: pre-line; }
+
+  /* Letterhead */
+  .aura-letterhead { display: flex; justify-content: space-between;
+    align-items: flex-start; gap: 2rem; padding-bottom: 1.25rem;
+    margin-bottom: 2rem; border-bottom: 2px solid #111827; }
+  .aura-letterhead .aura-logo { max-height: 4rem; max-width: 14rem; }
+  .aura-letterhead .aura-company-name { font-size: 1.05rem; font-weight: 700; }
+  .aura-letterhead .aura-company-line { color: #4b5563; font-size: .8125rem;
+    line-height: 1.5; white-space: pre-line; }
+  .aura-letterhead .aura-company-right { text-align: right; }
+
+  .aura-bank { margin-top: 2rem; padding-top: 1rem;
+    border-top: 1px solid #f3f4f6; color: #4b5563; font-size: .8125rem; }
+  .aura-bank .aura-bank-heading { font-weight: 600; color: #111827;
+    margin-bottom: .25rem; }
+
+  /* PDF-only. Frappe unhides .visible-pdf when it builds the document. */
+  .visible-pdf { display: none; }
+  .aura-signatures { margin-top: 3rem; page-break-inside: avoid; }
+  .aura-signatures table { width: 100%; }
+  .aura-signatures td { width: 50%; border: 0; padding: 0 1rem;
+    vertical-align: top; }
+  .aura-signatures .aura-sign-role { font-size: .75rem; text-transform: uppercase;
+    letter-spacing: .04em; color: #6b7280; }
+  .aura-signatures .aura-sign-name { font-weight: 700; margin-top: .25rem; }
+  .aura-signatures .aura-sign-title { color: #4b5563; font-size: .8125rem; }
+  /* Room for a wet signature and the company seal over it. */
+  .aura-signatures .aura-sign-space { height: 5rem; }
+  .aura-signatures .aura-sign-rule { border-top: 1px solid #9ca3af;
+    padding-top: .35rem; font-size: .75rem; color: #6b7280; }
+
+  /* Running header and footer. Frappe extracts these two elements for
+     wkhtmltopdf and strips them from the body, but only on the PDF
+     path — on the web page they would simply render, so their contents
+     carry `visible-pdf` too. Frappe unhides that class inside the
+     extracted element, so the PDF still shows them. */
+  .aura-running { font-family: -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif; font-size: .6875rem; color: #6b7280;
+    display: flex; justify-content: space-between; padding: 0 2mm; }
+  .aura-running-header { border-bottom: 1px solid #e5e7eb; padding-bottom: 2mm; }
+  .aura-running-footer { border-top: 1px solid #e5e7eb; padding-top: 2mm; }
 </style>
 
+{#
+  Pages 2+ only: wkhtmltopdf repeats this on every page, and the
+  letterhead below already identifies page 1. A page that gets detached
+  from the rest is still traceable to a company and a quote number.
+#}
+
+<div id="header-html">
+  <script>
+    /*
+      Page 1 already has the letterhead, so the slim continuation header
+      belongs on pages 2+ only — and wkhtmltopdf has no option for that.
+      What it does give the header document is its page number, as a
+      query string; Frappe's own footer template reads the same one to
+      print "Page X of Y".
+
+      Deliberately *inside* the extracted element. Frappe's
+      prepare_header_footer copies the body's <head> and <style> tags
+      into the header document but never a body script, so a script left
+      outside would only reach the PDF by accident of where html5lib
+      parked it — and would silently stop working the day this include
+      gains any markup ahead of it.
+    */
+    window.addEventListener("load", function () {
+      /* ES5 only, and the query parsed by hand: wkhtmltopdf renders in
+         an old WebKit with no URLSearchParams. Frappe's own footer
+         script splits the string the same way, for the same reason. */
+      var params = window.location.search.substring(1).split("&");
+      var page = null;
+      for (var i = 0; i < params.length; i++) {
+        var pair = params[i].split("=", 2);
+        if (pair[0] === "page") page = unescape(pair[1]);
+      }
+      var running = document.querySelector(".aura-running-header");
+      if (running && page === "1") running.style.display = "none";
+    });
+  </script>
+  <div class="aura-running aura-running-header visible-pdf">
+    <span>{{ company.company_name or "" }}</span>
+    <span>{{ quote_number or "" }}</span>
+  </div>
+</div>
+
+<div id="footer-html">
+  <div class="aura-running aura-running-footer visible-pdf">
+    <span>
+      {%- if company.tax_code %}Tax code {{ company.tax_code }}{% endif -%}
+    </span>
+    {# Frappe's footer wrapper fills these by class name from
+       wkhtmltopdf's page variables. #}
+    <span>Page <span class="page"></span> of <span class="topage"></span></span>
+  </div>
+</div>
+
 <div class="aura-quote">
+  {% if company.has_letterhead %}
+  <div class="aura-letterhead">
+    <div>
+      {% if company.logo %}
+      <img class="aura-logo" src="{{ company.logo }}"
+           alt="{{ company.company_name or '' }}" />
+      {% endif %}
+      {% if company.company_name %}
+      <div class="aura-company-name">{{ company.company_name }}</div>
+      {% endif %}
+      {% if company.tax_code %}
+      <div class="aura-company-line">Tax code {{ company.tax_code }}</div>
+      {% endif %}
+    </div>
+    {% if company.has_contact %}
+    <div class="aura-company-line aura-company-right">
+      {%- if company.address %}{{ company.address }}<br />{% endif -%}
+      {%- if company.phone %}{{ company.phone }}<br />{% endif -%}
+      {%- if company.email %}{{ company.email }}<br />{% endif -%}
+      {%- if company.website %}{{ company.website }}{% endif -%}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <h1>{{ title or "Quote" }}</h1>
   <div class="aura-meta">
     {% if client_name %}{{ client_name }} &middot; {% endif %}
-    Version {{ version }}
+    {{ quote_number or "Version " ~ version }}
     {% if published_display %} &middot; {{ published_display }}{% endif %}
   </div>
 
@@ -78,4 +207,48 @@
   {% if notes %}
   <div class="aura-notes">{{ notes }}</div>
   {% endif %}
+
+  {% if company.has_bank %}
+  <div class="aura-bank">
+    <div class="aura-bank-heading">Payment</div>
+    {%- if company.bank_name %}{{ company.bank_name }}<br />{% endif -%}
+    {%- if company.bank_account_number %}
+      Account {{ company.bank_account_number }}<br />
+    {%- endif -%}
+    {%- if company.bank_account_name %}{{ company.bank_account_name }}{% endif -%}
+  </div>
+  {% endif %}
+
+  {#
+    Signed by hand, on paper, with a seal — so this is on the PDF and
+    not on the page. The client's column stays blank: filling in their
+    signatory's name for them is not ours to do.
+  #}
+  <div class="aura-signatures visible-pdf">
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <div class="aura-sign-role">For the client</div>
+            <div class="aura-sign-name">{{ client_name or "&nbsp;" | safe }}</div>
+            <div class="aura-sign-space"></div>
+            <div class="aura-sign-rule">Name, title, date and seal</div>
+          </td>
+          <td>
+            <div class="aura-sign-role">
+              For {{ company.company_name or "us" }}
+            </div>
+            <div class="aura-sign-name">
+              {{ company.signatory_name or "&nbsp;" | safe }}
+            </div>
+            {% if company.signatory_title %}
+            <div class="aura-sign-title">{{ company.signatory_title }}</div>
+            {% endif %}
+            <div class="aura-sign-space"></div>
+            <div class="aura-sign-rule">Signature, date and seal</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>

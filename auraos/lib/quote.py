@@ -46,6 +46,83 @@ CLIENT_QUOTE_FIELDS = (
 # ours; the client sees an offer, not how we arrived at it.
 CLIENT_PACKAGE_FIELDS = ("title", "description", "price")
 
+# Who is making the offer (T6.1a, issue #42). A second whitelist rather
+# than a wider first one, because these fields come off a different
+# document: AuraOS Settings, which also holds the margin floor. Handing
+# that Single to a guest render context would put an internal number one
+# typo away from a client's page.
+#
+# Unlike the quote, this is read live at render time and never frozen
+# into a version — docs/adr/0002-quote-branding-renders-live.md says why.
+COMPANY_FIELDS = (
+    "logo",
+    "company_name",
+    "tax_code",
+    "address",
+    "phone",
+    "email",
+    "website",
+    "bank_name",
+    "bank_account_number",
+    "bank_account_name",
+    "signatory_name",
+    "signatory_title",
+)
+
+# Which of those, present, make a block worth printing at all.
+_BANK_FIELDS = ("bank_name", "bank_account_number", "bank_account_name")
+_CONTACT_FIELDS = ("address", "phone", "email", "website")
+# The letterhead's own half: who we are, as opposed to how to reach us
+# or where to pay. The signatory names are not here — they belong to the
+# PDF's signature block, and a site that filled in only those has no
+# letterhead to print.
+_MASTHEAD_FIELDS = ("logo", "company_name", "tax_code")
+
+
+def company_view(settings: Mapping[str, Any]) -> dict:
+    """The client-facing projection of the company's own identity.
+
+    Every field comes back present, unfilled ones as None, so the
+    template can address each key unconditionally and drop the lines
+    that have nothing behind them. An empty string is an absence: a
+    label with a blank beside it reads as a mistake on a printed
+    contract, and a heading over three empty lines reads worse — hence
+    `has_bank` and `has_contact`, which say whether a block has anything
+    in it at all.
+    """
+    view = {field: _filled(settings.get(field)) for field in COMPANY_FIELDS}
+    view["has_bank"] = any(view[field] for field in _BANK_FIELDS)
+    view["has_contact"] = any(view[field] for field in _CONTACT_FIELDS)
+    # Per field, not all-or-nothing: a site that filled in an address
+    # and a tax code but never a company name still has a letterhead,
+    # and hiding it would drop filled fields off the page.
+    view["has_letterhead"] = (
+        any(view[field] for field in _MASTHEAD_FIELDS) or view["has_contact"]
+    )
+    return view
+
+
+def _filled(value):
+    """A value, or None where there is nothing to print."""
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+def quote_number(name: str | None, version: int | None) -> str | None:
+    """What the printed document calls itself — `DQ-0007-v2`.
+
+    The record's identifier alone stops being an answer the moment a
+    second version exists, and a page detached from its PDF has to be
+    matchable to the offer it belongs to. v1 is written out for the same
+    reason: a bare `DQ-0007` on a desk is ambiguous once v2 is sent.
+    """
+    if not name:
+        return None
+    return f"{name}-v{version}" if version else name
+
 
 def client_view(quote: Mapping[str, Any]) -> dict:
     """The client-facing projection of a quote row and its packages.
