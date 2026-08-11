@@ -22,6 +22,8 @@
   "revision_rounds",
   "change_order_due",
   "revisions",
+  "money_section",
+  "payment_milestones",
   "breakdown_section",
   "cost_lines",
   "packages",
@@ -155,6 +157,18 @@
    "fieldtype": "Table",
    "label": "Revisions",
    "options": "Job Revision"
+  },
+  {
+   "fieldname": "money_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Milestones"
+  },
+  {
+   "description": "What the client owes and when — amounts derived from the quoted total",
+   "fieldname": "payment_milestones",
+   "fieldtype": "Table",
+   "label": "Payment Milestones",
+   "options": "Job Payment Milestone"
   },
   {
    "collapsible": 1,
