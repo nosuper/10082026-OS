@@ -580,7 +580,7 @@ const categoryCreator = createResource({ url: "frappe.client.insert" })
 const categoryCreations = new Map()
 
 function errorMessage(err) {
-  return err.messages?.join("\n") || err.message || "Could not add category"
+  return err.messages?.join("\n") || err.message || "Something went wrong"
 }
 
 async function ensureItemCategory(line) {
