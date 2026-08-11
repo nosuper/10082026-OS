@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
 
+import { administratorState } from "./e2e/auth-state.js"
+
 const baseURL = process.env.E2E_BASE_URL || "http://127.0.0.1:18000"
 
 export default defineConfig({
@@ -15,7 +17,7 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.js",
   use: {
     baseURL,
-    storageState: ".playwright-auth/administrator.json",
+    storageState: administratorState,
     // Keep action timelines and screenshots without recording authenticated
     // request headers in network/DOM snapshots uploaded by CI.
     trace: { mode: "retain-on-failure", snapshots: false },

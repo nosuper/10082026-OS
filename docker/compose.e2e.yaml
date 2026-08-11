@@ -14,6 +14,10 @@ services:
       E2E_BASE_URL: http://frappe:8000
       E2E_ADMIN_USER: Administrator
       E2E_ADMIN_PASSWORD: admin
+      # Off the bind mount: this container is root, so signed-in state written
+      # under /workspace/repo would land on the host owned by root and outlive
+      # the run. It is consumed entirely inside this container.
+      E2E_AUTH_DIR: /tmp/playwright-auth
     volumes:
       - ..:/workspace/repo
       - playwright-node-modules:/workspace/repo/frontend/node_modules

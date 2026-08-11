@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test"
 import { readFile } from "node:fs/promises"
 
+import { administratorState, producerState } from "./auth-state.js"
+
 const existingDeal = "Playwright Existing Deal"
 const company = "Playwright Client"
 const producerName = "Playwright Producer"
 const persistedBudget = "12.500.000"
 const producerTest = test.extend({
-  storageState: ".playwright-auth/producer.json",
+  storageState: producerState,
 })
 
 async function openDeals(page) {
@@ -134,10 +136,8 @@ test("deal titles open the card while editable cells stay inline", async ({ page
 })
 
 test("two users keep distinct view and column preferences in one browser context", async ({ browser }) => {
-  const administrator = JSON.parse(
-    await readFile(".playwright-auth/administrator.json", "utf8")
-  )
-  const producer = JSON.parse(await readFile(".playwright-auth/producer.json", "utf8"))
+  const administrator = JSON.parse(await readFile(administratorState, "utf8"))
+  const producer = JSON.parse(await readFile(producerState, "utf8"))
   const context = await browser.newContext()
   const page = await context.newPage()
 

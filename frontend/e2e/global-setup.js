@@ -1,10 +1,10 @@
 import { chromium } from "@playwright/test"
 import { mkdir } from "node:fs/promises"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
-
-const here = path.dirname(fileURLToPath(import.meta.url))
-const authDirectory = path.resolve(here, "../.playwright-auth")
+import {
+  administratorState,
+  authDirectory,
+  producerState,
+} from "./auth-state.js"
 
 async function logIn(baseURL, credentials, stateFile) {
   const browser = await chromium.launch()
@@ -41,7 +41,7 @@ export default async function globalSetup(config) {
       user: process.env.E2E_ADMIN_USER || "Administrator",
       password: process.env.E2E_ADMIN_PASSWORD || "admin",
     },
-    path.join(authDirectory, "administrator.json")
+    administratorState
   )
   await logIn(
     baseURL,
@@ -49,6 +49,6 @@ export default async function globalSetup(config) {
       user: requiredEnvironment("E2E_PRODUCER_USER"),
       password: requiredEnvironment("E2E_PRODUCER_PASSWORD"),
     },
-    path.join(authDirectory, "producer.json")
+    producerState
   )
 }

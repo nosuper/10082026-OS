@@ -3,14 +3,11 @@ set -euo pipefail
 
 REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 COMPOSE=(docker compose --project-name auraos-e2e --file "$REPO_DIR/docker/compose.yaml" --file "$REPO_DIR/docker/compose.e2e.yaml")
-AUTH_FILES=(
-  "$REPO_DIR/frontend/.playwright-auth/administrator.json"
-  "$REPO_DIR/frontend/.playwright-auth/producer.json"
-)
 
+# Signed-in state lives inside the Playwright container (E2E_AUTH_DIR), so it
+# goes when the container does and there is nothing here to delete.
 cleanup() {
   "${COMPOSE[@]}" down --volumes --remove-orphans
-  rm -f "${AUTH_FILES[@]}"
 }
 
 trap cleanup EXIT
