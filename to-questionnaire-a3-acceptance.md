@@ -76,6 +76,22 @@ This page is the one thing outsiders see. Typography, spacing, the letterhead, t
 
 >
 
+## Round 2 — the founder's answers (in-session, 2026-08-12) and what shipped
+
+Steps 3, 4 passed. Step 2: the Adjustment row was rejected — the
+override must be folded back into the lines so the numbers read as
+simply quoted that way; shipped as a proportional whole-đồng rescale
+with the remainder on the last line. 5.1: yes to the marked-up unit
+rate, and split the columns like the spreadsheet — the table is now
+Qty | Unit | Qty | Unit | Unit Price | Amount. 5.2: the page lacked the
+recipient — now invoice-shaped: QUOTATION heading, a frozen bill-to
+block (client name, address, tax code, Attn: contact) opposite the
+quote number, date and project.
+
+Note: versions published before this round carry no bill-to (the
+fields didn't exist when they froze); publish a fresh version to see
+the full block.
+
 ## Verdict
 
 - [ ] **GO** — merge it; A4 (job page + phone expense screen) starts
