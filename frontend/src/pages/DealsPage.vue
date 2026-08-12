@@ -479,54 +479,8 @@ import VndInput from "../components/VndInput.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd, vndShort } from "../utils/money"
 import { ago, daysSince } from "../utils/time"
-
-// The agreed pipeline, in board order (spec issue #2, story 3).
-// One color per stage, used everywhere a stage appears — board column
-// dots and table pills must never disagree.
-const STAGES = [
-  {
-    label: "Brief Received",
-    value: "Brief Received",
-    dot: "bg-gray-400",
-    pill: "bg-gray-100 text-gray-700",
-  },
-  {
-    label: "De-brief",
-    value: "De-brief",
-    dot: "bg-sky-500",
-    pill: "bg-sky-50 text-sky-700",
-  },
-  {
-    label: "Breakdown",
-    value: "Breakdown",
-    dot: "bg-violet-500",
-    pill: "bg-violet-50 text-violet-700",
-  },
-  {
-    label: "Quote Sent",
-    value: "Quote Sent",
-    dot: "bg-amber-500",
-    pill: "bg-amber-50 text-amber-800",
-  },
-  {
-    label: "Negotiation",
-    value: "Negotiation",
-    dot: "bg-orange-500",
-    pill: "bg-orange-50 text-orange-800",
-  },
-  {
-    label: "Won",
-    value: "Won",
-    dot: "bg-green-500",
-    pill: "bg-green-50 text-green-700",
-  },
-  {
-    label: "Lost",
-    value: "Lost",
-    dot: "bg-red-500",
-    pill: "bg-red-50 text-red-700",
-  },
-]
+import { STAGES, stageClass } from "../utils/stages"
+import { currentUser } from "../utils/user"
 
 // The founder's weekly ritual: which deal has sat still for over a
 // week? Past this many days in one stage, the age badge turns amber.
@@ -627,14 +581,6 @@ function ownerLabel(user) {
 }
 
 // -- table view (T3.2) --
-
-function currentUser() {
-  const cookie = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("user_id="))
-  return cookie ? decodeURIComponent(cookie.slice("user_id=".length)) : "unknown"
-}
 
 const preferenceKey = `auraos.deals.table.${currentUser()}`
 
@@ -809,12 +755,6 @@ function tagsFor(deal) {
   return dealTags.data?.[deal.name] || []
 }
 
-function stageClass(stage) {
-  return (
-    STAGES.find((entry) => entry.value === stage)?.pill ||
-    "bg-gray-100 text-gray-700"
-  )
-}
 
 // -- inline editing and blank-row creation (T3.3, issue #27) --
 

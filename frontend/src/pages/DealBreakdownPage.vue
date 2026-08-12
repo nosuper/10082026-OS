@@ -1,6 +1,10 @@
 <template>
-  <div class="px-4 py-6">
-    <div class="mb-4 flex items-center gap-3">
+  <div class="px-4 pb-6">
+    <!-- Sticky: this page is long and the founder sits on it for hours;
+         Save and the deal's identity must never scroll away. -->
+    <div
+      class="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b bg-gray-50/95 px-4 py-3 backdrop-blur"
+    >
       <router-link to="/deals" class="text-sm text-gray-500 hover:text-gray-800">
         ← Deals
       </router-link>
@@ -9,20 +13,25 @@
       </h1>
       <span
         v-if="deal.data"
-        class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+        class="rounded-full px-2 py-0.5 text-xs"
+        :class="stageClass(deal.data.stage)"
       >
         {{ deal.data.stage }}
       </span>
-      <div class="ml-auto flex items-center gap-2">
+      <div class="ml-auto flex items-center gap-3">
+        <span v-if="dirty" class="text-xs text-amber-700">
+          Unsaved changes — Ctrl+S saves
+        </span>
         <Button variant="solid" :loading="saving" @click="save">Save</Button>
       </div>
     </div>
 
     <div
       v-if="live?.floor_breached"
-      class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+      class="mb-4 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
     >
-      ⚠ Margin is below the company floor — this quote is flagged as
+      <FeatherIcon name="alert-triangle" class="h-4 w-4 shrink-0" />
+      Margin is below the company floor — this quote is flagged as
       unprofitable.
     </div>
 
@@ -34,17 +43,43 @@
       <!-- Cost lines -->
       <div class="mb-2 flex items-center gap-2">
         <h2 class="text-sm font-semibold text-gray-800">Cost lines</h2>
-        <Button class="ml-auto" @click="addLine">Add line</Button>
+        <details class="relative ml-auto">
+          <summary
+            class="cursor-pointer select-none rounded-md border bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Detail columns
+          </summary>
+          <div
+            class="absolute right-0 z-20 mt-1 w-52 rounded-md border bg-white p-2 shadow-lg"
+          >
+            <label
+              v-for="col in META_COLUMNS"
+              :key="col.key"
+              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50"
+            >
+              <input
+                type="checkbox"
+                :checked="visibleMeta.includes(col.key)"
+                @change="toggleMeta(col.key)"
+              />
+              {{ col.label }}
+            </label>
+            <p class="mt-1 border-t px-2 pt-1.5 text-xs text-gray-400">
+              Money columns are always shown.
+            </p>
+          </div>
+        </details>
+        <Button @click="addLine">Add line</Button>
       </div>
       <div class="overflow-x-auto rounded-lg border">
-        <table class="w-full min-w-[1700px] text-sm">
+        <table class="w-full text-sm" :class="visibleMeta.length ? 'min-w-[1700px]' : 'min-w-[1100px]'">
           <thead class="bg-gray-50 text-left text-xs text-gray-600">
             <tr>
               <th class="px-2 py-2 font-medium">Description</th>
-              <th class="px-2 py-2 font-medium">Item Category</th>
-              <th class="px-2 py-2 font-medium">Cost Phase</th>
-              <th class="px-2 py-2 font-medium">Source Type</th>
-              <th class="px-2 py-2 font-medium">Source Contact</th>
+              <th v-if="metaVisible('item_category')" class="px-2 py-2 font-medium">Item Category</th>
+              <th v-if="metaVisible('cost_phase')" class="px-2 py-2 font-medium">Cost Phase</th>
+              <th v-if="metaVisible('source_type')" class="px-2 py-2 font-medium">Source Type</th>
+              <th v-if="metaVisible('source_contact')" class="px-2 py-2 font-medium">Source Contact</th>
               <th class="px-2 py-2 font-medium">Package</th>
               <th class="px-2 py-2 font-medium">Qty</th>
               <th class="px-2 py-2 font-medium">Unit</th>
@@ -73,7 +108,7 @@
                   placeholder="Description"
                 />
               </td>
-              <td class="px-1 py-1">
+              <td v-if="metaVisible('item_category')" class="px-1 py-1">
                 <input
                   v-model="line.item_category"
                   list="item-categories"
@@ -82,7 +117,7 @@
                   @change="ensureItemCategory(line)"
                 />
               </td>
-              <td class="px-1 py-1">
+              <td v-if="metaVisible('cost_phase')" class="px-1 py-1">
                 <select
                   v-model="line.cost_phase"
                   class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
@@ -97,7 +132,7 @@
                   </option>
                 </select>
               </td>
-              <td class="px-1 py-1">
+              <td v-if="metaVisible('source_type')" class="px-1 py-1">
                 <select
                   v-model="line.source_type"
                   class="w-28 rounded border-gray-200 px-2 py-1 text-sm"
@@ -108,7 +143,7 @@
                   </option>
                 </select>
               </td>
-              <td class="px-1 py-1">
+              <td v-if="metaVisible('source_contact')" class="px-1 py-1">
                 <select
                   v-model="line.source_contact"
                   class="w-40 rounded border-gray-200 px-2 py-1 text-sm"
@@ -163,18 +198,16 @@
                 />
               </td>
               <td class="px-1 py-1">
-                <input
-                  v-model.number="line.unit_price"
-                  type="number"
-                  min="0"
-                  step="1000"
-                  class="w-28 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                <VndInput
+                  :model-value="line.unit_price"
+                  class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+                  @update:model-value="line.unit_price = $event === '' ? 0 : $event"
                 />
               </td>
               <td class="px-1 py-1">
                 <select
                   v-model="line.tax_type"
-                  class="w-32 rounded border-gray-200 px-2 py-1 text-sm"
+                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
                 >
                   <option v-for="t in TAX_TYPES" :key="t" :value="t">
                     {{ t }}
@@ -206,34 +239,34 @@
               <td class="px-2 py-1 text-right tabular-nums text-gray-700">
                 {{ vnd(live?.lines?.[i]?.margin) }}
               </td>
-              <td class="px-1 py-1 whitespace-nowrap text-gray-400">
+              <td class="whitespace-nowrap px-1 py-1 text-gray-400">
                 <button
-                  class="px-1 hover:text-gray-800 disabled:opacity-30"
+                  class="rounded p-1 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-30"
                   :disabled="i === 0"
                   title="Move up"
                   @click="moveLine(i, -1)"
                 >
-                  ↑
+                  <FeatherIcon name="chevron-up" class="h-3.5 w-3.5" />
                 </button>
                 <button
-                  class="px-1 hover:text-gray-800 disabled:opacity-30"
+                  class="rounded p-1 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-30"
                   :disabled="i === state.lines.length - 1"
                   title="Move down"
                   @click="moveLine(i, 1)"
                 >
-                  ↓
+                  <FeatherIcon name="chevron-down" class="h-3.5 w-3.5" />
                 </button>
                 <button
-                  class="px-1 hover:text-red-600"
+                  class="rounded p-1 hover:bg-red-50 hover:text-red-600"
                   title="Remove line"
                   @click="state.lines.splice(i, 1)"
                 >
-                  ✕
+                  <FeatherIcon name="x" class="h-3.5 w-3.5" />
                 </button>
               </td>
             </tr>
             <tr v-if="!state.lines.length">
-              <td colspan="18" class="px-3 py-6 text-center text-gray-400">
+              <td :colspan="14 + visibleMeta.length" class="px-3 py-6 text-center text-gray-400">
                 No cost lines yet — add the first one.
               </td>
             </tr>
@@ -295,13 +328,11 @@
                     />
                   </td>
                   <td class="px-1 py-1">
-                    <input
-                      v-model.number="pkg.price_override"
-                      type="number"
-                      min="0"
-                      step="1000"
-                      class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                    <VndInput
+                      :model-value="pkg.price_override"
+                      class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
                       placeholder="auto"
+                      @update:model-value="pkg.price_override = $event === '' ? null : $event"
                     />
                   </td>
                   <td class="px-2 py-1 text-right tabular-nums text-gray-700">
@@ -322,11 +353,11 @@
                   </td>
                   <td class="px-1 py-1 text-gray-400">
                     <button
-                      class="px-1 hover:text-red-600"
+                      class="rounded p-1 hover:bg-red-50 hover:text-red-600"
                       title="Remove package"
                       @click="removePackage(i)"
                     >
-                      ✕
+                      <FeatherIcon name="x" class="h-3.5 w-3.5" />
                     </button>
                   </td>
                 </tr>
@@ -465,16 +496,20 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch } from "vue"
+import { reactive, ref, computed, watch, onMounted, onUnmounted } from "vue"
 import { useRoute } from "vue-router"
 import {
   Button,
   ErrorMessage,
+  FeatherIcon,
   createListResource,
   createResource,
 } from "frappe-ui"
 import QuotePanel from "../components/QuotePanel.vue"
+import VndInput from "../components/VndInput.vue"
 import { vnd } from "../utils/money"
+import { stageClass } from "../utils/stages"
+import { currentUser } from "../utils/user"
 
 // Must match the Deal Cost Line tax_type options. Internal work carries
 // no invoice — Không hoá đơn.
@@ -487,8 +522,48 @@ const COST_PHASES = [
 ]
 const SOURCE_TYPES = ["Internal", "Freelancer", "Vendor"]
 
+// T5.1 metadata — real, but not what pricing a job needs on screen.
+// Hidden by default so the table fits a laptop without sideways
+// scrolling; the choice sticks per user.
+const META_COLUMNS = [
+  { key: "item_category", label: "Item Category" },
+  { key: "cost_phase", label: "Cost Phase" },
+  { key: "source_type", label: "Source Type" },
+  { key: "source_contact", label: "Source Contact" },
+]
+
 const route = useRoute()
 const name = route.params.name
+
+const metaKey = `auraos.breakdown.columns.${currentUser()}`
+
+function loadMeta() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(metaKey))
+    return Array.isArray(saved)
+      ? saved.filter((key) => META_COLUMNS.some((col) => col.key === key))
+      : []
+  } catch {
+    return []
+  }
+}
+
+const visibleMeta = ref(loadMeta())
+
+function metaVisible(key) {
+  return visibleMeta.value.includes(key)
+}
+
+function toggleMeta(key) {
+  visibleMeta.value = metaVisible(key)
+    ? visibleMeta.value.filter((item) => item !== key)
+    : [...visibleMeta.value, key]
+  try {
+    localStorage.setItem(metaKey, JSON.stringify(visibleMeta.value))
+  } catch {
+    // A blocked storage API must not make the editor unusable.
+  }
+}
 
 const state = reactive({
   lines: [],
@@ -502,6 +577,33 @@ const state = reactive({
 let serverDoc = null
 const error = ref("")
 const saving = ref(false)
+
+// Dirty = what's on screen differs from the last load or save. A JSON
+// snapshot, not a flag: population on load must not count as an edit.
+const baseline = ref("")
+
+function snapshot() {
+  return JSON.stringify({
+    lines: state.lines,
+    packages: state.packages,
+    quote_mf_pct: state.quote_mf_pct,
+    vat_pct: state.vat_pct,
+    commission_pct: state.commission_pct,
+  })
+}
+
+const dirty = computed(() => Boolean(baseline.value) && snapshot() !== baseline.value)
+
+// The founder sits on this page for hours; muscle-memory save must work.
+function onKeydown(event) {
+  if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+    event.preventDefault()
+    save()
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown))
+onUnmounted(() => window.removeEventListener("keydown", onKeydown))
 
 const LINE_FIELDS = [
   "description",
@@ -536,14 +638,19 @@ const deal = createResource({
       ...pick(row, LINE_FIELDS),
       package: row.package || "",
     }))
-    state.packages = (doc.packages || []).map((row) =>
-      pick(row, ["title", "description", "price_override"])
-    )
+    state.packages = (doc.packages || []).map((row) => {
+      const pkg = pick(row, ["title", "description", "price_override"])
+      // Frappe's Currency default is 0, but a 0 here would read as
+      // "overridden to zero đồng" — display blank so "auto" stays auto.
+      if (!pkg.price_override) pkg.price_override = null
+      return pkg
+    })
     state.quote_mf_pct = doc.quote_mf_pct ?? 10
     state.vat_pct = doc.vat_pct ?? 8
     // Producers never receive this field; null keeps the server default.
     state.commission_pct = doc.commission_pct ?? null
     recompute()
+    baseline.value = snapshot()
   },
   onError(err) {
     error.value = errorMessage(err)
@@ -700,12 +807,13 @@ const saveResource = createResource({
     saving.value = false
     error.value = ""
     serverDoc = doc
+    baseline.value = snapshot()
   },
   onError: onSaveError,
 })
 
 async function save() {
-  if (!serverDoc) return
+  if (!serverDoc || saving.value) return
   saving.value = true
   try {
     for (const line of state.lines) await ensureItemCategory(line)

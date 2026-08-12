@@ -59,7 +59,33 @@ def ensure_deal(company):
     ).insert(ignore_permissions=True)
 
 
+def ensure_breakdown():
+    """One priced line and one package, so the breakdown editor has
+    something on screen the moment the spec opens it (A2)."""
+    deal = frappe.get_doc("Deal", {"title": DEAL})
+    if deal.cost_lines:
+        return
+    deal.append(
+        "packages",
+        {"title": "Crew", "description": "Playwright crew package"},
+    )
+    deal.append(
+        "cost_lines",
+        {
+            "description": "Playwright director",
+            "package": "Crew",
+            "qty1": 1,
+            "qty2": 2,
+            "unit_price": 4_000_000,
+            "tax_type": "Cá nhân",
+            "markup_pct": 20,
+        },
+    )
+    deal.save(ignore_permissions=True)
+
+
 def run():
     ensure_user()
     ensure_deal(ensure_company())
+    ensure_breakdown()
     frappe.db.commit()
