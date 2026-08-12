@@ -130,8 +130,14 @@ A2 per the agreed order is the **breakdown editor** (your longest-sitting screen
 
 ## Verdict
 
-- [ ] **GO** — merge it; A2 starts
+- [x] **GO** — merge it; A2 starts
 - [ ] **GO with notes** — merge, and the notes above become follow-ups
 - [ ] **NO-GO** — fix the failed steps first
 
->
+> Answered in-session on 2026-08-12 (chat, not this file). Steps 1.3, 2,
+> 3.1–3.3, 4.3 passed. Four fixes were requested and shipped the same
+> day (commit 092ff7a): 1.1 "tr" → "triệu"; 1.2 "d" → "days"; 1.4 drag
+> felt laggy → optimistic move on drop; 4.2 raw digits in money inputs
+> confused → VndInput formats as typed. 4.1 decided: **UI stays English,
+> data stays Vietnamese.** Founder verified the fixes on the dev stack
+> and said "oke triển khai tiếp" — GO. A2 (breakdown editor) is next.
