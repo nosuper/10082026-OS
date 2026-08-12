@@ -13,6 +13,9 @@
   "client_section",
   "title",
   "client_name",
+  "client_address",
+  "client_tax_code",
+  "client_contact",
   "detail_level",
   "column_break_client",
   "notes",
@@ -88,6 +91,26 @@
    "fieldname": "client_name",
    "fieldtype": "Data",
    "label": "Client Name",
+   "read_only": 1
+  },
+  {
+   "description": "The bill-to block, frozen at publish — an invoice names both parties",
+   "fieldname": "client_address",
+   "fieldtype": "Small Text",
+   "label": "Client Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_tax_code",
+   "fieldtype": "Data",
+   "label": "Client Tax Code",
+   "read_only": 1
+  },
+  {
+   "description": "The person the quote is addressed to (Attn:)",
+   "fieldname": "client_contact",
+   "fieldtype": "Data",
+   "label": "Client Contact",
    "read_only": 1
   },
   {

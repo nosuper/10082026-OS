@@ -551,13 +551,37 @@ class TestQuoteDetailLevels(FrappeTestCase):
         # The totals are the same offer whichever way it is printed.
         self.assertEqual(quote.total, deal.quote_total)
 
-    def test_line_by_line_page_prints_quantities_and_amounts(self):
+    def test_line_by_line_page_prints_quantities_rates_and_amounts(self):
         deal = make_quotable_deal(quote_detail_level="Line by line")
         quote = publish(deal.name)
         html = squash(render_page(quote.token).get_data(as_text=True))
-        self.assertIn("1 người × 3 ngày", html)
         self.assertIn("Đạo diễn", html)
+        self.assertIn("người", html)
+        self.assertIn("ngày", html)
         self.assertIn(format_vnd(deal.cost_lines[0].quote_price), html)
+        # The marked-up unit rate, derived from the amount: 20tr / 3 ngày.
+        self.assertIn(
+            format_vnd(round(deal.cost_lines[0].quote_price / 3)), html
+        )
+
+    def test_the_page_names_both_parties(self):
+        # An invoice-shaped document names its recipient (A3 round 2).
+        deal = make_quotable_deal(quote_detail_level="Line by line")
+        frappe.db.set_value(
+            "Party Company",
+            deal.company,
+            {
+                "address": "45 Lê Lợi, Quận 1, TP.HCM",
+                "tax_code": "0309876543",
+            },
+        )
+        quote = publish(deal.name)
+        self.assertEqual(quote.client_address, "45 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(quote.client_tax_code, "0309876543")
+        html = squash(render_page(quote.token).get_data(as_text=True))
+        self.assertIn("45 Lê Lợi", html)
+        self.assertIn("0309876543", html)
+        self.assertIn("Quotation", html)
 
     def test_the_page_never_prints_the_cost_side_at_any_level(self):
         deal = make_quotable_deal(quote_detail_level="Line by line")

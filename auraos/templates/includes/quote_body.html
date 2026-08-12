@@ -33,17 +33,37 @@
   .aura-quote .aura-package-desc { color: #4b5563; font-size: .875rem;
     margin-top: .25rem; white-space: pre-line; }
 
-  /* Line-by-line detail (A3): section rows carry the package and its
-     price; member lines sit beneath, indented and lighter, and always
-     add up to the section — the builder prints an Adjustment line when
-     an override moved the price. */
+  /* The document heading and the two parties, invoice-shaped (founder,
+     A3 walkthrough: a quote missing its recipient reads as a flyer). */
+  .aura-quote .aura-doctype { font-size: 1.375rem; letter-spacing: .12em;
+    text-transform: uppercase; margin: 0 0 1.25rem; }
+  .aura-parties { display: flex; justify-content: space-between;
+    gap: 2rem; margin-bottom: 2rem; }
+  .aura-parties .aura-party-label { font-size: .6875rem;
+    text-transform: uppercase; letter-spacing: .04em; color: #6b7280;
+    margin-bottom: .25rem; }
+  .aura-parties .aura-party-name { font-weight: 700; }
+  .aura-parties .aura-party-line { color: #4b5563; font-size: .8125rem;
+    line-height: 1.5; white-space: pre-line; }
+  .aura-parties .aura-quote-meta { text-align: right; font-size: .8125rem;
+    color: #4b5563; line-height: 1.6; }
+  .aura-parties .aura-quote-meta strong { color: #111827; }
+
+  /* Line-by-line detail (A3): spreadsheet-style columns — quantities,
+     the marked-up unit rate and the amount. Section rows carry the
+     package and its price; member lines always add up to it (an
+     override is folded back into the lines, never printed as its own
+     row). */
   .aura-quote .aura-section-row td { border-bottom: 1px solid #e5e7eb;
     padding-top: 1rem; }
   .aura-quote .aura-section-amount { font-weight: 600; }
   .aura-quote .aura-line-row td { border-bottom: 0; padding: .3rem 0;
-    font-size: .875rem; color: #4b5563; }
+    font-size: .8125rem; color: #4b5563; }
   .aura-quote .aura-line-desc { padding-left: 1.25rem; }
-  .aura-quote .aura-line-qty { white-space: nowrap; color: #6b7280; }
+  .aura-quote td.aura-qty, .aura-quote th.aura-qty { text-align: right;
+    white-space: nowrap; padding-left: .5rem; }
+  .aura-quote td.aura-unit, .aura-quote th.aura-unit { white-space: nowrap;
+    padding-left: .35rem; color: #6b7280; }
   .aura-quote .aura-totals { margin-top: 1.5rem; margin-left: auto; width: 20rem; }
   .aura-quote .aura-totals div { display: flex; justify-content: space-between;
     padding: .35rem 0; font-size: .9375rem; }
@@ -174,11 +194,28 @@
   </div>
   {% endif %}
 
-  <h1>{{ title or "Quote" }}</h1>
-  <div class="aura-meta">
-    {% if client_name %}{{ client_name }} &middot; {% endif %}
-    {{ quote_number or "Version " ~ version }}
-    {% if published_display %} &middot; {{ published_display }}{% endif %}
+  <h1 class="aura-doctype">Quotation</h1>
+  <div class="aura-parties">
+    <div>
+      <div class="aura-party-label">To</div>
+      {% if client_name %}
+      <div class="aura-party-name">{{ client_name }}</div>
+      {% endif %}
+      {% if client_address %}
+      <div class="aura-party-line">{{ client_address }}</div>
+      {% endif %}
+      {% if client_tax_code %}
+      <div class="aura-party-line">Tax code {{ client_tax_code }}</div>
+      {% endif %}
+      {% if client_contact %}
+      <div class="aura-party-line">Attn: {{ client_contact }}</div>
+      {% endif %}
+    </div>
+    <div class="aura-quote-meta">
+      <div><strong>{{ quote_number or "Version " ~ version }}</strong></div>
+      {% if published_display %}<div>{{ published_display }}</div>{% endif %}
+      <div>Project: <strong>{{ title or "" }}</strong></div>
+    </div>
   </div>
 
   {% if detail_level == "Line by line" %}
@@ -186,14 +223,18 @@
     <thead>
       <tr>
         <th>Item</th>
-        <th>Quantity</th>
+        <th class="aura-qty">Qty</th>
+        <th class="aura-unit">Unit</th>
+        <th class="aura-qty">Qty</th>
+        <th class="aura-unit">Unit</th>
+        <th class="aura-amount">Unit Price</th>
         <th class="aura-amount">Amount (VND)</th>
       </tr>
     </thead>
     <tbody>
       {% for section in sections %}
       <tr class="aura-section-row">
-        <td colspan="2">
+        <td colspan="6">
           <div class="aura-package-title">{{ section.title }}</div>
           {% if section.description %}
           <div class="aura-package-desc">{{ section.description }}</div>
@@ -206,7 +247,11 @@
       {% for line in section.lines %}
       <tr class="aura-line-row">
         <td class="aura-line-desc">{{ line.description }}</td>
-        <td class="aura-line-qty">{{ line.quantity }}</td>
+        <td class="aura-qty">{{ line.qty1_display }}</td>
+        <td class="aura-unit">{{ line.qty1_unit or "" }}</td>
+        <td class="aura-qty">{{ line.qty2_display }}</td>
+        <td class="aura-unit">{{ line.qty2_unit or "" }}</td>
+        <td class="aura-amount">{{ money(line.unit_rate or 0) }}</td>
         <td class="aura-amount">{{ money(line.quote_price or 0) }}</td>
       </tr>
       {% endfor %}

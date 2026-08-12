@@ -24,7 +24,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Mapping
 
-from auraos.lib.money import to_decimal
+from auraos.lib.money import round_vnd, to_decimal
 from auraos.lib.pricing import TNDN_RATE
 
 # The playbook's three levels of quote detail (§3.3): how much of the
@@ -37,6 +37,9 @@ DEFAULT_DETAIL_LEVEL = "Package totals"
 CLIENT_QUOTE_FIELDS = (
     "title",
     "client_name",
+    "client_address",
+    "client_tax_code",
+    "client_contact",
     "version",
     "detail_level",
     "published_on",
@@ -181,6 +184,11 @@ def quantity_display(qty1, unit1, qty2, unit2) -> str:
     return " × ".join(parts)
 
 
+def _number_display(value) -> str:
+    value = to_decimal(value or 0)
+    return f"{value.normalize():f}" if value else ""
+
+
 def _client_line(line: Mapping[str, Any]) -> dict:
     view = {field: line.get(field) for field in CLIENT_LINE_FIELDS}
     view["quantity"] = quantity_display(
@@ -189,7 +197,20 @@ def _client_line(line: Mapping[str, Any]) -> dict:
         line.get("qty2"),
         line.get("qty2_unit"),
     )
+    # Spreadsheet-style columns (founder, A3 walkthrough): quantities as
+    # their own cells, plus the marked-up unit rate. The rate is derived
+    # from the final amount, so a rescaled line keeps rate × qty ≈ amount.
+    view["qty1_display"] = _number_display(line.get("qty1"))
+    view["qty2_display"] = _number_display(line.get("qty2"))
+    view["unit_rate"] = _unit_rate(view["quote_price"], line)
     return view
+
+
+def _unit_rate(amount, line):
+    factor = to_decimal(line.get("qty1") or 0) * to_decimal(line.get("qty2") or 0)
+    if not factor:
+        return round_vnd(amount or 0)
+    return round_vnd(to_decimal(amount or 0) / factor)
 
 
 def line_sections(packages, lines):
@@ -216,29 +237,20 @@ def line_sections(packages, lines):
     consumed = set()
     for package in packages:
         title = package.get("title")
-        members = [_client_line(line) for line in by_package.get(title, [])]
+        raw_members = by_package.get(title, [])
         # A standalone line published as its own entry (client_entries)
         # arrives here twice: once as this package entry, once in the
         # frozen lines. The entry *is* the line — consume it, or the
         # page would print it again below.
-        if not members:
+        if not raw_members:
             for index, line in enumerate(standalone):
                 if index not in consumed and standalone_title(line) == title:
                     consumed.add(index)
                     break
         price = package.get("price") or 0
-        lines_total = sum(
-            to_decimal(line.get("quote_price") or 0) for line in members
-        )
-        if members and lines_total != to_decimal(price):
-            members.append(
-                {
-                    "package": title,
-                    "description": "Adjustment",
-                    "quantity": "",
-                    "quote_price": to_decimal(price) - lines_total,
-                }
-            )
+        members = [
+            _client_line(line) for line in _rescaled_lines(raw_members, price)
+        ]
         sections.append(
             {
                 "title": title,
@@ -258,6 +270,33 @@ def line_sections(packages, lines):
                 }
             )
     return sections
+
+
+def _rescaled_lines(lines, price):
+    """Line amounts that sum exactly to the price as offered.
+
+    An overridden package must read as if it was simply quoted that way
+    — no Adjustment row (the founder's A3 verdict): the difference is
+    folded back into every line in proportion, whole đồng, remainder on
+    the last line so the client's own arithmetic always closes. Lines
+    that sum to zero cannot carry a proportion and are left alone.
+    """
+    rows = [dict(line) for line in lines]
+    if not rows:
+        return rows
+    total = sum(to_decimal(row.get("quote_price") or 0) for row in rows)
+    target = to_decimal(price or 0)
+    if not total or total == target:
+        return rows
+    running = Decimal(0)
+    for row in rows[:-1]:
+        scaled = Decimal(
+            round_vnd(to_decimal(row.get("quote_price") or 0) * target / total)
+        )
+        row["quote_price"] = scaled
+        running += scaled
+    rows[-1]["quote_price"] = target - running
+    return rows
 
 
 def lump_sum_entry(title, entries):

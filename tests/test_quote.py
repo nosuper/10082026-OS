@@ -416,28 +416,51 @@ def test_sections_group_lines_under_their_package():
     assert sections[1]["lines"] == []
 
 
-def test_an_overridden_section_prints_the_difference_as_adjustment():
-    # The section total must be the sum of what's above it, or the
-    # client's own arithmetic "catches" us. 45tr offered vs 48tr of
-    # lines → an Adjustment of -3tr.
+def test_an_override_is_folded_back_into_the_lines():
+    # The founder's A3 verdict: no Adjustment row — an overridden
+    # package must read as if it was simply quoted that way. 45tr
+    # offered over 20+28tr of lines → 18,75tr and 26,25tr.
     sections = line_sections(
         [{"title": "Crew", "description": None, "price": 45_000_000}],
         [line for line in _lines() if line["package"] == "Crew"],
     )
-    adjustment = sections[0]["lines"][-1]
-    assert adjustment["description"] == "Adjustment"
-    assert adjustment["quote_price"] == D("-3000000")
-    assert adjustment["quantity"] == ""
+    amounts = [line["quote_price"] for line in sections[0]["lines"]]
+    assert amounts == [18_750_000, D("26250000")]
+    assert sum(amounts) == 45_000_000
 
 
-def test_a_section_matching_its_lines_needs_no_adjustment():
+def test_the_rescale_remainder_lands_on_the_last_line():
+    # A target that doesn't divide cleanly must still close exactly.
+    sections = line_sections(
+        [{"title": "Crew", "description": None, "price": 45_000_001}],
+        [line for line in _lines() if line["package"] == "Crew"],
+    )
+    amounts = [line["quote_price"] for line in sections[0]["lines"]]
+    assert sum(amounts) == 45_000_001
+
+
+def test_a_section_matching_its_lines_keeps_them_untouched():
     sections = line_sections(
         [{"title": "Crew", "description": None, "price": 48_000_000}],
         [line for line in _lines() if line["package"] == "Crew"],
     )
-    assert all(
-        line["description"] != "Adjustment" for line in sections[0]["lines"]
+    assert [line["quote_price"] for line in sections[0]["lines"]] == [
+        20_000_000,
+        28_000_000,
+    ]
+
+
+def test_each_line_carries_its_marked_up_unit_rate():
+    sections = line_sections(
+        [{"title": "Crew", "description": None, "price": 48_000_000}],
+        [line for line in _lines() if line["package"] == "Crew"],
     )
+    director, camera = sections[0]["lines"]
+    # 20tr over 1 × 3 ngày → 6.666.667/ngày; 28tr over 2 × 3 → 4.666.667.
+    assert director["unit_rate"] == 6_666_667
+    assert camera["unit_rate"] == 4_666_667
+    assert director["qty1_display"] == "1"
+    assert director["qty2_display"] == "3"
 
 
 def test_lump_sum_collapses_the_offer_but_keeps_the_scope():

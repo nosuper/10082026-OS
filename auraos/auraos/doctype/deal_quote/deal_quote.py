@@ -190,7 +190,7 @@ def publish(deal_name, notes=None):
             "doctype": "Deal Quote",
             "deal": deal.name,
             "title": deal.title,
-            "client_name": client_name(deal),
+            **client_block(deal),
             "detail_level": detail_level,
             "notes": notes,
             "quote_mf_pct": deal.quote_mf_pct,
@@ -242,11 +242,35 @@ def client_entries(deal):
     return entries
 
 
-def client_name(deal):
-    """The client's own name for the page header — never our deal title."""
-    if not deal.company:
-        return None
-    return frappe.db.get_value("Party Company", deal.company, "company_name")
+def client_block(deal):
+    """Who the quote is addressed to, frozen at publish.
+
+    An invoice-shaped document names both parties (founder, A3
+    walkthrough); the company block is the letterhead, this is the
+    bill-to. Frozen rather than read live: the offer went to the client
+    as they were on that day.
+    """
+    company = (
+        frappe.db.get_value(
+            "Party Company",
+            deal.company,
+            ["company_name", "address", "tax_code"],
+            as_dict=True,
+        )
+        if deal.company
+        else None
+    )
+    contact = (
+        frappe.db.get_value("Party Contact", deal.contact, "full_name")
+        if deal.contact
+        else None
+    )
+    return {
+        "client_name": company.company_name if company else None,
+        "client_address": company.address if company else None,
+        "client_tax_code": company.tax_code if company else None,
+        "client_contact": contact,
+    }
 
 
 def deal_versions(deal_name):
