@@ -47,12 +47,16 @@
         />
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormControl
-            type="number"
-            label="Est. Client Budget (VND)"
-            v-model="form.estimated_budget"
-            :min="0"
-          />
+          <div>
+            <div class="mb-1.5 text-xs text-gray-600">
+              Est. Client Budget (VND)
+            </div>
+            <VndInput
+              v-model="form.estimated_budget"
+              placeholder="0"
+              class="w-full rounded border-gray-300 py-1.5 text-right text-sm tabular-nums placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+            />
+          </div>
           <FormControl
             type="select"
             label="Source"
@@ -284,6 +288,7 @@ import {
   createListResource,
 } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
+import VndInput from "./VndInput.vue"
 
 const props = defineProps({
   modelValue: Boolean,

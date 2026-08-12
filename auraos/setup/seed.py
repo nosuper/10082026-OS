@@ -25,12 +25,33 @@ COMPANY = "Chungify Media"
 CONTACT = "Chị Hằng"
 
 # One deal per pipeline stage worth looking at, so the board is never
-# empty and drag-and-drop has somewhere to go.
+# empty and drag-and-drop has somewhere to go. Budgets deliberately
+# differ (A1): identical figures would make the per-column totals
+# unreadable as totals.
 DEALS = [
-    {"title": "TVC Tết 2027", "stage": "Brief Received"},
-    {"title": "Social series — 6 tập", "stage": "Breakdown"},
-    {"title": "Phim doanh nghiệp Vinamilk", "stage": "Negotiation"},
+    {
+        "title": "TVC Tết 2027",
+        "stage": "Brief Received",
+        "project_type": "TVC",
+        "estimated_budget": 220_000_000,
+    },
+    {
+        "title": "Social series — 6 tập",
+        "stage": "Breakdown",
+        "project_type": "Social Video",
+        "estimated_budget": 90_000_000,
+    },
+    {
+        "title": "Phim doanh nghiệp Vinamilk",
+        "stage": "Negotiation",
+        "project_type": "TVC",
+        "estimated_budget": 150_000_000,
+    },
 ]
+
+# The deal A1 ages past the weekly ritual's seven days, so the amber
+# badge is visible the moment the stack boots.
+STALE_DEAL = "Phim doanh nghiệp Vinamilk"
 
 # A breakdown that exercises every offered tax type, with two packages
 # and one line quoted standalone (the founder prices some items that way).
@@ -192,7 +213,9 @@ def founder():
     return holders[0] if holders else "Administrator"
 
 
-def ensure_deal(company, title, stage):
+def ensure_deal(
+    company, title, stage, project_type=None, estimated_budget=150_000_000
+):
     existing = frappe.db.exists("Deal", {"title": title})
     if existing:
         return existing
@@ -203,7 +226,8 @@ def ensure_deal(company, title, stage):
             "company": company,
             "stage": stage,
             "deal_owner": founder(),
-            "estimated_budget": 150_000_000,
+            "project_type": project_type,
+            "estimated_budget": estimated_budget,
         }
     ).insert(ignore_permissions=True).name
 
@@ -470,6 +494,36 @@ def seed_t11_paperwork(deal_name):
     ).insert(ignore_permissions=True)
 
 
+def seed_a1_stale_deal(deal_name):
+    """A1: one deal aged past seven days in its stage.
+
+    The board's age badge turns amber past STALE_DAYS, and a fresh seed
+    is all zero-day deals — without this row the walkthrough could only
+    be told the badge exists, the hole the T6 silence badge fell into.
+    The *stage log* is backdated, not `modified`: the badge reads when
+    the deal entered its current stage.
+    """
+    stale = frappe.db.exists("Deal", {"title": STALE_DEAL})
+    if not stale:
+        return
+    last = frappe.get_all(
+        "Deal Stage Log",
+        filters={"parenttype": "Deal", "parent": stale},
+        fields=["name"],
+        order_by="idx desc",
+        limit=1,
+    )
+    if not last:
+        return
+    frappe.db.set_value(
+        "Deal Stage Log",
+        last[0].name,
+        "changed_on",
+        frappe.utils.add_to_date(frappe.utils.now_datetime(), days=-12),
+        update_modified=False,
+    )
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T6.1a company identity": seed_t6_1a_company_identity,
@@ -477,4 +531,5 @@ FEATURE_SEEDS = {
     "T8 money out": seed_t8_money_out,
     "T10 payment milestones": seed_t10_payment_milestones,
     "T11 paperwork templates": seed_t11_paperwork,
+    "A1 stale deal": seed_a1_stale_deal,
 }

@@ -97,24 +97,30 @@ producerTest("blank table row creates a deal with normal defaults and no card di
   await expect(created).toContainText(producerName)
 })
 
-test("inline edits persist and invalid budgets show an error without saving", async ({ page }) => {
+test("inline money edits format as typed, persist, and swallow non-digits", async ({ page }) => {
   await openDeals(page)
   await openTable(page)
   let row = await dealRow(page)
 
   const budgetCell = row.locator("td").nth(4)
   await budgetCell.click()
-  await budgetCell.locator('input[type="number"]').fill("12500000")
-  await budgetCell.locator('input[type="number"]').blur()
+  const editor = budgetCell.locator("input")
+  await editor.fill("12500000")
+  // The field itself reads the way money is written — the A1
+  // walkthrough failed on raw digits sitting beside formatted cells.
+  await expect(editor).toHaveValue(persistedBudget)
+  await editor.blur()
   await expect(budgetCell).toHaveText(persistedBudget)
 
   await page.reload()
   row = await dealRow(page)
   await expect(row.locator("td").nth(4)).toHaveText(persistedBudget)
   await row.locator("td").nth(4).click()
-  await row.locator('input[type="number"]').fill("-1")
-  await row.locator('input[type="number"]').blur()
-  await expect(page.getByText(/Value cannot be negative for Deal:/i)).toBeVisible()
+  // Anything that isn't digits never even lands in the field, and Esc
+  // walks away without saving.
+  await row.locator("input").fill("-abc")
+  await expect(row.locator("input")).toHaveValue("")
+  await row.locator("input").press("Escape")
 
   await page.reload()
   row = await dealRow(page)
@@ -131,7 +137,7 @@ test("deal titles open the card while editable cells stay inline", async ({ page
   await page.getByRole("button", { name: "Cancel" }).click()
 
   await row.locator("td").nth(4).click()
-  await expect(row.locator('input[type="number"]')).toBeVisible()
+  await expect(row.locator("input")).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
 })
 

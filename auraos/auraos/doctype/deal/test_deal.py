@@ -442,6 +442,31 @@ class TestDealDetailsFields(FrappeTestCase):
         with self.assertRaises(frappe.PermissionError):
             deal_tags_map()
 
+    def test_deal_stage_entries_tracks_the_latest_move(self):
+        from auraos.api import deal_stage_entries
+
+        deal = make_deal(title="Stage age probe")
+        frappe.set_user(PRODUCER)
+        entered = deal_stage_entries()
+        # Insertion logs the first stage_history row.
+        first = entered.get(deal.name)
+        self.assertIsNotNone(first)
+
+        deal.reload()
+        deal.stage = "De-brief"
+        deal.save()
+        moved = deal_stage_entries().get(deal.name)
+        # The map follows the move into the current stage.
+        self.assertEqual(moved, deal.stage_history[-1].changed_on)
+        self.assertGreaterEqual(moved, first)
+
+    def test_deal_stage_entries_denied_without_app_role(self):
+        from auraos.api import deal_stage_entries
+
+        frappe.set_user(OUTSIDER)
+        with self.assertRaises(frappe.PermissionError):
+            deal_stage_entries()
+
 
 class TestDealTableEditing(FrappeTestCase):
     """T3.3 (#27): the table saves through the Deal validation seam."""
