@@ -5,9 +5,11 @@ export function vnd(amount, blank = "—") {
   return new Intl.NumberFormat("vi-VN").format(amount)
 }
 
-// Compact VND the way the founder says it out loud — "1,2 tỷ",
-// "450tr" — for board column totals where the full figure is noise.
-// Below a million the full figure is already short enough.
+// Compact VND the way it is written in a quote — "1,2 tỷ",
+// "450 triệu" — for board column totals where the full figure is
+// noise. Spelled out, not "tr": the founder's A1 verdict was that the
+// abbreviation reads unprofessional. Below a million the full figure
+// is already short enough.
 export function vndShort(amount) {
   if (!amount) return ""
   const sign = amount < 0 ? "-" : ""
@@ -17,7 +19,7 @@ export function vndShort(amount) {
     const rendered = billions >= 10 ? Math.round(billions) : Math.round(billions * 10) / 10
     return `${sign}${String(rendered).replace(".", ",")} tỷ`
   }
-  if (abs >= 1e6) return `${sign}${Math.round(abs / 1e6)}tr`
+  if (abs >= 1e6) return `${sign}${Math.round(abs / 1e6)} triệu`
   return sign + vnd(abs)
 }
 

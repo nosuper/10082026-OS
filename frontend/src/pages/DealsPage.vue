@@ -173,9 +173,9 @@
                     ? 'rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800'
                     : 'text-gray-400'
                 "
-                :title="`In ${deal.stage} for ${stageAge(deal)} days`"
+                :title="`In ${deal.stage} for ${stageAge(deal)} ${stageAge(deal) === 1 ? 'day' : 'days'}`"
               >
-                {{ stageAge(deal) }}d
+                {{ stageAge(deal) }} {{ stageAge(deal) === 1 ? "day" : "days" }}
               </span>
             </div>
           </div>
@@ -250,10 +250,17 @@
                   {{ option.label }}
                 </option>
               </select>
+              <VndInput
+                v-else-if="col.editable && col.type === 'number'"
+                v-model="newDeal[col.key]"
+                :placeholder="col.label"
+                class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums"
+                @enter="createFromTable"
+              />
               <input
                 v-else-if="col.editable"
                 v-model="newDeal[col.key]"
-                :type="col.type === 'number' ? 'number' : 'text'"
+                type="text"
                 :placeholder="col.key === 'tags' ? 'tag, tag' : col.label"
                 class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
                 @keydown.enter="createFromTable"
@@ -306,10 +313,20 @@
                     {{ option.label }}
                   </option>
                 </select>
+                <VndInput
+                  v-else-if="col.type === 'number'"
+                  v-model="editing.value"
+                  class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-right text-sm tabular-nums"
+                  autofocus
+                  @click.stop
+                  @enter="$event.target.blur()"
+                  @esc="cancelEditing"
+                  @blur="saveInline"
+                />
                 <input
                   v-else
                   v-model="editing.value"
-                  :type="col.type === 'number' ? 'number' : 'text'"
+                  type="text"
                   class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-sm"
                   autofocus
                   @click.stop
@@ -458,6 +475,7 @@ import {
 } from "frappe-ui"
 import DealFormDialog from "../components/DealFormDialog.vue"
 import LostReasonDialog from "../components/LostReasonDialog.vue"
+import VndInput from "../components/VndInput.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd, vndShort } from "../utils/money"
 import { ago, daysSince } from "../utils/time"
@@ -1026,6 +1044,11 @@ function onDrop(stage) {
     return
   }
   lastMove.value = { deal, stage }
+  // Move the card before the server answers: a drop that waits out a
+  // round-trip before landing reads as lag (founder, A1 walkthrough).
+  // The reload in the success/error handlers is the correction if the
+  // server disagrees.
+  deal.stage = stage
   setStage.submit({
     doctype: "Deal",
     name: deal.name,
