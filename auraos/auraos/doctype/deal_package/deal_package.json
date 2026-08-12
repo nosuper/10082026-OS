@@ -7,6 +7,7 @@
  "field_order": [
   "title",
   "description",
+  "has_price_override",
   "price_override",
   "default_price",
   "price",
@@ -27,7 +28,14 @@
    "label": "Description"
   },
   {
-   "description": "Leave 0 to price at the sum of member lines",
+   "default": "0",
+   "description": "Currency cannot store \"unset\" (the column is NOT NULL 0), and an override of literally 0 đồng is a real case — a package quoted free of charge. This flag says whether price_override means anything.",
+   "fieldname": "has_price_override",
+   "fieldtype": "Check",
+   "label": "Has Price Override"
+  },
+  {
+   "description": "Used only when Has Price Override is set; 0 quotes the package free of charge",
    "fieldname": "price_override",
    "fieldtype": "Currency",
    "in_list_view": 1,

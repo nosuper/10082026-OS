@@ -189,7 +189,9 @@ class Deal(Document):
             self.floor_breached = 0
             for package in self.packages:
                 package.default_price = 0
-                package.price = round_vnd(package.price_override or 0)
+                package.price = round_vnd(
+                    package.price_override if package.has_price_override else 0
+                )
                 package.variance = package.price
             return
 
@@ -217,7 +219,11 @@ class Deal(Document):
                 budgets.setdefault(row.package, []).append(line.budget)
         for package in self.packages:
             priced = pricing.package_price(
-                budgets.get(package.title, []), package.price_override or None
+                budgets.get(package.title, []),
+                # The Check carries "is this set" — a Currency column
+                # cannot, and an override of literally 0 đồng (free of
+                # charge) is a real quote the founder sends.
+                package.price_override if package.has_price_override else None,
             )
             package.default_price = round_vnd(priced.default)
             package.price = round_vnd(priced.price)

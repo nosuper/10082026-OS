@@ -310,7 +310,12 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
         {
             "title": row.get("title"),
             **_package_dict(
-                budgets.get(row.get("title"), []), row.get("price_override") or None
+                budgets.get(row.get("title"), []),
+                # has_price_override carries "is this set"; 0 with the
+                # flag on is a real free-of-charge override.
+                row.get("price_override")
+                if row.get("has_price_override")
+                else None,
             ),
         }
         for row in package_rows
