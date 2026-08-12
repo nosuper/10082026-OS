@@ -13,10 +13,15 @@
   "client_section",
   "title",
   "client_name",
+  "client_address",
+  "client_tax_code",
+  "client_contact",
+  "detail_level",
   "column_break_client",
   "notes",
   "packages_section",
   "packages",
+  "lines",
   "totals_section",
   "quote_mf_pct",
   "vat_pct",
@@ -89,6 +94,35 @@
    "read_only": 1
   },
   {
+   "description": "The bill-to block, frozen at publish — an invoice names both parties",
+   "fieldname": "client_address",
+   "fieldtype": "Small Text",
+   "label": "Client Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_tax_code",
+   "fieldtype": "Data",
+   "label": "Client Tax Code",
+   "read_only": 1
+  },
+  {
+   "description": "The person the quote is addressed to (Attn:)",
+   "fieldname": "client_contact",
+   "fieldtype": "Data",
+   "label": "Client Contact",
+   "read_only": 1
+  },
+  {
+   "default": "Package totals",
+   "description": "How much of the build this frozen version shows the client",
+   "fieldname": "detail_level",
+   "fieldtype": "Select",
+   "label": "Detail Level",
+   "options": "Package totals\nLine by line\nLump sum",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_client",
    "fieldtype": "Column Break"
   },
@@ -109,6 +143,14 @@
    "fieldtype": "Table",
    "label": "Packages",
    "options": "Deal Quote Package",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen only on line-by-line versions",
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Deal Quote Line",
    "read_only": 1
   },
   {

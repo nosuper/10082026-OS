@@ -31,6 +31,7 @@
   "vat_pct",
   "column_break_params",
   "commission_pct",
+  "quote_detail_level",
   "quote_section",
   "quote_subtotal",
   "quote_mf_amount",
@@ -216,6 +217,14 @@
    "fieldtype": "Percent",
    "label": "Commission %",
    "permlevel": 1
+  },
+  {
+   "default": "Package totals",
+   "description": "How much of the build the client's quote shows (playbook §3.3): package totals, every line with quantities (AICP-style), or one lump sum",
+   "fieldname": "quote_detail_level",
+   "fieldtype": "Select",
+   "label": "Quote Detail Level",
+   "options": "Package totals\nLine by line\nLump sum"
   },
   {
    "collapsible": 1,

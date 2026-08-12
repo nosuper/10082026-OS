@@ -487,6 +487,30 @@
             </div>
           </div>
 
+          <div class="rounded-lg border p-4">
+            <h3 class="mb-1 text-xs font-semibold uppercase text-gray-500">
+              Quote detail level
+            </h3>
+            <p class="mb-2 text-xs text-gray-500">
+              How much of the build the client's page and PDF show — the
+              next published version uses this.
+            </p>
+            <select
+              v-model="state.quote_detail_level"
+              class="w-full rounded border-gray-300 py-1.5 text-sm text-gray-800 focus:border-gray-500 focus:ring-0"
+            >
+              <option value="Package totals">
+                Package totals — one price per package
+              </option>
+              <option value="Line by line">
+                Line by line — every item with quantities (AICP-style)
+              </option>
+              <option value="Lump sum">
+                Lump sum — a single figure for the whole job
+              </option>
+            </select>
+          </div>
+
           <QuotePanel
             :deal="name"
             :before-publish="save"
@@ -576,6 +600,7 @@ const state = reactive({
   packages: [],
   quote_mf_pct: 10,
   vat_pct: 8,
+  quote_detail_level: "Package totals",
   // Founder-only; stays null for producers (the server ignores it from
   // them anyway).
   commission_pct: null,
@@ -594,6 +619,7 @@ function snapshot() {
     packages: state.packages,
     quote_mf_pct: state.quote_mf_pct,
     vat_pct: state.vat_pct,
+    quote_detail_level: state.quote_detail_level,
     commission_pct: state.commission_pct,
   })
 }
@@ -666,6 +692,7 @@ const deal = createResource({
     })
     state.quote_mf_pct = doc.quote_mf_pct ?? 10
     state.vat_pct = doc.vat_pct ?? 8
+    state.quote_detail_level = doc.quote_detail_level || "Package totals"
     // Producers never receive this field; null keeps the server default.
     state.commission_pct = doc.commission_pct ?? null
     recompute()
@@ -877,6 +904,7 @@ async function save() {
     doctype: "Deal",
     quote_mf_pct: state.quote_mf_pct || 0,
     vat_pct: state.vat_pct || 0,
+    quote_detail_level: state.quote_detail_level,
     cost_lines: state.lines.map((line) => ({
       ...line,
       doctype: "Deal Cost Line",

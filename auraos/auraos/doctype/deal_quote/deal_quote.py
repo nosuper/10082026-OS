@@ -15,9 +15,11 @@ from frappe.model.document import Document
 from auraos.lib.money import format_vnd, round_vnd, to_decimal
 from auraos.lib.quote import (
     COMPANY_FIELDS,
+    DEFAULT_DETAIL_LEVEL,
     client_view,
     company_view,
     delivery_state,
+    lump_sum_entry,
     needs_nudge,
     quote_number,
     quote_totals,
@@ -80,6 +82,13 @@ class DealQuote(Document):
                 ),
                 frappe.ValidationError,
             )
+        if lines_snapshot(self) != lines_snapshot(before):
+            frappe.throw(
+                _("Quote {0} is published — its lines cannot change. Publish a new version instead.").format(
+                    self.name
+                ),
+                frappe.ValidationError,
+            )
 
     def on_update(self):
         sync_deal_quote_state(self.deal)
@@ -114,6 +123,21 @@ def packages_snapshot(doc):
     ]
 
 
+def lines_snapshot(doc):
+    return [
+        (
+            row.package,
+            row.description,
+            row.qty1,
+            row.qty1_unit,
+            row.qty2,
+            row.qty2_unit,
+            round_vnd(row.quote_price or 0),
+        )
+        for row in (doc.get("lines") or [])
+    ]
+
+
 def next_version(deal):
     """One past the deal's highest version.
 
@@ -135,7 +159,10 @@ def publish(deal_name, notes=None):
     """Freeze a deal's current packages and totals as the next version.
 
     Packages are the client-facing surface (spec #2, story 24), so a
-    breakdown without them has nothing to publish.
+    breakdown without them has nothing to publish. The deal's detail
+    level decides what else the version carries: lump sum collapses the
+    entries into one, line by line freezes the client-safe half of every
+    cost line alongside them (A3, playbook §3.3).
     """
     deal = frappe.get_doc("Deal", deal_name)
     deal.check_permission("write")
@@ -145,6 +172,13 @@ def publish(deal_name, notes=None):
             _("Nothing to publish — add a cost line or a package first"),
             frappe.ValidationError,
         )
+
+    detail_level = deal.quote_detail_level or DEFAULT_DETAIL_LEVEL
+    lines = []
+    if detail_level == "Lump sum":
+        entries = [lump_sum_entry(deal.title, entries)]
+    elif detail_level == "Line by line":
+        lines = frozen_lines(deal)
 
     totals = quote_totals(
         [entry["price"] for entry in entries],
@@ -156,7 +190,8 @@ def publish(deal_name, notes=None):
             "doctype": "Deal Quote",
             "deal": deal.name,
             "title": deal.title,
-            "client_name": client_name(deal),
+            **client_block(deal),
+            "detail_level": detail_level,
             "notes": notes,
             "quote_mf_pct": deal.quote_mf_pct,
             "vat_pct": deal.vat_pct,
@@ -165,10 +200,31 @@ def publish(deal_name, notes=None):
             "vat_amount": round_vnd(totals.vat_amount),
             "total": round_vnd(totals.total),
             "packages": entries,
+            "lines": lines,
         }
     )
     quote.insert()
     return quote
+
+
+def frozen_lines(deal):
+    """The client-safe half of every cost line, for a line-by-line quote.
+
+    quote_price is the marked-up sell price; cost, markup and tax
+    routing stay on the deal and are never frozen into a version.
+    """
+    return [
+        {
+            "package": row.package or None,
+            "description": row.description,
+            "qty1": row.qty1,
+            "qty1_unit": row.qty1_unit,
+            "qty2": row.qty2,
+            "qty2_unit": row.qty2_unit,
+            "quote_price": round_vnd(row.quote_price or 0),
+        }
+        for row in deal.cost_lines
+    ]
 
 
 def client_entries(deal):
@@ -186,11 +242,35 @@ def client_entries(deal):
     return entries
 
 
-def client_name(deal):
-    """The client's own name for the page header — never our deal title."""
-    if not deal.company:
-        return None
-    return frappe.db.get_value("Party Company", deal.company, "company_name")
+def client_block(deal):
+    """Who the quote is addressed to, frozen at publish.
+
+    An invoice-shaped document names both parties (founder, A3
+    walkthrough); the company block is the letterhead, this is the
+    bill-to. Frozen rather than read live: the offer went to the client
+    as they were on that day.
+    """
+    company = (
+        frappe.db.get_value(
+            "Party Company",
+            deal.company,
+            ["company_name", "address", "tax_code"],
+            as_dict=True,
+        )
+        if deal.company
+        else None
+    )
+    contact = (
+        frappe.db.get_value("Party Contact", deal.contact, "full_name")
+        if deal.contact
+        else None
+    )
+    return {
+        "client_name": company.company_name if company else None,
+        "client_address": company.address if company else None,
+        "client_tax_code": company.tax_code if company else None,
+        "client_contact": contact,
+    }
 
 
 def deal_versions(deal_name):

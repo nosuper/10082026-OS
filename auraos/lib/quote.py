@@ -24,14 +24,24 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Mapping
 
-from auraos.lib.money import to_decimal
+from auraos.lib.money import round_vnd, to_decimal
 from auraos.lib.pricing import TNDN_RATE
+
+# The playbook's three levels of quote detail (§3.3): how much of the
+# build a client gets to read. Internal is always the full build; what
+# goes out is gathered to the level the client needs.
+DETAIL_LEVELS = ("Package totals", "Line by line", "Lump sum")
+DEFAULT_DETAIL_LEVEL = "Package totals"
 
 # Everything a client may read off a quote. Ordered as the page reads.
 CLIENT_QUOTE_FIELDS = (
     "title",
     "client_name",
+    "client_address",
+    "client_tax_code",
+    "client_contact",
     "version",
+    "detail_level",
     "published_on",
     "quote_mf_pct",
     "vat_pct",
@@ -45,6 +55,19 @@ CLIENT_QUOTE_FIELDS = (
 # ...and off each of its packages. Cost, variance and the override are
 # ours; the client sees an offer, not how we arrived at it.
 CLIENT_PACKAGE_FIELDS = ("title", "description", "price")
+
+# ...and off each frozen line on a line-by-line quote. quote_price is
+# the marked-up sell price; cost, markup and tax routing are never
+# frozen into a quote at all, so they cannot leak from here.
+CLIENT_LINE_FIELDS = (
+    "package",
+    "description",
+    "qty1",
+    "qty1_unit",
+    "qty2",
+    "qty2_unit",
+    "quote_price",
+)
 
 # Who is making the offer (T6.1a, issue #42). A second whitelist rather
 # than a wider first one, because these fields come off a different
@@ -135,7 +158,163 @@ def client_view(quote: Mapping[str, Any]) -> dict:
         {field: package.get(field) for field in CLIENT_PACKAGE_FIELDS}
         for package in (quote.get("packages") or [])
     ]
+    view["sections"] = line_sections(
+        view["packages"], quote.get("lines") or []
+    )
     return view
+
+
+def quantity_display(qty1, unit1, qty2, unit2) -> str:
+    """How a line's quantities read on a bid — "2 người × 3 ngày".
+
+    Each half prints only when it says something: a bare quantity of 1
+    with no unit is packaging noise, not information. Both halves silent
+    → empty string, and the template leaves the cell blank.
+    """
+
+    def half(qty, unit):
+        qty = to_decimal(qty or 0)
+        unit = (unit or "").strip()
+        if not unit and qty in (Decimal(0), Decimal(1)):
+            return None
+        number = f"{qty.normalize():f}"
+        return f"{number} {unit}".strip() if unit else number
+
+    parts = [part for part in (half(qty1, unit1), half(qty2, unit2)) if part]
+    return " × ".join(parts)
+
+
+def _number_display(value) -> str:
+    value = to_decimal(value or 0)
+    return f"{value.normalize():f}" if value else ""
+
+
+def _client_line(line: Mapping[str, Any]) -> dict:
+    view = {field: line.get(field) for field in CLIENT_LINE_FIELDS}
+    view["quantity"] = quantity_display(
+        line.get("qty1"),
+        line.get("qty1_unit"),
+        line.get("qty2"),
+        line.get("qty2_unit"),
+    )
+    # Spreadsheet-style columns (founder, A3 walkthrough): quantities as
+    # their own cells, plus the marked-up unit rate. The rate is derived
+    # from the final amount, so a rescaled line keeps rate × qty ≈ amount.
+    view["qty1_display"] = _number_display(line.get("qty1"))
+    view["qty2_display"] = _number_display(line.get("qty2"))
+    view["unit_rate"] = _unit_rate(view["quote_price"], line)
+    return view
+
+
+def _unit_rate(amount, line):
+    factor = to_decimal(line.get("qty1") or 0) * to_decimal(line.get("qty2") or 0)
+    if not factor:
+        return round_vnd(amount or 0)
+    return round_vnd(to_decimal(amount or 0) / factor)
+
+
+def line_sections(packages, lines):
+    """The line-by-line rendering: every offer entry with its member
+    lines beneath it, in the same order `client_entries` prints.
+
+    A package priced away from its lines' sum (T5's override — a
+    round-up or a free-of-charge) would hand the client a table that
+    doesn't add up; the difference is printed as its own Adjustment
+    line, so the section total is always the sum of what's above it.
+    """
+    by_package = {}
+    standalone = []
+    for line in lines:
+        if line.get("package"):
+            by_package.setdefault(line["package"], []).append(line)
+        else:
+            standalone.append(line)
+
+    def standalone_title(line):
+        return line.get("description") or f"Item {line.get('idx')}"
+
+    sections = []
+    consumed = set()
+    for package in packages:
+        title = package.get("title")
+        raw_members = by_package.get(title, [])
+        # A standalone line published as its own entry (client_entries)
+        # arrives here twice: once as this package entry, once in the
+        # frozen lines. The entry *is* the line — consume it, or the
+        # page would print it again below.
+        if not raw_members:
+            for index, line in enumerate(standalone):
+                if index not in consumed and standalone_title(line) == title:
+                    consumed.add(index)
+                    break
+        price = package.get("price") or 0
+        members = [
+            _client_line(line) for line in _rescaled_lines(raw_members, price)
+        ]
+        sections.append(
+            {
+                "title": title,
+                "description": package.get("description"),
+                "price": price,
+                "lines": members,
+            }
+        )
+    for index, line in enumerate(standalone):
+        if index not in consumed:
+            sections.append(
+                {
+                    "title": standalone_title(line),
+                    "description": None,
+                    "price": line.get("quote_price") or 0,
+                    "lines": [],
+                }
+            )
+    return sections
+
+
+def _rescaled_lines(lines, price):
+    """Line amounts that sum exactly to the price as offered.
+
+    An overridden package must read as if it was simply quoted that way
+    — no Adjustment row (the founder's A3 verdict): the difference is
+    folded back into every line in proportion, whole đồng, remainder on
+    the last line so the client's own arithmetic always closes. Lines
+    that sum to zero cannot carry a proportion and are left alone.
+    """
+    rows = [dict(line) for line in lines]
+    if not rows:
+        return rows
+    total = sum(to_decimal(row.get("quote_price") or 0) for row in rows)
+    target = to_decimal(price or 0)
+    if not total or total == target:
+        return rows
+    running = Decimal(0)
+    for row in rows[:-1]:
+        scaled = Decimal(
+            round_vnd(to_decimal(row.get("quote_price") or 0) * target / total)
+        )
+        row["quote_price"] = scaled
+        running += scaled
+    rows[-1]["quote_price"] = target - running
+    return rows
+
+
+def lump_sum_entry(title, entries):
+    """The whole offer as one line — the playbook's lump-sum level for
+    small jobs and clients who don't read production budgets.
+
+    The scope still reads: the single entry's description lists what
+    the figure covers, so "one number" never becomes "no idea what
+    for".
+    """
+    scope = ", ".join(
+        entry["title"] for entry in entries if entry.get("title")
+    )
+    return {
+        "title": title or "Production services",
+        "description": scope or None,
+        "price": sum(entry.get("price") or 0 for entry in entries),
+    }
 
 
 @dataclass(frozen=True)
