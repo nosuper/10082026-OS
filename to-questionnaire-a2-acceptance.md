@@ -70,6 +70,25 @@ After A1+A2, what's the next worst thing about pricing a job in here — anythin
 
 >
 
+## Round 2 — the founder's answers (in-session, 2026-08-12) and what shipped
+
+Steps 3, 4 passed; 1 and 2 passed **with notes**, all addressed the same
+day (commit "A2 round 2"): Item Category and Package became query-style
+comboboxes (click shows options, typing filters, free text still grows
+the vocabulary); Qty/Unit headers numbered 1/2; every numeric input
+right-aligned under its header; computed columns tinted behind a
+divider; **autosave** ~2.5s after the last edit with a red-border
+warning while a line is missing its description; **0-đồng override
+restored** — a new `has_price_override` Check carries "is this set", so
+FOC/discount packages price at 0 on the client quote (5.1 answered:
+yes, the founder quotes free packages).
+
+**Still open, moved to A3:** quantities/units are not shown on the
+client-facing quote, and the playbook's three quote-detail levels (lump
+sum / grouped by package / full AICP line-by-line) are not selectable —
+today every quote renders as grouped packages only. A3 (client quote
+page) will carry a per-deal "detail level" choice.
+
 ## Verdict
 
 - [ ] **GO** — merge it; A3 (client quote page) starts
