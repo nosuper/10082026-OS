@@ -20,15 +20,13 @@
     </p>
 
     <label class="mt-4 block text-xs font-medium text-gray-600">Amount</label>
-    <input
+    <VndInput
       ref="amountInput"
       v-model="amount"
-      inputmode="numeric"
       placeholder="0"
       class="mt-1 w-full rounded-lg border-gray-300 px-3 py-3 text-right text-2xl tabular-nums"
-      @keyup.enter="save"
+      @enter="save"
     />
-    <p class="mt-1 text-right text-sm text-gray-500">{{ vnd(parsed, "0") }} ₫</p>
 
     <label class="mt-4 block text-xs font-medium text-gray-600">Category</label>
     <div class="mt-1 flex flex-wrap gap-2">
@@ -111,6 +109,7 @@
 import { computed, ref, onMounted } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
+import VndInput from "../components/VndInput.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { parseVnd, vnd } from "../utils/money"
 

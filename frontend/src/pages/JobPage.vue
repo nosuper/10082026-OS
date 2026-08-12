@@ -8,16 +8,18 @@
         {{ doc?.title || name }}
       </h1>
       <span class="text-xs tabular-nums text-gray-400">{{ name }}</span>
-      <select
-        v-if="doc"
-        v-model="stage"
-        class="ml-auto rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
-        @change="saveStage"
-      >
-        <option v-for="option in STAGES" :key="option" :value="option">
-          {{ option }}
-        </option>
-      </select>
+      <div v-if="doc" class="ml-auto flex items-center gap-2">
+        <span class="h-2 w-2 rounded-full" :class="jobStageDot(stage)"></span>
+        <select
+          v-model="stage"
+          class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
+          @change="saveStage"
+        >
+          <option v-for="option in STAGES" :key="option" :value="option">
+            {{ option }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <div v-if="job.loading" class="py-12 text-center text-sm text-gray-500">
@@ -54,9 +56,10 @@
               <h2 class="text-sm font-semibold text-gray-800">Revisions</h2>
               <span
                 v-if="doc.change_order_due"
-                class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
               >
-                ⚠ Round {{ doc.revision_rounds }} — chargeable change order
+                <FeatherIcon name="alert-triangle" class="h-3 w-3" />
+                Round {{ doc.revision_rounds }} — chargeable change order
               </span>
               <span v-else class="text-xs text-gray-500">
                 {{ doc.revision_rounds || 0 }} of
@@ -92,8 +95,15 @@
                   :class="row.chargeable ? 'bg-amber-50' : ''"
                 >
                   <td class="py-1 pr-2 tabular-nums">
-                    {{ row.round }}
-                    <span v-if="row.chargeable" title="Chargeable">⚠</span>
+                    <span class="inline-flex items-center gap-1">
+                      {{ row.round }}
+                      <FeatherIcon
+                        v-if="row.chargeable"
+                        name="alert-triangle"
+                        class="h-3 w-3 text-amber-700"
+                        title="Chargeable"
+                      />
+                    </span>
                   </td>
                   <td class="py-1 pr-2 whitespace-nowrap tabular-nums text-gray-600">
                     {{ row.requested_on?.slice(0, 16) }}
@@ -261,10 +271,11 @@
 <script setup>
 import { ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
 import PaperworkPanel from "../components/PaperworkPanel.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
+import { jobStageDot } from "../utils/stages"
 import JobMoneyPanel from "../components/JobMoneyPanel.vue"
 import MilestonesPanel from "../components/MilestonesPanel.vue"
 import {

@@ -90,9 +90,8 @@
             {{ user.full_name || user.name }}
           </option>
         </select>
-        <input
+        <VndInput
           v-model="advanceForm.amount"
-          inputmode="numeric"
           placeholder="Amount"
           class="w-36 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
         />
@@ -163,9 +162,8 @@
       <p v-else class="py-2 text-sm text-gray-400">Nothing logged yet.</p>
 
       <div class="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-        <input
+        <VndInput
           v-model="expenseForm.amount"
-          inputmode="numeric"
           placeholder="Amount"
           class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
         />
@@ -268,6 +266,7 @@ import { Button, ErrorMessage, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { parseVnd, vnd } from "../utils/money"
 import { EVEN, FROM_ADVANCE, FROM_COMPANY, RETURN } from "../data/money"
+import VndInput from "./VndInput.vue"
 
 const props = defineProps({ name: { type: String, required: true } })
 

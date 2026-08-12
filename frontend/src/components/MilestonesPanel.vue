@@ -4,10 +4,11 @@
       <h2 class="text-sm font-semibold text-gray-800">Payment milestones</h2>
       <span
         v-if="overdueCount"
-        class="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-800"
+        class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-800"
         :title="`Uncollected more than ${termsDays} days after falling due`"
       >
-        ⚠ {{ overdueCount }} overdue
+        <FeatherIcon name="alert-circle" class="h-3 w-3" />
+        {{ overdueCount }} overdue
       </span>
       <span class="ml-auto text-xs" :class="planClass">
         {{ plannedPct }}% of the quote planned
@@ -104,11 +105,11 @@
               Invoice request
             </button>
             <button
-              class="ml-1 rounded border px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-50"
+              class="ml-1 rounded border p-1 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
               title="Remove this milestone"
               @click="rows.splice(index, 1)"
             >
-              ✕
+              <FeatherIcon name="x" class="h-3 w-3" />
             </button>
           </td>
         </tr>
@@ -169,7 +170,7 @@
 
 <script setup>
 import { ref, computed, watch } from "vue"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
