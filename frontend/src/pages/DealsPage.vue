@@ -1,7 +1,31 @@
 <template>
   <div class="px-4 py-6">
-    <div class="mb-4 flex items-center gap-3">
+    <div class="mb-4 flex flex-wrap items-center gap-2">
       <h1 class="text-lg font-semibold text-gray-900">Deals</h1>
+      <span class="text-sm tabular-nums text-gray-400">
+        {{ filteredDeals.length }}
+      </span>
+      <div class="relative ml-2">
+        <FeatherIcon
+          name="search"
+          class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+        />
+        <input
+          v-model.trim="query"
+          type="text"
+          placeholder="Search deals"
+          class="w-56 rounded-md border-gray-300 py-1.5 pl-8 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+        />
+      </div>
+      <select
+        v-model="ownerFilter"
+        class="rounded-md border-gray-300 py-1.5 text-sm text-gray-700 focus:border-gray-500 focus:ring-0"
+      >
+        <option value="">All owners</option>
+        <option v-for="owner in owners" :key="owner.name" :value="owner.name">
+          {{ owner.full_name || owner.name }}
+        </option>
+      </select>
       <div class="ml-auto flex items-center gap-2">
         <div class="flex rounded-md bg-gray-100 p-0.5">
           <button
@@ -26,36 +50,82 @@
       <div
         v-for="stage in STAGES"
         :key="stage.value"
-        class="flex w-64 shrink-0 flex-col rounded-lg bg-gray-100"
-        @dragover.prevent
+        class="flex w-72 shrink-0 flex-col rounded-lg transition-colors"
+        :class="
+          dragOverStage === stage.value
+            ? 'bg-blue-50 ring-2 ring-inset ring-blue-300'
+            : 'bg-gray-100'
+        "
+        @dragover.prevent="dragOverStage = stage.value"
+        @dragleave="onDragLeave(stage.value, $event)"
         @drop="onDrop(stage.value)"
       >
-        <div
-          class="flex items-center gap-2 px-3 py-2 text-sm font-medium"
-          :class="stage.headerClass"
-        >
+        <div class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-800">
+          <span class="h-2 w-2 shrink-0 rounded-full" :class="stage.dot"></span>
           {{ stage.label }}
           <span class="text-xs font-normal text-gray-500">
             {{ dealsByStage[stage.value]?.length || 0 }}
+          </span>
+          <span
+            v-if="stageTotals[stage.value]"
+            class="ml-auto text-xs font-medium tabular-nums text-gray-600"
+            :title="`${vnd(stageTotals[stage.value])} ₫ total in ${stage.label}`"
+          >
+            {{ vndShort(stageTotals[stage.value]) }}
           </span>
         </div>
         <div class="flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2">
           <div
             v-for="deal in dealsByStage[stage.value]"
             :key="deal.name"
-            class="cursor-grab rounded-md border bg-white p-3 shadow-sm hover:border-gray-400"
+            class="group cursor-grab rounded-md border bg-white p-3 shadow-sm transition-shadow hover:border-gray-300 hover:shadow"
+            :class="dragged === deal ? 'opacity-50' : ''"
             draggable="true"
             @dragstart="dragged = deal"
-            @dragend="dragged = null"
+            @dragend="((dragged = null), (dragOverStage = null))"
             @click="openEdit(deal)"
           >
-            <div class="text-sm font-medium text-gray-900">
-              {{ deal.title }}
+            <div class="flex items-start gap-2">
+              <div class="min-w-0 flex-1">
+                <div
+                  class="truncate text-sm font-medium text-gray-900"
+                  :title="deal.title"
+                >
+                  {{ deal.title }}
+                </div>
+                <div
+                  v-if="deal.company"
+                  class="mt-0.5 truncate text-xs text-gray-500"
+                >
+                  {{ companyNames[deal.company] || deal.company }}
+                </div>
+              </div>
+              <button
+                class="shrink-0 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100"
+                title="Breakdown & Quote"
+                @click.stop="openBreakdown(deal)"
+              >
+                <FeatherIcon name="dollar-sign" class="h-3.5 w-3.5" />
+              </button>
             </div>
-            <div v-if="deal.company" class="mt-0.5 text-xs text-gray-600">
-              {{ companyNames[deal.company] || deal.company }}
+            <div
+              v-if="deal.estimated_budget || deal.project_type"
+              class="mt-2 flex items-center gap-2"
+            >
+              <span
+                v-if="deal.estimated_budget"
+                class="text-sm font-medium tabular-nums text-gray-800"
+              >
+                {{ vnd(deal.estimated_budget) }}
+              </span>
+              <span
+                v-if="deal.project_type"
+                class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600"
+              >
+                {{ deal.project_type }}
+              </span>
             </div>
-            <div class="mt-2 flex items-center gap-1.5">
+            <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <span
                 class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
               >
@@ -69,37 +139,44 @@
               </span>
               <span
                 v-if="silentDeals[deal.name]"
-                class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
                 :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} — no reply after ${silence.data?.silence_days} days`"
               >
-                ⏰ Silent
+                <FeatherIcon name="clock" class="h-3 w-3" />
+                Silent
               </span>
               <a
                 v-if="quoteLinks[deal.name]"
                 :href="quoteLinks[deal.name].url"
                 target="_blank"
                 rel="noopener"
-                class="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
+                class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
                 :title="`Open the client's quote page (v${quoteLinks[deal.name].version})`"
                 @click.stop
               >
-                🔗 v{{ quoteLinks[deal.name].version }}
+                <FeatherIcon name="link" class="h-3 w-3" />
+                v{{ quoteLinks[deal.name].version }}
               </a>
               <button
-                class="ml-auto rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
-                title="Breakdown & Quote"
-                @click.stop="openBreakdown(deal)"
-              >
-                ₫ Breakdown
-              </button>
-              <button
                 v-if="deal.stage === 'Won'"
-                class="rounded px-1.5 py-0.5 text-xs text-green-700 hover:bg-green-50"
+                class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
                 :title="jobFor(deal) ? 'Open the job' : 'Create the job'"
                 @click.stop="openOrCreateJob(deal)"
               >
                 {{ jobFor(deal) ? "Job →" : "+ Job" }}
               </button>
+              <span
+                v-if="stageAge(deal) >= 1 && deal.stage !== 'Won' && deal.stage !== 'Lost'"
+                class="ml-auto text-xs tabular-nums"
+                :class="
+                  stageAge(deal) > STALE_DAYS
+                    ? 'rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800'
+                    : 'text-gray-400'
+                "
+                :title="`In ${deal.stage} for ${stageAge(deal)} days`"
+              >
+                {{ stageAge(deal) }}d
+              </span>
             </div>
           </div>
         </div>
@@ -142,6 +219,7 @@
               v-for="col in visibleColumns"
               :key="col.key"
               class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-medium hover:text-gray-900"
+              :class="col.align === 'right' ? 'text-right' : ''"
               @click="sortBy(col.key)"
             >
               {{ col.label }}
@@ -149,11 +227,11 @@
                 {{ sortDir === "asc" ? "↑" : "↓" }}
               </span>
             </th>
-            <th class="whitespace-nowrap px-3 py-2 font-medium">Action</th>
+            <th class="sticky right-0 w-px bg-gray-50 px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
-          <tr class="border-b bg-blue-50/40 align-top">
+          <tr class="border-b bg-gray-50/70 align-top">
             <td
               v-for="col in visibleColumns"
               :key="col.key"
@@ -182,7 +260,7 @@
               />
               <span v-else class="text-gray-300">—</span>
             </td>
-            <td class="whitespace-nowrap px-2 py-1.5">
+            <td class="sticky right-0 whitespace-nowrap bg-gray-50 px-2 py-1.5">
               <Button
                 variant="solid"
                 :loading="createTableRow.loading"
@@ -195,13 +273,19 @@
           <tr
             v-for="deal in sortedDeals"
             :key="deal.name"
-            class="border-b last:border-b-0 hover:bg-gray-50"
+            class="group border-b last:border-b-0 hover:bg-gray-50"
           >
             <td
               v-for="col in visibleColumns"
               :key="col.key"
-              class="min-w-32 px-3 py-2 text-gray-700"
-              :class="col.editable && col.key !== 'title' ? 'cursor-text' : ''"
+              class="px-3 py-2 text-gray-700"
+              :class="[
+                col.key === 'title' ? 'min-w-56' : 'min-w-32',
+                col.align === 'right' ? 'text-right' : '',
+                col.editable && col.key !== 'title'
+                  ? 'cursor-text hover:bg-blue-50/50'
+                  : '',
+              ]"
               @click="startEditing(deal, col)"
             >
               <template v-if="isEditing(deal, col)">
@@ -235,19 +319,21 @@
                 />
               </template>
               <template v-else-if="col.key === 'title'">
-                <button
-                  class="font-medium text-blue-700 hover:underline"
-                  @click.stop="openEdit(deal)"
-                >
-                  {{ deal.title }}
-                </button>
-                <button
-                  class="ml-2 text-xs text-gray-400 hover:text-gray-700"
-                  title="Edit title inline"
-                  @click.stop="startEditing(deal, col, true)"
-                >
-                  ✎
-                </button>
+                <div class="group flex items-center gap-1.5">
+                  <button
+                    class="text-left font-medium text-blue-700 hover:underline"
+                    @click.stop="openEdit(deal)"
+                  >
+                    {{ deal.title }}
+                  </button>
+                  <button
+                    class="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100"
+                    title="Edit title inline"
+                    @click.stop="startEditing(deal, col, true)"
+                  >
+                    <FeatherIcon name="edit-2" class="h-3 w-3" />
+                  </button>
+                </div>
               </template>
               <span
                 v-else-if="col.key === 'stage'"
@@ -269,9 +355,10 @@
                 {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
                 <span
                   v-if="silentDeals[deal.name]"
-                  class="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                  class="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
                 >
-                  ⏰ Silent
+                  <FeatherIcon name="clock" class="h-3 w-3" />
+                  Silent
                 </span>
               </template>
               <span v-else-if="col.key === 'company'">
@@ -283,25 +370,37 @@
               <span v-else-if="col.key === 'estimated_budget'" class="tabular-nums">
                 {{ formatBudget(deal.estimated_budget) }}
               </span>
-              <span v-else-if="col.key === 'modified'" class="whitespace-nowrap tabular-nums text-gray-500">
-                {{ deal.modified?.slice(0, 16) }}
+              <span
+                v-else-if="col.key === 'modified'"
+                class="whitespace-nowrap tabular-nums text-gray-500"
+                :title="deal.modified?.slice(0, 16)"
+              >
+                {{ ago(deal.modified) }}
               </span>
               <span v-else>{{ deal[col.key] }}</span>
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
-              Click a cell to edit
-            </td>
+            <td class="sticky right-0 bg-white px-3 py-2 group-hover:bg-gray-50"></td>
           </tr>
           <tr v-if="!sortedDeals.length">
             <td
               :colspan="visibleColumns.length + 1"
               class="px-3 py-6 text-center text-gray-400"
             >
-              No deals yet.
+              {{
+                query || ownerFilter
+                  ? "No deals match your search."
+                  : "No deals yet — add one in the row above."
+              }}
             </td>
           </tr>
         </tbody>
         </table>
+      </div>
+      <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+        <span>Click any cell to edit it in place — Enter saves, Esc cancels.</span>
+        <span v-if="tableBudgetTotal" class="tabular-nums">
+          {{ sortedDeals.length }} deals · {{ vnd(tableBudgetTotal) }} ₫
+        </span>
       </div>
     </div>
 
@@ -353,24 +452,67 @@ import {
   Button,
   Dialog,
   ErrorMessage,
+  FeatherIcon,
   createResource,
   createListResource,
 } from "frappe-ui"
 import DealFormDialog from "../components/DealFormDialog.vue"
 import LostReasonDialog from "../components/LostReasonDialog.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd } from "../utils/money"
+import { vnd, vndShort } from "../utils/money"
+import { ago, daysSince } from "../utils/time"
 
 // The agreed pipeline, in board order (spec issue #2, story 3).
+// One color per stage, used everywhere a stage appears — board column
+// dots and table pills must never disagree.
 const STAGES = [
-  { label: "Brief Received", value: "Brief Received" },
-  { label: "De-brief", value: "De-brief" },
-  { label: "Breakdown", value: "Breakdown" },
-  { label: "Quote Sent", value: "Quote Sent" },
-  { label: "Negotiation", value: "Negotiation" },
-  { label: "Won", value: "Won", headerClass: "text-green-700" },
-  { label: "Lost", value: "Lost", headerClass: "text-red-700" },
+  {
+    label: "Brief Received",
+    value: "Brief Received",
+    dot: "bg-gray-400",
+    pill: "bg-gray-100 text-gray-700",
+  },
+  {
+    label: "De-brief",
+    value: "De-brief",
+    dot: "bg-sky-500",
+    pill: "bg-sky-50 text-sky-700",
+  },
+  {
+    label: "Breakdown",
+    value: "Breakdown",
+    dot: "bg-violet-500",
+    pill: "bg-violet-50 text-violet-700",
+  },
+  {
+    label: "Quote Sent",
+    value: "Quote Sent",
+    dot: "bg-amber-500",
+    pill: "bg-amber-50 text-amber-800",
+  },
+  {
+    label: "Negotiation",
+    value: "Negotiation",
+    dot: "bg-orange-500",
+    pill: "bg-orange-50 text-orange-800",
+  },
+  {
+    label: "Won",
+    value: "Won",
+    dot: "bg-green-500",
+    pill: "bg-green-50 text-green-700",
+  },
+  {
+    label: "Lost",
+    value: "Lost",
+    dot: "bg-red-500",
+    pill: "bg-red-50 text-red-700",
+  },
 ]
+
+// The founder's weekly ritual: which deal has sat still for over a
+// week? Past this many days in one stage, the age badge turns amber.
+const STALE_DAYS = 7
 
 const deals = createListResource({
   doctype: "Deal",
@@ -387,11 +529,22 @@ const deals = createListResource({
     "quote_status",
     "quote_sent_on",
     "modified",
+    "creation",
   ],
   orderBy: "modified desc",
   pageLength: 500,
   auto: true,
 })
+
+// {deal: datetime it entered its current stage} — the age badge.
+const stageEntries = createResource({
+  url: "auraos.api.deal_stage_entries",
+  auto: true,
+})
+
+function stageAge(deal) {
+  return daysSince(stageEntries.data?.[deal.name] || deal.creation) ?? 0
+}
 
 // Quotes that have gone unanswered past the company's silence window
 // (spec #2, story 6) — the deal-killer the board is meant to surface.
@@ -480,6 +633,39 @@ const view = ref(savedPreferences.view === "Table" ? "Table" : "Board")
 const sortKey = ref("modified")
 const sortDir = ref("desc")
 
+// -- search & owner filter (shared by both views) --
+
+const query = ref("")
+const ownerFilter = ref("")
+
+const filteredDeals = computed(() => {
+  const needle = query.value.toLowerCase()
+  const owner = ownerFilter.value
+  return (deals.data || []).filter((deal) => {
+    if (owner && deal.deal_owner !== owner) return false
+    if (!needle) return true
+    return [
+      deal.title,
+      companyNames.value[deal.company] || deal.company,
+      deal.project_type,
+      deal.name,
+    ]
+      .filter(Boolean)
+      .some((text) => String(text).toLowerCase().includes(needle))
+  })
+})
+
+// Pipeline value per column — the number the playbook's 3X coverage
+// rule is read off of.
+const stageTotals = computed(() => {
+  const totals = {}
+  for (const deal of filteredDeals.value) {
+    if (!deal.estimated_budget) continue
+    totals[deal.stage] = (totals[deal.stage] || 0) + deal.estimated_budget
+  }
+  return totals
+})
+
 const COLUMNS = [
   {
     key: "title",
@@ -502,6 +688,7 @@ const COLUMNS = [
     label: "Budget (VND)",
     editable: true,
     type: "number",
+    align: "right",
   },
   { key: "source", label: "Source", editable: true, type: "select" },
   {
@@ -605,9 +792,10 @@ function tagsFor(deal) {
 }
 
 function stageClass(stage) {
-  if (stage === "Lost") return "bg-red-50 text-red-700"
-  if (stage === "Won") return "bg-green-50 text-green-700"
-  return "bg-gray-100 text-gray-700"
+  return (
+    STAGES.find((entry) => entry.value === stage)?.pill ||
+    "bg-gray-100 text-gray-700"
+  )
 }
 
 // -- inline editing and blank-row creation (T3.3, issue #27) --
@@ -697,6 +885,7 @@ async function saveInline() {
     if (editing.value === active) cancelEditing()
     deals.reload()
     dealTags.reload()
+    if (active.key === "stage") stageEntries.reload()
     if (active.key === "stage" && active.value === "Won" && !jobFor(active.deal)) {
       offerJob({ ...active.deal, stage: "Won" })
     }
@@ -730,6 +919,7 @@ async function createFromTable() {
     newDeal.value = emptyTableRow()
     deals.reload()
     dealTags.reload()
+    stageEntries.reload()
   } catch (err) {
     tableError.value = frappeErrorMessage(err)
   }
@@ -755,7 +945,7 @@ function sortValue(deal, key) {
 
 const sortedDeals = computed(() => {
   const dir = sortDir.value === "asc" ? 1 : -1
-  return [...(deals.data || [])].sort((a, b) => {
+  return [...filteredDeals.value].sort((a, b) => {
     const va = sortValue(a, sortKey.value)
     const vb = sortValue(b, sortKey.value)
     if (typeof va === "number" || typeof vb === "number") {
@@ -771,16 +961,33 @@ function formatBudget(value) {
 
 const dealsByStage = computed(() => {
   const map = {}
-  for (const deal of deals.data || []) {
+  for (const deal of filteredDeals.value) {
     ;(map[deal.stage] ||= []).push(deal)
   }
   return map
 })
 
+const tableBudgetTotal = computed(() =>
+  sortedDeals.value.reduce((sum, deal) => sum + (deal.estimated_budget || 0), 0)
+)
+
 // -- drag & drop --
 
 const dragged = ref(null)
+// The column a card is currently held over — its highlight is the
+// "you are about to drop here" answer.
+const dragOverStage = ref(null)
 const moveError = ref("")
+
+function onDragLeave(stage, event) {
+  if (dragOverStage.value !== stage) return
+  // Moving over a card inside the column also fires dragleave; only
+  // clear when the pointer truly left the column.
+  if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) {
+    return
+  }
+  dragOverStage.value = null
+}
 const lostDialogOpen = ref(false)
 const pendingLost = ref(null)
 // The move a pending set_value is carrying out, so its success handler
@@ -792,6 +999,7 @@ const setStage = createResource({
   onSuccess() {
     moveError.value = ""
     deals.reload()
+    stageEntries.reload()
     // Winning a deal is where the job gets created (T7); ask right here
     // rather than leaving it to be remembered later.
     if (lastMove.value?.stage === "Won" && !jobFor(lastMove.value.deal)) {
@@ -809,6 +1017,7 @@ const setStage = createResource({
 function onDrop(stage) {
   const deal = dragged.value
   dragged.value = null
+  dragOverStage.value = null
   if (!deal || deal.stage === stage) return
   if (stage === "Lost") {
     // The server refuses Lost without a reason; collect it first.
@@ -852,6 +1061,7 @@ function openEdit(deal) {
 function onSaved(deal) {
   deals.reload()
   dealTags.reload()
+  stageEntries.reload()
   if (deal?.stage === "Won" && !jobFor(deal)) offerJob(deal)
 }
 

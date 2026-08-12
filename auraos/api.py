@@ -229,6 +229,32 @@ def deal_tags_map():
     return tag_map
 
 
+@frappe.whitelist()
+def deal_stage_entries():
+    """When each deal entered its current stage — {deal_name: datetime}.
+
+    Serves the board's staleness badge: the founder's weekly ritual is
+    "which deal has sat still in a stage for over a week?", and the
+    board should answer it at a glance. Insertion logs a stage_history
+    row too, so every deal has at least one; the last row per deal is
+    the move into its current stage.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    # get_all skips row-level permissions, so scope the child rows to
+    # the deals this user may actually list.
+    permitted = frappe.get_list("Deal", pluck="name", limit_page_length=0)
+    rows = frappe.get_all(
+        "Deal Stage Log",
+        filters={"parenttype": "Deal", "parent": ["in", permitted]},
+        fields=["parent", "changed_on"],
+        order_by="parent asc, idx asc",
+    )
+    entered = {}
+    for row in rows:
+        entered[row.parent] = row.changed_on
+    return entered
+
+
 def _is_founder():
     return "Founder" in frappe.get_roles()
 
