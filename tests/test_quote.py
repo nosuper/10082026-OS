@@ -86,7 +86,9 @@ def quote(**overrides):
 
 def test_client_view_keeps_only_whitelisted_quote_fields():
     view = client_view(quote())
-    assert set(view) == set(CLIENT_QUOTE_FIELDS) | {"packages"}
+    # `sections` is derived presentation, built only from whitelisted
+    # package and line fields — no new data crosses the boundary.
+    assert set(view) == set(CLIENT_QUOTE_FIELDS) | {"packages", "sections"}
 
 
 def test_client_view_keeps_only_whitelisted_package_fields():
@@ -354,3 +356,120 @@ def test_zero_silence_days_turns_the_nudge_off(silence_days):
         status="Sent", sent_on=SENT_ON, now=SENT_ON + timedelta(days=365),
         silence_days=silence_days,
     )
+
+
+# -- detail levels (A3, playbook §3.3) --
+
+
+from auraos.lib.quote import (  # noqa: E402
+    line_sections,
+    lump_sum_entry,
+    quantity_display,
+)
+
+
+def test_quantity_reads_the_way_a_bid_writes_it():
+    assert quantity_display(2, "người", 3, "ngày") == "2 người × 3 ngày"
+
+
+def test_quantity_of_one_with_no_unit_is_silence_not_noise():
+    assert quantity_display(1, "", 1, None) == ""
+    assert quantity_display(1, "", 3, "ngày") == "3 ngày"
+
+
+def test_quantity_keeps_a_bare_count_above_one():
+    assert quantity_display(10, "", 3, "ngày") == "10 × 3 ngày"
+
+
+def test_quantity_drops_trailing_zeroes():
+    assert quantity_display(2.5, "ngày", 1, "") == "2.5 ngày"
+
+
+def _lines():
+    return [
+        {"package": "Crew", "description": "Đạo diễn", "qty1": 1,
+         "qty1_unit": "người", "qty2": 3, "qty2_unit": "ngày",
+         "quote_price": 20_000_000},
+        {"package": "Crew", "description": "Quay phim", "qty1": 2,
+         "qty1_unit": "người", "qty2": 3, "qty2_unit": "ngày",
+         "quote_price": 28_000_000},
+        {"package": None, "description": "Flycam", "qty1": 1,
+         "qty1_unit": "", "qty2": 1, "qty2_unit": "",
+         "quote_price": 6_900_000, "idx": 3},
+    ]
+
+
+def test_sections_group_lines_under_their_package():
+    sections = line_sections(
+        [{"title": "Crew", "description": "Crew!", "price": 48_000_000}],
+        _lines(),
+    )
+    assert [s["title"] for s in sections] == ["Crew", "Flycam"]
+    crew = sections[0]
+    assert [line["description"] for line in crew["lines"]] == [
+        "Đạo diễn",
+        "Quay phim",
+    ]
+    assert crew["lines"][0]["quantity"] == "1 người × 3 ngày"
+    # A standalone line is its own section, price and all, no sub-lines.
+    assert sections[1]["price"] == 6_900_000
+    assert sections[1]["lines"] == []
+
+
+def test_an_overridden_section_prints_the_difference_as_adjustment():
+    # The section total must be the sum of what's above it, or the
+    # client's own arithmetic "catches" us. 45tr offered vs 48tr of
+    # lines → an Adjustment of -3tr.
+    sections = line_sections(
+        [{"title": "Crew", "description": None, "price": 45_000_000}],
+        [line for line in _lines() if line["package"] == "Crew"],
+    )
+    adjustment = sections[0]["lines"][-1]
+    assert adjustment["description"] == "Adjustment"
+    assert adjustment["quote_price"] == D("-3000000")
+    assert adjustment["quantity"] == ""
+
+
+def test_a_section_matching_its_lines_needs_no_adjustment():
+    sections = line_sections(
+        [{"title": "Crew", "description": None, "price": 48_000_000}],
+        [line for line in _lines() if line["package"] == "Crew"],
+    )
+    assert all(
+        line["description"] != "Adjustment" for line in sections[0]["lines"]
+    )
+
+
+def test_lump_sum_collapses_the_offer_but_keeps_the_scope():
+    entry = lump_sum_entry(
+        "Social series — 6 tập",
+        [
+            {"title": "Crew", "price": 48_000_000},
+            {"title": "Equipment", "price": 31_350_000},
+        ],
+    )
+    assert entry["title"] == "Social series — 6 tập"
+    assert entry["description"] == "Crew, Equipment"
+    assert entry["price"] == 79_350_000
+
+
+def test_client_line_fields_never_name_the_cost_side():
+    from auraos.lib.quote import CLIENT_LINE_FIELDS
+
+    for internal in ("unit_price", "markup_pct", "vendor_mf_pct",
+                     "tax_type", "cost_basis", "margin"):
+        assert internal not in CLIENT_LINE_FIELDS
+
+
+def test_a_standalone_entry_and_its_frozen_line_print_once():
+    # The publish freezes a standalone line twice over: as its own
+    # package entry AND as a frozen line. The page must print it once.
+    sections = line_sections(
+        [
+            {"title": "Crew", "description": None, "price": 48_000_000},
+            {"title": "Flycam", "description": None, "price": 6_900_000},
+        ],
+        _lines(),
+    )
+    assert [s["title"] for s in sections] == ["Crew", "Flycam"]
+    assert sections[1]["price"] == 6_900_000

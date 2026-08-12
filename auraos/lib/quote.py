@@ -27,11 +27,18 @@ from typing import Any, Mapping
 from auraos.lib.money import to_decimal
 from auraos.lib.pricing import TNDN_RATE
 
+# The playbook's three levels of quote detail (§3.3): how much of the
+# build a client gets to read. Internal is always the full build; what
+# goes out is gathered to the level the client needs.
+DETAIL_LEVELS = ("Package totals", "Line by line", "Lump sum")
+DEFAULT_DETAIL_LEVEL = "Package totals"
+
 # Everything a client may read off a quote. Ordered as the page reads.
 CLIENT_QUOTE_FIELDS = (
     "title",
     "client_name",
     "version",
+    "detail_level",
     "published_on",
     "quote_mf_pct",
     "vat_pct",
@@ -45,6 +52,19 @@ CLIENT_QUOTE_FIELDS = (
 # ...and off each of its packages. Cost, variance and the override are
 # ours; the client sees an offer, not how we arrived at it.
 CLIENT_PACKAGE_FIELDS = ("title", "description", "price")
+
+# ...and off each frozen line on a line-by-line quote. quote_price is
+# the marked-up sell price; cost, markup and tax routing are never
+# frozen into a quote at all, so they cannot leak from here.
+CLIENT_LINE_FIELDS = (
+    "package",
+    "description",
+    "qty1",
+    "qty1_unit",
+    "qty2",
+    "qty2_unit",
+    "quote_price",
+)
 
 # Who is making the offer (T6.1a, issue #42). A second whitelist rather
 # than a wider first one, because these fields come off a different
@@ -135,7 +155,127 @@ def client_view(quote: Mapping[str, Any]) -> dict:
         {field: package.get(field) for field in CLIENT_PACKAGE_FIELDS}
         for package in (quote.get("packages") or [])
     ]
+    view["sections"] = line_sections(
+        view["packages"], quote.get("lines") or []
+    )
     return view
+
+
+def quantity_display(qty1, unit1, qty2, unit2) -> str:
+    """How a line's quantities read on a bid — "2 người × 3 ngày".
+
+    Each half prints only when it says something: a bare quantity of 1
+    with no unit is packaging noise, not information. Both halves silent
+    → empty string, and the template leaves the cell blank.
+    """
+
+    def half(qty, unit):
+        qty = to_decimal(qty or 0)
+        unit = (unit or "").strip()
+        if not unit and qty in (Decimal(0), Decimal(1)):
+            return None
+        number = f"{qty.normalize():f}"
+        return f"{number} {unit}".strip() if unit else number
+
+    parts = [part for part in (half(qty1, unit1), half(qty2, unit2)) if part]
+    return " × ".join(parts)
+
+
+def _client_line(line: Mapping[str, Any]) -> dict:
+    view = {field: line.get(field) for field in CLIENT_LINE_FIELDS}
+    view["quantity"] = quantity_display(
+        line.get("qty1"),
+        line.get("qty1_unit"),
+        line.get("qty2"),
+        line.get("qty2_unit"),
+    )
+    return view
+
+
+def line_sections(packages, lines):
+    """The line-by-line rendering: every offer entry with its member
+    lines beneath it, in the same order `client_entries` prints.
+
+    A package priced away from its lines' sum (T5's override — a
+    round-up or a free-of-charge) would hand the client a table that
+    doesn't add up; the difference is printed as its own Adjustment
+    line, so the section total is always the sum of what's above it.
+    """
+    by_package = {}
+    standalone = []
+    for line in lines:
+        if line.get("package"):
+            by_package.setdefault(line["package"], []).append(line)
+        else:
+            standalone.append(line)
+
+    def standalone_title(line):
+        return line.get("description") or f"Item {line.get('idx')}"
+
+    sections = []
+    consumed = set()
+    for package in packages:
+        title = package.get("title")
+        members = [_client_line(line) for line in by_package.get(title, [])]
+        # A standalone line published as its own entry (client_entries)
+        # arrives here twice: once as this package entry, once in the
+        # frozen lines. The entry *is* the line — consume it, or the
+        # page would print it again below.
+        if not members:
+            for index, line in enumerate(standalone):
+                if index not in consumed and standalone_title(line) == title:
+                    consumed.add(index)
+                    break
+        price = package.get("price") or 0
+        lines_total = sum(
+            to_decimal(line.get("quote_price") or 0) for line in members
+        )
+        if members and lines_total != to_decimal(price):
+            members.append(
+                {
+                    "package": title,
+                    "description": "Adjustment",
+                    "quantity": "",
+                    "quote_price": to_decimal(price) - lines_total,
+                }
+            )
+        sections.append(
+            {
+                "title": title,
+                "description": package.get("description"),
+                "price": price,
+                "lines": members,
+            }
+        )
+    for index, line in enumerate(standalone):
+        if index not in consumed:
+            sections.append(
+                {
+                    "title": standalone_title(line),
+                    "description": None,
+                    "price": line.get("quote_price") or 0,
+                    "lines": [],
+                }
+            )
+    return sections
+
+
+def lump_sum_entry(title, entries):
+    """The whole offer as one line — the playbook's lump-sum level for
+    small jobs and clients who don't read production budgets.
+
+    The scope still reads: the single entry's description lists what
+    the figure covers, so "one number" never becomes "no idea what
+    for".
+    """
+    scope = ", ".join(
+        entry["title"] for entry in entries if entry.get("title")
+    )
+    return {
+        "title": title or "Production services",
+        "description": scope or None,
+        "price": sum(entry.get("price") or 0 for entry in entries),
+    }
 
 
 @dataclass(frozen=True)

@@ -13,10 +13,12 @@
   "client_section",
   "title",
   "client_name",
+  "detail_level",
   "column_break_client",
   "notes",
   "packages_section",
   "packages",
+  "lines",
   "totals_section",
   "quote_mf_pct",
   "vat_pct",
@@ -89,6 +91,15 @@
    "read_only": 1
   },
   {
+   "default": "Package totals",
+   "description": "How much of the build this frozen version shows the client",
+   "fieldname": "detail_level",
+   "fieldtype": "Select",
+   "label": "Detail Level",
+   "options": "Package totals\nLine by line\nLump sum",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_client",
    "fieldtype": "Column Break"
   },
@@ -109,6 +120,14 @@
    "fieldtype": "Table",
    "label": "Packages",
    "options": "Deal Quote Package",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen only on line-by-line versions",
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Deal Quote Line",
    "read_only": 1
   },
   {

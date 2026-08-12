@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "creation": "2026-08-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "package",
+  "description",
+  "qty1",
+  "qty1_unit",
+  "qty2",
+  "qty2_unit",
+  "quote_price"
+ ],
+ "fields": [
+  {
+   "description": "Title of the quote package this line sits under; empty for a standalone line",
+   "fieldname": "package",
+   "fieldtype": "Data",
+   "label": "Package"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Description"
+  },
+  {
+   "fieldname": "qty1",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty 1"
+  },
+  {
+   "fieldname": "qty1_unit",
+   "fieldtype": "Data",
+   "label": "Unit 1"
+  },
+  {
+   "fieldname": "qty2",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty 2"
+  },
+  {
+   "fieldname": "qty2_unit",
+   "fieldtype": "Data",
+   "label": "Unit 2"
+  },
+  {
+   "description": "The marked-up sell price — cost, markup and tax routing are never frozen into a quote",
+   "fieldname": "quote_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Quote Price"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Deal Quote Line",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

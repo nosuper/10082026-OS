@@ -51,7 +51,9 @@ LINES = [
         "description": "Đạo diễn",
         "package": "Human resources",
         "qty1": 1,
+        "qty1_unit": "người",
         "qty2": 3,
+        "qty2_unit": "ngày",
         "unit_price": 5_000_000,
         "tax_type": "Cá nhân",
         "markup_pct": 20,
@@ -60,7 +62,9 @@ LINES = [
         "description": "Thuê thiết bị",
         "package": "Equipment",
         "qty1": 2,
+        "qty1_unit": "bộ",
         "qty2": 3,
+        "qty2_unit": "ngày",
         "unit_price": 8_000_000,
         "tax_type": "Công ty",
         "vendor_mf_pct": 5,
@@ -509,3 +513,79 @@ class TestDealQuote(FrappeTestCase):
         payload = silent_quote_deals()
         self.assertEqual(payload["silence_days"], 3)
         self.assertIn(deal.name, [row.name for row in payload["deals"]])
+
+
+class TestQuoteDetailLevels(FrappeTestCase):
+    """A3 (playbook §3.3): how much of the build the client's page shows."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def test_default_publish_stays_package_totals(self):
+        deal = make_quotable_deal()
+        quote = publish(deal.name)
+        self.assertEqual(quote.detail_level, "Package totals")
+        self.assertEqual(len(quote.lines), 0)
+
+    def test_line_by_line_freezes_the_client_safe_half_of_every_line(self):
+        deal = make_quotable_deal(quote_detail_level="Line by line")
+        quote = publish(deal.name)
+        self.assertEqual(quote.detail_level, "Line by line")
+        self.assertEqual(len(quote.lines), len(deal.cost_lines))
+        frozen = quote.lines[0]
+        source = deal.cost_lines[0]
+        self.assertEqual(frozen.description, source.description)
+        self.assertEqual(frozen.package, source.package)
+        self.assertEqual(frozen.qty1, source.qty1)
+        self.assertEqual(frozen.quote_price, source.quote_price)
+        # The totals are the same offer whichever way it is printed.
+        self.assertEqual(quote.total, deal.quote_total)
+
+    def test_line_by_line_page_prints_quantities_and_amounts(self):
+        deal = make_quotable_deal(quote_detail_level="Line by line")
+        quote = publish(deal.name)
+        html = squash(render_page(quote.token).get_data(as_text=True))
+        self.assertIn("1 người × 3 ngày", html)
+        self.assertIn("Đạo diễn", html)
+        self.assertIn(format_vnd(deal.cost_lines[0].quote_price), html)
+
+    def test_the_page_never_prints_the_cost_side_at_any_level(self):
+        deal = make_quotable_deal(quote_detail_level="Line by line")
+        quote = publish(deal.name)
+        html = squash(render_page(quote.token).get_data(as_text=True))
+        # The internal unit cost and markup are not in the frozen rows at
+        # all, so they cannot render — pin it anyway. (Checked as field
+        # names and figures, not bare words: a template comment may
+        # legitimately say "markup".)
+        self.assertNotIn(format_vnd(deal.cost_lines[0].unit_price), html)
+        self.assertNotIn("markup_pct", html)
+        self.assertNotIn("vendor_mf_pct", html)
+
+    def test_lump_sum_collapses_to_one_entry_with_the_scope(self):
+        deal = make_quotable_deal(quote_detail_level="Lump sum")
+        quote = publish(deal.name)
+        self.assertEqual(quote.detail_level, "Lump sum")
+        self.assertEqual(len(quote.packages), 1)
+        entry = quote.packages[0]
+        self.assertEqual(entry.title, deal.title)
+        self.assertIn("Human resources", entry.description)
+        self.assertIn("Equipment", entry.description)
+        # One line or many, the client is offered the same money.
+        self.assertEqual(quote.total, deal.quote_total)
+
+    def test_frozen_lines_are_immutable(self):
+        deal = make_quotable_deal(quote_detail_level="Line by line")
+        quote = publish(deal.name)
+        quote.lines[0].quote_price = 1
+        with self.assertRaises(frappe.ValidationError):
+            quote.save()

@@ -32,6 +32,18 @@
   .aura-quote .aura-package-title { font-weight: 600; }
   .aura-quote .aura-package-desc { color: #4b5563; font-size: .875rem;
     margin-top: .25rem; white-space: pre-line; }
+
+  /* Line-by-line detail (A3): section rows carry the package and its
+     price; member lines sit beneath, indented and lighter, and always
+     add up to the section — the builder prints an Adjustment line when
+     an override moved the price. */
+  .aura-quote .aura-section-row td { border-bottom: 1px solid #e5e7eb;
+    padding-top: 1rem; }
+  .aura-quote .aura-section-amount { font-weight: 600; }
+  .aura-quote .aura-line-row td { border-bottom: 0; padding: .3rem 0;
+    font-size: .875rem; color: #4b5563; }
+  .aura-quote .aura-line-desc { padding-left: 1.25rem; }
+  .aura-quote .aura-line-qty { white-space: nowrap; color: #6b7280; }
   .aura-quote .aura-totals { margin-top: 1.5rem; margin-left: auto; width: 20rem; }
   .aura-quote .aura-totals div { display: flex; justify-content: space-between;
     padding: .35rem 0; font-size: .9375rem; }
@@ -169,10 +181,43 @@
     {% if published_display %} &middot; {{ published_display }}{% endif %}
   </div>
 
+  {% if detail_level == "Line by line" %}
   <table>
     <thead>
       <tr>
-        <th>Package</th>
+        <th>Item</th>
+        <th>Quantity</th>
+        <th class="aura-amount">Amount (VND)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for section in sections %}
+      <tr class="aura-section-row">
+        <td colspan="2">
+          <div class="aura-package-title">{{ section.title }}</div>
+          {% if section.description %}
+          <div class="aura-package-desc">{{ section.description }}</div>
+          {% endif %}
+        </td>
+        <td class="aura-amount aura-section-amount">
+          {{ money(section.price or 0) }}
+        </td>
+      </tr>
+      {% for line in section.lines %}
+      <tr class="aura-line-row">
+        <td class="aura-line-desc">{{ line.description }}</td>
+        <td class="aura-line-qty">{{ line.quantity }}</td>
+        <td class="aura-amount">{{ money(line.quote_price or 0) }}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>{{ "Scope" if detail_level == "Lump sum" else "Package" }}</th>
         <th class="aura-amount">Price (VND)</th>
       </tr>
     </thead>
@@ -190,6 +235,7 @@
       {% endfor %}
     </tbody>
   </table>
+  {% endif %}
 
   <div class="aura-totals">
     <div><span>Subtotal</span><span>{{ money(subtotal or 0) }}</span></div>
