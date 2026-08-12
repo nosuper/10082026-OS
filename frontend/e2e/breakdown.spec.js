@@ -54,10 +54,17 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
     directorRow(page).locator('input[inputmode="numeric"]')
   ).toHaveValue("5.500.000")
 
-  // Put the seeded figure back so specs stay order-independent.
+  // Put the seeded figure back — and let AUTOSAVE do it: no Ctrl+S,
+  // the page saves itself a moment after the last edit.
   await directorRow(page).locator('input[inputmode="numeric"]').fill("4000000")
-  await page.keyboard.press("Control+s")
-  await expect(page.getByText("Unsaved changes", { exact: false })).toHaveCount(0)
+  await expect(page.getByText("Unsaved changes", { exact: false })).toHaveCount(
+    0,
+    { timeout: 15_000 }
+  )
+  await page.reload()
+  await expect(
+    directorRow(page).locator('input[inputmode="numeric"]')
+  ).toHaveValue("4.000.000")
 })
 
 test("detail columns are hidden by default and the choice sticks per user", async ({ page }) => {

@@ -32,7 +32,10 @@ const display = computed(() =>
 )
 
 function onInput(event) {
-  const value = parseVnd(event.target.value) || ""
+  const digits = String(event.target.value).replace(/\D/g, "")
+  // A typed "0" stays 0 — a package overridden to 0 đồng (free of
+  // charge) is a real quote. Only a truly empty field means "no value".
+  const value = digits === "" ? "" : parseVnd(digits)
   // Rewrite the field immediately so stray characters never linger; a
   // caret jump to the end is the accepted price on a money field.
   event.target.value = value === "" ? "" : vnd(value)

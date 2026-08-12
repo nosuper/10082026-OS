@@ -286,7 +286,11 @@ class TestDealBreakdown(FrappeTestCase):
             cost_lines=self.package_lines(),
             packages=[
                 {"title": "Human resources"},
-                {"title": "Equipment", "price_override": 70_000_000},
+                {
+                    "title": "Equipment",
+                    "price_override": 70_000_000,
+                    "has_price_override": 1,
+                },
             ],
         )
         equipment = {p.title: p for p in deal.packages}["Equipment"]
@@ -295,6 +299,40 @@ class TestDealBreakdown(FrappeTestCase):
             equipment.variance, 70_000_000 - equipment.default_price
         )
         self.assertNotEqual(equipment.variance, 0)
+
+    def test_override_without_flag_is_ignored(self):
+        # The Currency column defaults to 0 for every package ever saved
+        # without an override; only the Check makes the number mean
+        # something.
+        deal = make_breakdown_deal(
+            cost_lines=self.package_lines(),
+            packages=[
+                {"title": "Human resources"},
+                {"title": "Equipment", "price_override": 70_000_000},
+            ],
+        )
+        equipment = {p.title: p for p in deal.packages}["Equipment"]
+        self.assertEqual(equipment.price, equipment.default_price)
+        self.assertEqual(equipment.variance, 0)
+
+    def test_package_override_zero_quotes_free_of_charge(self):
+        # The founder's discount move: a package with real costs behind
+        # it, quoted to the client at 0 đồng (A2 walkthrough answer).
+        deal = make_breakdown_deal(
+            cost_lines=self.package_lines(),
+            packages=[
+                {"title": "Human resources"},
+                {
+                    "title": "Equipment",
+                    "price_override": 0,
+                    "has_price_override": 1,
+                },
+            ],
+        )
+        equipment = {p.title: p for p in deal.packages}["Equipment"]
+        self.assertEqual(equipment.price, 0)
+        self.assertGreater(equipment.default_price, 0)
+        self.assertEqual(equipment.variance, -equipment.default_price)
 
     def test_duplicate_package_titles_are_rejected(self):
         with self.assertRaises(frappe.ValidationError):
@@ -586,7 +624,11 @@ class TestDealBreakdown(FrappeTestCase):
             lines=lines,
             packages=[
                 {"title": "Human resources"},
-                {"title": "Equipment", "price_override": 70_000_000},
+                {
+                    "title": "Equipment",
+                    "price_override": 70_000_000,
+                    "has_price_override": 1,
+                },
             ],
         )
         by_title = {p["title"]: p for p in out["packages"]}

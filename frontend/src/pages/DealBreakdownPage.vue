@@ -19,8 +19,15 @@
         {{ deal.data.stage }}
       </span>
       <div class="ml-auto flex items-center gap-3">
-        <span v-if="dirty" class="text-xs text-amber-700">
-          Unsaved changes — Ctrl+S saves
+        <span v-if="saving" class="text-xs text-gray-500">Saving…</span>
+        <span v-else-if="dirty && !allLinesComplete" class="text-xs text-red-600">
+          A line is missing its description — autosave is waiting
+        </span>
+        <span v-else-if="dirty" class="text-xs text-amber-700">
+          Unsaved changes — autosaves in a moment, Ctrl+S saves now
+        </span>
+        <span v-else-if="baseline" class="text-xs text-gray-400">
+          All changes saved
         </span>
         <Button variant="solid" :loading="saving" @click="save">Save</Button>
       </div>
@@ -81,17 +88,17 @@
               <th v-if="metaVisible('source_type')" class="px-2 py-2 font-medium">Source Type</th>
               <th v-if="metaVisible('source_contact')" class="px-2 py-2 font-medium">Source Contact</th>
               <th class="px-2 py-2 font-medium">Package</th>
-              <th class="px-2 py-2 font-medium">Qty</th>
-              <th class="px-2 py-2 font-medium">Unit</th>
-              <th class="px-2 py-2 font-medium">Qty</th>
-              <th class="px-2 py-2 font-medium">Unit</th>
+              <th class="px-2 py-2 text-right font-medium">Qty 1</th>
+              <th class="px-2 py-2 font-medium">Unit 1</th>
+              <th class="px-2 py-2 text-right font-medium">Qty 2</th>
+              <th class="px-2 py-2 font-medium">Unit 2</th>
               <th class="px-2 py-2 text-right font-medium">Unit Price</th>
               <th class="px-2 py-2 font-medium">Tax Type</th>
               <th class="px-2 py-2 text-right font-medium">Vendor MF %</th>
               <th class="px-2 py-2 text-right font-medium">Markup %</th>
-              <th class="px-2 py-2 text-right font-medium">Subtotal</th>
-              <th class="px-2 py-2 text-right font-medium">Quote Price</th>
-              <th class="px-2 py-2 text-right font-medium">Margin</th>
+              <th class="border-l bg-gray-100/60 px-2 py-2 text-right font-medium">Subtotal</th>
+              <th class="bg-gray-100/60 px-2 py-2 text-right font-medium">Quote Price</th>
+              <th class="bg-gray-100/60 px-2 py-2 text-right font-medium">Margin</th>
               <th class="px-2 py-2"></th>
             </tr>
           </thead>
@@ -104,17 +111,22 @@
               <td class="px-1 py-1">
                 <input
                   v-model="line.description"
-                  class="w-44 rounded border-gray-200 px-2 py-1 text-sm"
+                  class="w-44 rounded px-2 py-1 text-sm"
+                  :class="
+                    line.description?.trim()
+                      ? 'border-gray-200'
+                      : 'border-red-300 bg-red-50/40'
+                  "
                   placeholder="Description"
+                  title="A line needs a description before it can save"
                 />
               </td>
               <td v-if="metaVisible('item_category')" class="px-1 py-1">
-                <input
+                <ComboInput
                   v-model="line.item_category"
-                  list="item-categories"
-                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
+                  :options="(categories.data || []).map((row) => row.name)"
                   placeholder="Select or add"
-                  @change="ensureItemCategory(line)"
+                  @commit="ensureItemCategory(line)"
                 />
               </td>
               <td v-if="metaVisible('cost_phase')" class="px-1 py-1">
@@ -159,12 +171,11 @@
                 </select>
               </td>
               <td class="px-1 py-1">
-                <input
+                <ComboInput
                   v-model="line.package"
-                  list="package-titles"
-                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
+                  :options="state.packages.map((pkg) => pkg.title)"
                   placeholder="No package"
-                  @change="ensurePackage(line.package)"
+                  @commit="ensurePackage(line.package)"
                 />
               </td>
               <td class="px-1 py-1">
@@ -172,7 +183,7 @@
                   v-model.number="line.qty1"
                   type="number"
                   min="0"
-                  class="w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
                 />
               </td>
               <td class="px-1 py-1">
@@ -187,7 +198,7 @@
                   v-model.number="line.qty2"
                   type="number"
                   min="0"
-                  class="w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
                 />
               </td>
               <td class="px-1 py-1">
@@ -200,7 +211,7 @@
               <td class="px-1 py-1">
                 <VndInput
                   :model-value="line.unit_price"
-                  class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+                  class="ml-auto block w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
                   @update:model-value="line.unit_price = $event === '' ? 0 : $event"
                 />
               </td>
@@ -219,7 +230,7 @@
                   v-model.number="line.vendor_mf_pct"
                   type="number"
                   min="0"
-                  class="w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
                 />
               </td>
               <td class="px-1 py-1">
@@ -227,16 +238,16 @@
                   v-model.number="line.markup_pct"
                   type="number"
                   min="0"
-                  class="w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
                 />
               </td>
-              <td class="px-2 py-1 text-right tabular-nums text-gray-700">
+              <td class="border-l bg-gray-50/70 px-2 py-1 text-right tabular-nums text-gray-700">
                 {{ vnd(live?.lines?.[i]?.subtotal) }}
               </td>
-              <td class="px-2 py-1 text-right font-medium tabular-nums">
+              <td class="bg-gray-50/70 px-2 py-1 text-right font-medium tabular-nums">
                 {{ vnd(live?.lines?.[i]?.quote_price) }}
               </td>
-              <td class="px-2 py-1 text-right tabular-nums text-gray-700">
+              <td class="bg-gray-50/70 px-2 py-1 text-right tabular-nums text-gray-700">
                 {{ vnd(live?.lines?.[i]?.margin) }}
               </td>
               <td class="whitespace-nowrap px-1 py-1 text-gray-400">
@@ -273,17 +284,6 @@
           </tbody>
         </table>
       </div>
-
-      <datalist id="package-titles">
-        <option v-for="p in state.packages" :key="p.title" :value="p.title" />
-      </datalist>
-      <datalist id="item-categories">
-        <option
-          v-for="category in categories.data || []"
-          :key="category.name"
-          :value="category.name"
-        />
-      </datalist>
 
       <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <!-- Packages -->
@@ -329,10 +329,15 @@
                   </td>
                   <td class="px-1 py-1">
                     <VndInput
-                      :model-value="pkg.price_override"
-                      class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+                      :model-value="pkg.has_price_override ? pkg.price_override : ''"
+                      class="ml-auto block w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
                       placeholder="auto"
-                      @update:model-value="pkg.price_override = $event === '' ? null : $event"
+                      :title="
+                        pkg.has_price_override && !pkg.price_override
+                          ? 'Quoted free of charge'
+                          : 'Blank = sum of member lines; 0 = free of charge'
+                      "
+                      @update:model-value="setOverride(pkg, $event)"
                     />
                   </td>
                   <td class="px-2 py-1 text-right tabular-nums text-gray-700">
@@ -505,6 +510,7 @@ import {
   createListResource,
   createResource,
 } from "frappe-ui"
+import ComboInput from "../components/ComboInput.vue"
 import QuotePanel from "../components/QuotePanel.vue"
 import VndInput from "../components/VndInput.vue"
 import { vnd } from "../utils/money"
@@ -594,6 +600,12 @@ function snapshot() {
 
 const dirty = computed(() => Boolean(baseline.value) && snapshot() !== baseline.value)
 
+// Autosave holds off while a line has no description — the save would
+// only bounce off server validation; the red border says why.
+const allLinesComplete = computed(() =>
+  state.lines.every((line) => (line.description || "").trim())
+)
+
 // The founder sits on this page for hours; muscle-memory save must work.
 function onKeydown(event) {
   if ((event.metaKey || event.ctrlKey) && event.key === "s") {
@@ -639,10 +651,17 @@ const deal = createResource({
       package: row.package || "",
     }))
     state.packages = (doc.packages || []).map((row) => {
-      const pkg = pick(row, ["title", "description", "price_override"])
-      // Frappe's Currency default is 0, but a 0 here would read as
-      // "overridden to zero đồng" — display blank so "auto" stays auto.
-      if (!pkg.price_override) pkg.price_override = null
+      const pkg = pick(row, [
+        "title",
+        "description",
+        "price_override",
+        "has_price_override",
+      ])
+      // The Check carries "is this set": without it the Currency
+      // column's default 0 is meaningless, with it 0 is a real
+      // free-of-charge override.
+      pkg.has_price_override = pkg.has_price_override ? 1 : 0
+      if (!pkg.has_price_override) pkg.price_override = null
       return pkg
     })
     state.quote_mf_pct = doc.quote_mf_pct ?? 10
@@ -725,14 +744,26 @@ function recompute() {
 }
 
 let computeTimer = null
+let autosaveTimer = null
 watch(
   state,
   () => {
     clearTimeout(computeTimer)
     computeTimer = setTimeout(recompute, 400)
+    // Autosave asked for on the A2 walkthrough: a couple of quiet
+    // seconds after the last edit, the page saves itself. Ctrl+S and
+    // the button stay for the impatient.
+    clearTimeout(autosaveTimer)
+    autosaveTimer = setTimeout(autosave, 2500)
   },
   { deep: true }
 )
+
+function autosave() {
+  if (!dirty.value || saving.value || !serverDoc) return
+  if (!allLinesComplete.value) return
+  save()
+}
 
 function livePackage(title) {
   return (live.value?.packages || []).find((p) => p.title === title)
@@ -767,7 +798,22 @@ function moveLine(i, delta) {
 }
 
 function addPackage() {
-  state.packages.push({ title: "", description: "", price_override: null })
+  state.packages.push({
+    title: "",
+    description: "",
+    price_override: null,
+    has_price_override: 0,
+  })
+}
+
+function setOverride(pkg, value) {
+  if (value === "") {
+    pkg.has_price_override = 0
+    pkg.price_override = null
+  } else {
+    pkg.has_price_override = 1
+    pkg.price_override = value
+  }
 }
 
 // Typing a new name in a line's package cell creates the package on the
@@ -781,6 +827,7 @@ function ensurePackage(title) {
       title: trimmed,
       description: "",
       price_override: null,
+      has_price_override: 0,
     })
   }
 }
@@ -801,13 +848,17 @@ function onSaveError(err) {
   error.value = errorMessage(err)
 }
 
+// What the in-flight save actually carried: edits typed while the
+// request runs must stay dirty, not be silently marked saved.
+let sentSnapshot = ""
+
 const saveResource = createResource({
   url: "frappe.client.save",
   onSuccess(doc) {
     saving.value = false
     error.value = ""
     serverDoc = doc
-    baseline.value = snapshot()
+    baseline.value = sentSnapshot || snapshot()
   },
   onError: onSaveError,
 })
@@ -838,6 +889,7 @@ async function save() {
   if (live.value?.founder && state.commission_pct != null) {
     doc.commission_pct = state.commission_pct
   }
+  sentSnapshot = snapshot()
   // Returned so publishing can save first and freeze what's on screen.
   return saveResource.submit({ doc })
 }
