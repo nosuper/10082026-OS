@@ -178,6 +178,9 @@ import { COLLECTION_STATUSES, PAID, overdueLabel } from "../data/milestones"
 
 const props = defineProps({ job: { type: String, required: true } })
 
+// The job page's stat strip mirrors these numbers; it listens for this.
+const emit = defineEmits(["changed"])
+
 const error = ref("")
 const rows = ref([])
 const invoiceText = ref("")
@@ -247,6 +250,7 @@ const saver = createResource({
     // time gets its server name here, and everything keyed off that
     // name (the invoice text, the status control) needs it.
     milestones.reload()
+    emit("changed")
   },
   onError(err) {
     // The typed plan is left alone on purpose: a refusal is usually a
@@ -274,6 +278,7 @@ const statusSetter = createResource({
   onSuccess() {
     error.value = ""
     milestones.reload()
+    emit("changed")
   },
   onError(err) {
     error.value = frappeErrorMessage(err)

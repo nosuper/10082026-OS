@@ -140,9 +140,10 @@
                 :href="row.photo"
                 target="_blank"
                 rel="noopener"
-                class="text-blue-700 hover:underline"
+                class="inline-flex items-center gap-1 text-blue-700 hover:underline"
               >
-                📷 receipt
+                <FeatherIcon name="paperclip" class="h-3 w-3" />
+                receipt
               </a>
             </td>
             <td class="py-1 pr-2 whitespace-nowrap text-gray-500">
@@ -216,41 +217,38 @@
     </div>
 
     <!-- Actual against quoted, per category — free, because the
-         categories are the quote's own entries -->
+         categories are the quote's own entries. Bars, not a bare
+         table: how far along each budget is should read at a glance
+         (founder, A4 round 2 — "like the apps on the market"). -->
     <div class="rounded-lg border bg-white p-3">
-      <h2 class="mb-2 text-sm font-semibold text-gray-800">
+      <h2 class="mb-3 text-sm font-semibold text-gray-800">
         Where the money went
       </h2>
-      <table class="w-full text-sm">
-        <thead class="text-left text-xs text-gray-600">
-          <tr>
-            <th class="py-1 font-medium">Category</th>
-            <th class="py-1 text-right font-medium">Quoted cost</th>
-            <th class="py-1 text-right font-medium">Actual</th>
-            <th class="py-1 text-right font-medium">Over / under</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in money.data?.categories || []"
-            :key="row.title"
-            class="border-t"
-          >
-            <td class="py-1 pr-2 text-gray-900">{{ row.title }}</td>
-            <td class="py-1 pr-2 text-right tabular-nums text-gray-600">
-              {{ vnd(row.quoted) }}
-            </td>
-            <td class="py-1 pr-2 text-right tabular-nums">{{ vnd(row.actual) }}</td>
-            <td
-              class="py-1 text-right tabular-nums"
-              :class="row.variance > 0 ? 'text-amber-700' : 'text-gray-500'"
+      <div class="space-y-3">
+        <div v-for="row in money.data?.categories || []" :key="row.title">
+          <div class="flex items-baseline gap-2 text-sm">
+            <span class="font-medium text-gray-900">{{ row.title }}</span>
+            <span class="ml-auto tabular-nums text-gray-700">
+              {{ vnd(row.actual) }}
+              <span class="text-gray-400">/ {{ vnd(row.quoted) }}</span>
+            </span>
+            <span
+              class="w-24 text-right text-xs tabular-nums"
+              :class="row.variance > 0 ? 'font-medium text-red-600' : 'text-gray-400'"
             >
               {{ row.variance > 0 ? "+" : "" }}{{ vnd(row.variance) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="mt-1 text-xs text-gray-500">
+            </span>
+          </div>
+          <div class="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
+            <div
+              class="h-full rounded-full transition-all"
+              :class="barClass(row)"
+              :style="{ width: `${barWidth(row)}%` }"
+            ></div>
+          </div>
+        </div>
+      </div>
+      <p class="mt-2 text-xs text-gray-500">
         Quoted cost is what the job expected to pay out for that category —
         not what the client is charged for it.
       </p>
@@ -262,13 +260,16 @@
 
 <script setup>
 import { computed, reactive, ref } from "vue"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { parseVnd, vnd } from "../utils/money"
 import { EVEN, FROM_ADVANCE, FROM_COMPANY, RETURN } from "../data/money"
 import VndInput from "./VndInput.vue"
 
 const props = defineProps({ name: { type: String, required: true } })
+
+// The job page's stat strip mirrors these numbers; it listens for this.
+const emit = defineEmits(["changed"])
 
 const error = ref("")
 const settled = ref("")
@@ -306,6 +307,21 @@ function settleWording(held) {
 function reload() {
   error.value = ""
   money.reload()
+  emit("changed")
+}
+
+// Budget bars: fill toward the quoted cost; spending past it turns the
+// bar red. A category with no quoted cost (unplanned spend) is all red.
+function barWidth(row) {
+  if (!row.quoted) return row.actual ? 100 : 0
+  return Math.min(100, Math.round((row.actual / row.quoted) * 100))
+}
+
+function barClass(row) {
+  if (!row.actual) return "bg-gray-200"
+  // green, not emerald — emerald is outside frappe-ui's palette and
+  // renders transparent.
+  return row.variance > 0 ? "bg-red-500" : "bg-green-500"
 }
 
 function fail(err) {
