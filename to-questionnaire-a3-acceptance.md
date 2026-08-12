@@ -94,8 +94,10 @@ the full block.
 
 ## Verdict
 
-- [ ] **GO** — merge it; A4 (job page + phone expense screen) starts
+- [x] **GO** — merge it; A4 (job page + phone expense screen) starts
 - [ ] **GO with notes**
 - [ ] **NO-GO** — fix the failed steps first
 
 >
+
+> GO given in-session 2026-08-12 ("go") after round 2.
