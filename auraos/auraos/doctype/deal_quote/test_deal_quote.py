@@ -143,6 +143,7 @@ class TestDealQuote(FrappeTestCase):
         frozen_total = first.total
 
         deal.packages[0].price_override = 999_000_000
+        deal.packages[0].has_price_override = 1
         deal.save()
         second = publish(deal.name)
 
@@ -165,6 +166,7 @@ class TestDealQuote(FrappeTestCase):
         deal = make_quotable_deal()
         before = publish(deal.name)
         deal.packages[0].price_override = deal.packages[0].price + 1_500_000
+        deal.packages[0].has_price_override = 1
         deal.save()
         after = publish(deal.name)
         self.assertEqual(after.subtotal - before.subtotal, 1_500_000)
@@ -201,6 +203,7 @@ class TestDealQuote(FrappeTestCase):
         deal = make_quotable_deal()
         before = frappe.get_doc("Deal", deal.name)
         deal.packages[0].price_override = deal.packages[0].price + 2_000_000
+        deal.packages[0].has_price_override = 1
         deal.save()
         after = frappe.get_doc("Deal", deal.name)
 
@@ -212,6 +215,7 @@ class TestDealQuote(FrappeTestCase):
         deal = make_quotable_deal()
         before = frappe.get_doc("Deal", deal.name)
         deal.packages[0].price_override = deal.packages[0].price + 2_000_000
+        deal.packages[0].has_price_override = 1
         deal.save()
         after = frappe.get_doc("Deal", deal.name)
 
@@ -223,6 +227,7 @@ class TestDealQuote(FrappeTestCase):
         # is worth is what the client is asked to pay.
         deal = make_quotable_deal()
         deal.packages[0].price_override = deal.packages[0].price + 2_000_000
+        deal.packages[0].has_price_override = 1
         deal.save()
         quote = publish(deal.name)
         reloaded = frappe.get_doc("Deal", deal.name)
