@@ -60,6 +60,40 @@ Anything on the job page that still fights you — layout, ordering of the panel
 
 >
 
+## Round 2 — the job detail, reshaped like the market apps
+
+Your note ("cải thiện UX phần job detail, bao gồm cả phần chi tiêu —
+tham khảo các app tương tự") landed as a redesign:
+
+- **Sticky header** (title · code · client · stage) and a **clickable
+  production stepper** — the pipeline as a progress bar, one click to
+  move the job.
+- **Stat strip**: Quoted / Collected (with progress bar) / Uncollected
+  (with overdue badge) / Spent (with advanced context) — the job's
+  money before any scrolling.
+- **Three tabs** — Production / Money / Paperwork — replace the long
+  scroll; the Money tab carries a red dot while anything is overdue.
+- **Budget bars** replace the "Where the money went" table: each
+  category fills toward its quoted cost, turns red past it; unplanned
+  spend is all red.
+
+### Round-2 checks
+
+**R2.1** Open the MV job: does the top (stepper + numbers) answer
+"where is this job and how is its money" without scrolling?
+
+>
+
+**R2.2** Click a stepper stage to move the job (and back). Comfortable,
+or does it feel dangerous?
+
+>
+
+**R2.3** Money tab: do the budget bars read instantly — green under,
+red over, unplanned all-red?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; A5 (paperwork, contacts, settings) starts
