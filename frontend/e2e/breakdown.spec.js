@@ -19,17 +19,24 @@ async function openBreakdown(page) {
   await expect(page.getByText("Cost lines", { exact: true })).toBeVisible()
 }
 
+// Text-anchored, not role-anchored: Chromium's layout-table heuristics
+// can demote a one-row table to a layout table and strip columnheader
+// roles — exactly what the seeded single-line table hits on CI.
+function columnHeader(page, name) {
+  return page.locator("thead").first().getByText(name, { exact: true })
+}
+
 function directorRow(page) {
-  // getByDisplayValue reads the live input property — Vue never writes
-  // the value *attribute*, so a CSS [value=…] selector finds nothing.
-  return page
-    .getByRole("row")
-    .filter({ has: page.getByDisplayValue("Playwright director") })
+  // The seed guarantees exactly one cost line; the cost-lines table is
+  // the first table on the page (packages sit below it). CSS, not
+  // getByRole("table") — same layout-table heuristic risk.
+  return page.locator("table").first().locator("tbody tr").first()
 }
 
 test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", async ({ page }) => {
   await openBreakdown(page)
   const row = directorRow(page)
+  await expect(row.locator("input").first()).toHaveValue("Playwright director")
 
   // The seeded price arrives already formatted — never raw digits.
   const price = row.locator('input[inputmode="numeric"]')
@@ -58,28 +65,18 @@ test("detail columns are hidden by default and the choice sticks per user", asyn
 
   // Metadata stays off screen until asked for — the table must fit a
   // laptop without sideways scrolling.
-  await expect(
-    page.getByRole("columnheader", { name: "Item Category" })
-  ).toHaveCount(0)
-  await expect(
-    page.getByRole("columnheader", { name: "Unit Price" })
-  ).toBeVisible()
+  await expect(columnHeader(page, "Item Category")).toHaveCount(0)
+  await expect(columnHeader(page, "Unit Price")).toBeVisible()
 
   await page.getByText("Detail columns", { exact: true }).click()
   await page.getByRole("checkbox", { name: "Item Category" }).check()
-  await expect(
-    page.getByRole("columnheader", { name: "Item Category" })
-  ).toBeVisible()
+  await expect(columnHeader(page, "Item Category")).toBeVisible()
 
   await page.reload()
-  await expect(
-    page.getByRole("columnheader", { name: "Item Category" })
-  ).toBeVisible()
+  await expect(columnHeader(page, "Item Category")).toBeVisible()
 
   // Back to default so the other spec's geometry assumptions hold.
   await page.getByText("Detail columns", { exact: true }).click()
   await page.getByRole("checkbox", { name: "Item Category" }).uncheck()
-  await expect(
-    page.getByRole("columnheader", { name: "Item Category" })
-  ).toHaveCount(0)
+  await expect(columnHeader(page, "Item Category")).toHaveCount(0)
 })
