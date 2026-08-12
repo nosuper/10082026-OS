@@ -27,7 +27,7 @@ Test at **http://192.168.1.94:8000/aura** — login `Administrator / admin`, **C
 
 Pass / fail:
 
->
+> Pass with notes (round 1): datalist pickers felt like bare dialogs; Qty/Unit headers ambiguous; no autosave or missing-field warning; Unit Price/Override misaligned; quote lacks qty/unit; asked whether the playbook's three quote-detail levels are met (no — moved to A3). All UI notes shipped in round 2.
 
 ## 2. Money reads as money
 
@@ -36,7 +36,7 @@ Pass / fail:
 
 Pass / fail:
 
->
+> Pass, except: the founder DOES quote 0-đồng packages (discount/FOC) — restored in round 2 via has_price_override.
 
 ## 3. Detail columns
 
@@ -45,7 +45,7 @@ Pass / fail:
 
 Pass / fail:
 
->
+> Pass.
 
 ## 4. Sticky save + dirty flag
 
@@ -54,7 +54,7 @@ Pass / fail:
 
 Pass / fail:
 
->
+> Pass ("oke").
 
 ## 5. Design questions
 
@@ -62,13 +62,13 @@ Pass / fail:
 
 With the new Override field, typing `0` clears it (auto) — an override of literally **0 đồng** (a package shown to the client as free) is no longer possible from this screen. The engine still supports it. Have you ever priced a package at 0 on purpose (khuyến mãi/miễn phí), or is this fine to leave as-is?
 
->
+> Yes — FOC/discount packages are real; shipped in round 2.
 
 ### 5.2 What still hurts
 
 After A1+A2, what's the next worst thing about pricing a job in here — anything slower than your xlsx still?
 
->
+> UX still not easy to read/operate, columns unclear — addressed in round 2 with numbered headers, right-aligned inputs and the tinted computed zone.
 
 ## Round 2 — the founder's answers (in-session, 2026-08-12) and what shipped
 
@@ -91,8 +91,8 @@ page) will carry a per-deal "detail level" choice.
 
 ## Verdict
 
-- [ ] **GO** — merge it; A3 (client quote page) starts
+- [x] **GO** — merge it; A3 (client quote page) starts
 - [ ] **GO with notes**
 - [ ] **NO-GO** — fix the failed steps first
 
->
+> GO given in-session 2026-08-12 ("ok tiếp tục bước tiếp theo") after round 2 was verified on the dev stack. Quote detail levels move to A3.
