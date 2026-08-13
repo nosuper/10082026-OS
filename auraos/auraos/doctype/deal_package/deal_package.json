@@ -29,7 +29,7 @@
   },
   {
    "default": "0",
-   "description": "Currency cannot store \"unset\" (the column is NOT NULL 0), and an override of literally 0 đồng is a real case — a package quoted free of charge. This flag says whether price_override means anything.",
+   "description": "Currency cannot store \"unset\" (the column is NOT NULL 0), and an override of literally 0 đồng is a real case - a package quoted free of charge. This flag says whether price_override means anything.",
    "fieldname": "has_price_override",
    "fieldtype": "Check",
    "label": "Has Price Override"

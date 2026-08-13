@@ -1,4 +1,4 @@
-"""Seam tests for T3 (issue #5): deal pipeline — stage transitions,
+"""Seam tests for T3 (issue #5): deal pipeline - stage transitions,
 lost-reason enforcement, ownership, and stage history.
 
 Runs via: bench --site <site> run-tests --app auraos
@@ -11,7 +11,7 @@ from auraos.tests.utils import make_test_user
 
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
-# A System User with neither app role — the negative control.
+# A System User with neither app role - the negative control.
 OUTSIDER = "outsider@test.auraos.local"
 
 STAGES = [
@@ -207,6 +207,11 @@ class TestDeal(FrappeTestCase):
     # -- ownership --
 
     def test_owner_is_required(self):
+        # As a user with no operating role: before_validate auto-fills
+        # the owner for Founder/Producer sessions, and on a lived-in
+        # site Administrator holds Founder - which made this test pass
+        # only on a pristine CI site.
+        frappe.set_user(OUTSIDER)
         with self.assertRaises(
             (frappe.MandatoryError, frappe.ValidationError)
         ):
@@ -216,7 +221,7 @@ class TestDeal(FrappeTestCase):
                     "title": "Ownerless",
                     "company": make_company().name,
                 }
-            ).insert()
+            ).insert(ignore_permissions=True)
 
     def test_owner_defaults_to_creating_operating_user(self):
         company = make_company()
@@ -257,9 +262,17 @@ class TestDeal(FrappeTestCase):
         deal.save()
         from frappe.client import get_list
 
+        # Filtered by name: the unfiltered list is capped at a page
+        # (20 rows), so on a site with real data the probe deal may
+        # legitimately fall off it.
         self.assertIn(
             deal.name,
-            [row["name"] for row in get_list("Deal", fields=["name"])],
+            [
+                row["name"]
+                for row in get_list(
+                    "Deal", fields=["name"], filters={"name": deal.name}
+                )
+            ],
         )
 
     def test_founder_can_read_write_deals(self):
@@ -382,7 +395,7 @@ class TestDealDetailsFields(FrappeTestCase):
 
     def test_founder_can_expand_sources(self):
         # Founder decision on issue #21: the source list must stay
-        # expandable — a new expo or channel is a Desk entry, not code.
+        # expandable - a new expo or channel is a Desk entry, not code.
         frappe.set_user(FOUNDER)
         source = frappe.get_doc(
             {"doctype": "Deal Source", "source_name": "TikTok"}
@@ -552,7 +565,7 @@ class TestDealTableEditing(FrappeTestCase):
 
 class TestTierSuggestion(FrappeTestCase):
     """Phase B (playbook §2.2): positioning is the input, tier is the
-    output — derived by the rules unless someone pins it by hand."""
+    output - derived by the rules unless someone pins it by hand."""
 
     @classmethod
     def setUpClass(cls):

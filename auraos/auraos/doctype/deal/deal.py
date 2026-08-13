@@ -42,7 +42,7 @@ def to_engine_lines(rows):
 def client_prices(packages, lines):
     """The prices the client is shown, as plain numbers.
 
-    Revenue is measured against these — not the engine's line total —
+    Revenue is measured against these - not the engine's line total -
     because a rounded-up package is what the client actually pays
     (issue #32). Rows may be child docs or plain dicts.
     """
@@ -98,8 +98,8 @@ def tier3_threshold():
 def derive_tier(estimated_budget=0, project_type=None, positioning=None):
     """The tier the playbook's rules (§2.2) assign to a deal.
 
-    Positioning is the input, tier is the output: Brand work — or a job
-    type flagged as the positioning segment — is Tier 3 whatever it
+    Positioning is the input, tier is the output: Brand work - or a job
+    type flagged as the positioning segment - is Tier 3 whatever it
     pays; everything else follows the two budget thresholds. No budget
     and no positioning signal means no tier yet.
     """
@@ -135,7 +135,7 @@ def floor_breached(margin_fraction):
 def append_stage_change(doc):
     """Log a stage move on a doc carrying a `stage_history` table.
 
-    Shared by Deal and Job — both move through a fixed stage list and
+    Shared by Deal and Job - both move through a fixed stage list and
     both answer "who moved this, and when" from the same child table.
     Call from before_save, after validation, so a rejected transition is
     never logged.
@@ -155,7 +155,7 @@ def append_stage_change(doc):
 
 
 def holds_operating_role(user):
-    # Explicit role assignments only — frappe.get_roles reports every
+    # Explicit role assignments only - frappe.get_roles reports every
     # role for Administrator, which would let it slip through.
     return bool(
         frappe.db.exists(
@@ -182,7 +182,7 @@ class Deal(Document):
     def apply_tier(self):
         """Keep the tier derived unless someone pinned it by hand.
 
-        One strategic question — positioning — plus the budget decides
+        One strategic question - positioning - plus the budget decides
         the tier (derive_tier), so it tracks the deal as those change.
         Writing the tier directly pins it (tier_is_manual) and the rules
         leave it alone; clearing it hands it back to the rules.
@@ -239,7 +239,7 @@ class Deal(Document):
         """Store the engine's producer-visible outputs (the T5 seam).
 
         The founder-only chain is persisted separately by
-        store_founder_chain (permlevel-1 fields, written post-save) —
+        store_founder_chain (permlevel-1 fields, written post-save) -
         see that method for why it cannot happen here.
         """
         if not self.cost_lines:
@@ -283,7 +283,7 @@ class Deal(Document):
         for package in self.packages:
             priced = pricing.package_price(
                 budgets.get(package.title, []),
-                # The Check carries "is this set" — a Currency column
+                # The Check carries "is this set" - a Currency column
                 # cannot, and an override of literally 0 đồng (free of
                 # charge) is a real quote the founder sends.
                 package.price_override if package.has_price_override else None,
@@ -316,8 +316,8 @@ class Deal(Document):
         permlevel-1 value a producer session touches back to its stale
         database copy during validation (validate_higher_perm_levels), so
         controller-computed values set there would be thrown away. By
-        on_update the reset has already run — self.commission_pct holds
-        the database truth — and db_set writes regardless of the session's
+        on_update the reset has already run - self.commission_pct holds
+        the database truth - and db_set writes regardless of the session's
         field-level permissions. Reads stay founder-only via permlevel 1.
         """
         if not self.cost_lines:

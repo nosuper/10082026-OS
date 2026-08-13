@@ -1,4 +1,4 @@
-// The money vocabulary the server owns — mirrors auraos.lib.settlement,
+// The money vocabulary the server owns - mirrors auraos.lib.settlement,
 // which is the authority. The same words appear as Select options on
 // Job Expense and Job Settlement, so a screen that spells one of them
 // differently silently stops matching.

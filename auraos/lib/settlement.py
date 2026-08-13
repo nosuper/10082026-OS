@@ -2,12 +2,12 @@
 
 Framework-free by contract (T8 / spec #2, stories 30–34); the DocType
 controllers and the API are thin adapters over this module. All
-arithmetic is exact Decimal — rounding to whole đồng is the caller's
+arithmetic is exact Decimal - rounding to whole đồng is the caller's
 concern (auraos.lib.money.round_vnd).
 
 **The float.** The founder advances cash to whoever is doing the
 spending; every expense that person pays out of it hands part of it
-back as receipts. What remains is the float — positive while they are
+back as receipts. What remains is the float - positive while they are
 still holding company money, negative once they have covered a
 shortfall themselves. Settling records the transfer that puts it back
 to zero, so the same job can be advanced, spent and settled again
@@ -17,8 +17,8 @@ Money the company paid directly belongs to no float: it lands in
 actual-vs-quoted and moves nobody's float.
 
 **Categories mirror the quote.** An expense's category is one of the
-entries the client was quoted — a package, or a cost line quoted on its
-own — which is what makes actual-vs-quoted per package fall out with no
+entries the client was quoted - a package, or a cost line quoted on its
+own - which is what makes actual-vs-quoted per package fall out with no
 extra work. The quoted side is measured in what somebody on the job
 actually hands over, never the client-facing price.
 """
@@ -50,7 +50,7 @@ Row = Mapping[str, Any]
 class Float:
     """What one person is holding of the company's money on one job.
 
-    `amount` is the float itself — what they were advanced, less what
+    `amount` is the float itself - what they were advanced, less what
     they have spent out of it, less what has already been settled.
     """
 
@@ -119,7 +119,7 @@ def float_for(
 ) -> Float:
     """One person's float, whether or not they are holding anything.
 
-    An empty float is a real answer — "you have nothing of ours" — and
+    An empty float is a real answer - "you have nothing of ours" - and
     the screen that asks after every logged expense needs it as often as
     it needs a full one.
     """
@@ -161,7 +161,7 @@ def categories(packages: Iterable[Row], cost_lines: Iterable[Row]) -> list[str]:
     """The categories an expense on this job may carry, in quote order.
 
     Exactly what the client was offered: the packages, then any cost
-    line standing in none of them — the same rule the quote page reads
+    line standing in none of them - the same rule the quote page reads
     (auraos.lib.quote.client_entries). Anything else and actual-vs-quoted
     would have holes in it.
     """
@@ -176,7 +176,7 @@ def category_actuals(
     """Quoted cash-out against money actually spent, per category.
 
     Every category appears whether or not anything has been spent on it
-    — an untouched package is the interesting one during a shoot. An
+    - an untouched package is the interesting one during a shoot. An
     expense naming no known category is gathered into one trailing row
     rather than quietly dropped.
     """
@@ -209,7 +209,7 @@ def _quoted_costs(packages, cost_lines) -> dict[str, Decimal]:
     carries its own.
 
     Per line that is the cost after the vendor management fee, plus the
-    VAT on an invoice-bearing one — money somebody on the job hands
+    VAT on an invoice-bearing one - money somebody on the job hands
     over, which is the same kind of money an expense records. It is
     deliberately *not* the line's profit cost basis: for a freelancer
     that basis is grossed up by the PIT the company remits later

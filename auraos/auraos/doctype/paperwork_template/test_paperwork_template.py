@@ -1,7 +1,7 @@
 """Seam tests for T11 (issue #13): docx paperwork from templates.
 
-`tests/test_paperwork.py` proves the filling itself — split runs,
-escaping, markers — without Frappe. What can only be proved here is the
+`tests/test_paperwork.py` proves the filling itself - split runs,
+escaping, markers - without Frappe. What can only be proved here is the
 wiring around it:
 
 1. **The template library is the founder's.** A producer may read the
@@ -16,7 +16,7 @@ wiring around it:
 4. **Missing data reaches the caller.** A client with no tax code
    produces a document and a complaint, not a silent blank.
 5. **The result lands on the job**, where the next person looking for
-   the contract will look — and only for people who may write that job.
+   the contract will look - and only for people who may write that job.
 
 Runs via: bench --site <site> run-tests --app auraos
 """
@@ -95,7 +95,7 @@ def make_job(**company_fields):
     """A job for a client whose details are exactly what this test set.
 
     The client record is shared across the suite, so every field a paper
-    reads is cleared and re-set here — otherwise "no tax code on file"
+    reads is cleared and re-set here - otherwise "no tax code on file"
     would depend on which test ran first.
     """
     company = make_company(CLIENT)
@@ -146,7 +146,7 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
         )
 
     def test_replacing_the_file_moves_the_placeholders_with_it(self):
-        """The list follows the docx — there is no second step to forget."""
+        """The list follows the docx - there is no second step to forget."""
         template = make_template()
 
         template.template_file = upload(
@@ -174,7 +174,7 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
     def test_the_library_flags_a_placeholder_no_version_of_this_can_fill(self):
         """A typo in a template is found in the library, not on the printer."""
         make_template(
-            ["Bên A: {{clint.company_name}} — {{job.title}}"],
+            ["Bên A: {{clint.company_name}} - {{job.title}}"],
             template_name="Hợp đồng có lỗi chính tả",
         )
 

@@ -50,7 +50,7 @@
           {{ silent.length }}
         </div>
         <div class="mt-0.5 text-xs" :class="silent.length ? 'text-amber-800' : 'text-gray-500'">
-          past {{ silenceDays || "—" }} days
+          past {{ silenceDays || "-" }} days
         </div>
       </router-link>
     </div>
@@ -127,7 +127,7 @@
           </li>
         </ul>
         <p v-else class="py-2 text-sm text-gray-400">
-          Nothing chasing you — the board is quiet.
+          Nothing chasing you - the board is quiet.
         </p>
       </div>
     </div>

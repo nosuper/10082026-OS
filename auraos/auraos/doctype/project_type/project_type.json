@@ -19,7 +19,7 @@
   },
   {
    "default": "0",
-   "description": "Job types the company wants to be known for \u2014 any deal of this type is suggested Tier 3 regardless of budget (playbook \u00a72.2)",
+   "description": "Job types the company wants to be known for - any deal of this type is suggested Tier 3 regardless of budget (playbook \u00a72.2)",
    "fieldname": "is_positioning",
    "fieldtype": "Check",
    "label": "Positioning Segment"

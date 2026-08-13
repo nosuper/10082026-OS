@@ -2,8 +2,8 @@
 
 The company signs on paper: contracts, phụ lục, biên bản nghiệm thu,
 thanh lý and freelancer papers are printed, signed by hand and sealed.
-What the system owes that practice is the typing — the client's tax
-code, the job's number, the amount agreed — not a rendering engine. So a
+What the system owes that practice is the typing - the client's tax
+code, the job's number, the amount agreed - not a rendering engine. So a
 template here is the founder's own .docx, designed in Word, with
 ``{{client.tax_code}}`` typed where a value belongs; generating a
 document returns *that file* with the placeholders replaced and
@@ -15,14 +15,14 @@ Two things make that harder than a string replace.
 founder typed in one go is routinely three runs in the XML, split
 wherever a spell-check pass or a formatting toggle happened to land.
 Placeholders are therefore matched against a paragraph's *joined* text
-and written back into the run each one starts in — so the surrounding
+and written back into the run each one starts in - so the surrounding
 runs keep their own formatting, and only paragraphs that actually carry
 a placeholder are rewritten at all.
 
 **Missing data must not disappear.** A blank where a tax code belongs is
 invisible on a printed page and expensive at the notary. Anything the
 system cannot fill is written into the document as a marker a human eye
-catches, and reported back to the caller besides — separated into fields
+catches, and reported back to the caller besides - separated into fields
 we know but have no data for (open the client record) and names we have
 never heard of (fix the template).
 
@@ -43,7 +43,7 @@ from xml.sax.saxutils import escape, unescape
 from auraos.lib.money import format_vnd
 
 # What a placeholder looks like in the founder's template. Narrow on
-# purpose — a brace around prose, an unclosed pair or anything with a
+# purpose - a brace around prose, an unclosed pair or anything with a
 # space in it is not a placeholder, so ordinary writing is safe. An
 # undotted name still matches: `{{TODO}}` is a placeholder nothing can
 # fill, which the founder should be told rather than left to print.
@@ -56,8 +56,8 @@ MISSING_MARKER = "«thiếu: {name}»"
 UNKNOWN_MARKER = "«không có trường: {name}»"
 
 # The parts of a docx that hold text a template author can type into.
-# Everything else — styles, fonts, images, numbering, the relationship
-# graph — is copied through untouched.
+# Everything else - styles, fonts, images, numbering, the relationship
+# graph - is copied through untouched.
 _FILLABLE_PART = re.compile(
     r"^word/(document\d*|header\d+|footer\d+|footnotes|endnotes)\.xml$"
 )
@@ -107,7 +107,7 @@ def _archive(data: bytes) -> zipfile.ZipFile:
         return zipfile.ZipFile(BytesIO(data))
     except zipfile.BadZipFile:
         raise ValueError(
-            "That file is not a docx — Word documents saved as .doc or "
+            "That file is not a docx - Word documents saved as .doc or "
             "exported as PDF cannot be used as templates."
         ) from None
 
@@ -218,7 +218,7 @@ def _fill_paragraph(
     for match in matches:
         copy(cursor, match.start())
         # The replacement goes wholly into the run the placeholder opens
-        # in — the one whose formatting the founder chose for it.
+        # in - the one whose formatting the founder chose for it.
         rebuilt[_run_at(match.start(), parts, starts)].append(
             _replacement(match.group(1), values, report)
         )
@@ -237,7 +237,7 @@ def _run_at(position: int, parts: Sequence[str], starts: Sequence[int]) -> int:
 
 
 def _replacement(name: str, values: Mapping[str, Any], report: _Report) -> str:
-    """What one placeholder becomes — its value, or a visible absence."""
+    """What one placeholder becomes - its value, or a visible absence."""
     known = name in values
     value = values.get(name)
     # `0` and `0.0` are answers; only None and the empty string are gaps.
@@ -324,7 +324,7 @@ def document_values(
     `job` and `quote` are the work and its price, `client`/`contact` are
     who the job is for, and `vendor`/`freelancer` are whoever this
     particular paper is with. A record nobody selected still contributes
-    its field names, with no value — so "no freelancer chosen" reports as
+    its field names, with no value - so "no freelancer chosen" reports as
     missing data rather than as a broken template.
 
     Our own company's name, tax code and address are deliberately absent:
@@ -333,7 +333,7 @@ def document_values(
 
     So is the deal. A job carries the deal's title, client and quoted
     totals already, and the rest of a Deal is where the founder-only
-    numbers live — commission, the profit chain. Opening that record to
+    numbers live - commission, the profit chain. Opening that record to
     templates would put a permlevel behind a placeholder, where the one
     thing nobody can see is who is about to read the printout.
     """
@@ -352,8 +352,8 @@ def document_values(
     values.update(_namespace("contact", contact, PERSON_FIELDS))
     values.update(_namespace("freelancer", freelancer, PERSON_FIELDS))
 
-    # Contracts open with the date in words the signer reads aloud —
-    # "hôm nay, ngày 11 tháng 08 năm 2026" — so the parts are offered
+    # Contracts open with the date in words the signer reads aloud -
+    # "hôm nay, ngày 11 tháng 08 năm 2026" - so the parts are offered
     # separately as well as joined.
     today = today or date.today()
     values["today.date"] = _date(today)
@@ -364,7 +364,7 @@ def document_values(
 
 
 def fillable_placeholders() -> list[str]:
-    """Every placeholder name the system can fill — the founder's cheat sheet."""
+    """Every placeholder name the system can fill - the founder's cheat sheet."""
     return sorted(document_values())
 
 
@@ -391,7 +391,7 @@ def _date(value: date) -> str:
 
 
 def _money(amount: Any) -> str | None:
-    """An amount in whole đồng — the symbol belongs to the template's prose."""
+    """An amount in whole đồng - the symbol belongs to the template's prose."""
     if amount is None or amount == "":
         return None
     return format_vnd(amount)
@@ -439,7 +439,7 @@ class FilledHtml:
 
 
 def fill_html(source: str, values: Mapping[str, Any]) -> FilledHtml:
-    """The template's own HTML with values dropped in — the on-screen
+    """The template's own HTML with values dropped in - the on-screen
     preview and print view (A5 round 3).
 
     Values are escaped on the way in: they come from records, and a
@@ -469,7 +469,7 @@ def fill_html(source: str, values: Mapping[str, Any]) -> FilledHtml:
 # -- building a .docx from HTML written in the app's editor --
 
 # The subset the web editor produces that survives into the paper.
-# Anything else degrades to its text — a paper is clauses and headings,
+# Anything else degrades to its text - a paper is clauses and headings,
 # not a layout engine.
 _HEADING_SIZES = {"h1": 32, "h2": 28, "h3": 26}  # half-points
 _ALIGNMENTS = {"center": "center", "right": "right", "justify": "both"}
@@ -662,7 +662,7 @@ def html_to_docx(source: str) -> bytes:
 
     Word's own vocabulary for what the editor offers: bold, italic,
     underline, three heading sizes, alignment, bullet and numbered
-    lists (as visible prefixes) — and tables, bordered unless the
+    lists (as visible prefixes) - and tables, bordered unless the
     table carries class="borderless" (round 7: a signature block is a
     borderless table). Placeholders pass through as text and are
     filled exactly like an uploaded template's.
@@ -690,8 +690,8 @@ def html_to_docx(source: str) -> bytes:
 
 # Reading a .docx back for the screen (A5 round 6): the founder's
 # uploaded contracts must not lose their look in a preview. The same
-# subset html_to_docx writes is read back — bold, italic, underline,
-# alignment, line breaks — so the two converters are symmetric.
+# subset html_to_docx writes is read back - bold, italic, underline,
+# alignment, line breaks - so the two converters are symmetric.
 _RUN = re.compile(r"<w:r(?:\s[^>]*)?>.*?</w:r>", re.DOTALL)
 _RUN_PROPS = re.compile(r"<w:rPr>.*?</w:rPr>", re.DOTALL)
 _PARA_PROPS = re.compile(r"<w:pPr>.*?</w:pPr>", re.DOTALL)
@@ -742,7 +742,7 @@ def _table_bordered(tbl: str) -> bool:
 
     Checked against the founder's real contracts (A5 round 7): a fee
     schedule carries <w:tblBorders> with w:val="single"; a signature
-    block has no tblBorders and no table style at all — Word draws
+    block has no tblBorders and no table style at all - Word draws
     nothing, and neither must the preview.
     """
     pr_match = _TABLE_PR.search(tbl)
@@ -781,7 +781,7 @@ def _table_to_html(tbl: str) -> str:
 def docx_to_html(data: bytes) -> str:
     """A .docx as screen HTML, keeping what the screen can keep.
 
-    Words, emphasis, alignment — and tables, in document order (a
+    Words, emphasis, alignment - and tables, in document order (a
     contract's fee schedule is a table; dropping it reads as a
     different document, A5 round 7). Word-only refinements (exact
     fonts, images) stay in the file.
@@ -814,7 +814,7 @@ def docx_paragraph_texts(data: bytes) -> list[str]:
     """Every paragraph's visible text, in order.
 
     The preview of an uploaded template: its formatting stays in the
-    .docx, but every word — and every gap marker — belongs on screen
+    .docx, but every word - and every gap marker - belongs on screen
     before anything is generated (A5 round 3).
     """
     archive = _archive(data)
@@ -834,7 +834,7 @@ def looks_like_html(source: str) -> bool:
 def build_docx(paragraphs: Sequence[str]) -> bytes:
     """The smallest real .docx that holds these paragraphs.
 
-    Not a document generator — a document generator is exactly what this
+    Not a document generator - a document generator is exactly what this
     ticket decided not to build. It exists so a preview stack can boot
     with a starter template in the library, and so the tests have a
     fixture that is a genuine Word file rather than a hand-rolled zip.

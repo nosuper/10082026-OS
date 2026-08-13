@@ -1,5 +1,5 @@
 // The agreed pipeline, in board order (spec issue #2, story 3).
-// One color per stage, used everywhere a stage appears — board column
+// One color per stage, used everywhere a stage appears - board column
 // dots, table pills and page chips must never disagree.
 export const STAGES = [
   {
@@ -12,7 +12,7 @@ export const STAGES = [
     label: "De-brief",
     value: "De-brief",
     // blue, not sky: frappe-ui's Tailwind palette has no sky (nor
-    // emerald, indigo, lime) — an off-palette class silently renders
+    // emerald, indigo, lime) - an off-palette class silently renders
     // transparent.
     dot: "bg-blue-500",
     pill: "bg-blue-50 text-blue-700",
@@ -57,10 +57,10 @@ export function stageClass(stage) {
 }
 
 // The production flow's colors (A4). Names must match
-// data/jobStages.js STAGES — the flow itself lives there; this is only
+// data/jobStages.js STAGES - the flow itself lives there; this is only
 // how each stage looks, with a gray fallback for anything unmapped.
 // Palette note: frappe-ui's Tailwind preset ships amber, blue, cyan,
-// gray, green, orange, pink, red, teal, violet, yellow — nothing else.
+// gray, green, orange, pink, red, teal, violet, yellow - nothing else.
 const JOB_STAGE_DOTS = {
   "Pre-production": "bg-cyan-500",
   "Production": "bg-blue-500",

@@ -1,4 +1,4 @@
-"""The Job — a won deal in production (T7, issue #9).
+"""The Job - a won deal in production (T7, issue #9).
 
 The job reuses the deal's child tables wherever the shape is genuinely
 the same (Deal Cost Line, Deal Package, Deal Link, Deal Stage Log): a
@@ -34,31 +34,35 @@ STAGES = [
 ]
 
 # What a new job includes before a revision round becomes a chargeable
-# change order (spec #2, story 28). The standing house number only —
+# change order (spec #2, story 28). The standing house number only -
 # each job carries its own, negotiable count.
 INCLUDED_REVISION_ROUNDS = 2
 
 # Where a revision request puts the job: the client has asked for
-# changes, so the work reopens where changes are made (issue #9, raised
+# changes, so the work goes back for a redo where changes are made (issue #9, raised
 # at the T6 walkthrough).
 REDO_STAGE = "Post-production"
 
-# How the company gets paid unless a deal says otherwise: half on
-# signing, half once the client has accepted the work (spec #2, story
-# 37). Written onto every new job so money-in is tracked from the moment
-# a deal is won rather than whenever someone remembers to set it up;
-# both the split and the stages are editable per job.
+# How the company gets paid unless a deal says otherwise (playbook §4):
+# a non-refundable deposit on signing, a milestone when post begins,
+# and the balance due at the Delivery gate - collected BEFORE the final
+# files are handed over, the last leverage the playbook says never to
+# give up. (The old default triggered the balance at Client sign-off,
+# i.e. files first, money after - the exact order §4 forbids.) Written
+# onto every new job so money-in is tracked from the moment a deal is
+# won; both the split and the stages are editable per job.
 DEFAULT_MILESTONES = (
-    {"title": "Deposit", "pct": 50, "trigger_stage": "Pre-production"},
-    {"title": "Final", "pct": 50, "trigger_stage": "Client sign-off"},
+    {"title": "Đặt cọc (không hoàn lại)", "pct": 50, "trigger_stage": "Pre-production"},
+    {"title": "Bắt đầu post", "pct": 25, "trigger_stage": "Post-production"},
+    {"title": "Trước khi giao file", "pct": 25, "trigger_stage": "Delivery"},
 )
 
-# The last stage a revision may reopen. Past it the client has signed
+# The last stage a revision may send back for a redo. Past it the client has signed
 # the work off and is being invoiced for it, so a change
 # request is a new negotiation, not a redo: the round is still counted
 # and flagged chargeable, but a job nobody is working on any more is
 # not dragged back onto the board.
-LAST_REOPENABLE_STAGE = "Delivery"
+LAST_REDOABLE_STAGE = "Delivery"
 
 
 def redo_stage_for(stage):
@@ -72,11 +76,11 @@ def redo_stage_for(stage):
     if stage not in STAGES:
         return stage
     position = STAGES.index(stage)
-    reopenable = range(
+    redoable = range(
         STAGES.index(REDO_STAGE) + 1,
-        STAGES.index(LAST_REOPENABLE_STAGE) + 1,
+        STAGES.index(LAST_REDOABLE_STAGE) + 1,
     )
-    return REDO_STAGE if position in reopenable else stage
+    return REDO_STAGE if position in redoable else stage
 
 
 # Fields carried from the deal that the job stores verbatim.
@@ -94,7 +98,7 @@ CARRIED_FIELDS = (
 
 # The frozen half of that: the money the deal was won at. Read-only
 # fields only stop the form, not the API, and the founder found the gap
-# on the preview — a carried line's numbers could still be typed over,
+# on the preview - a carried line's numbers could still be typed over,
 # leaving the job quietly disagreeing with the deal it came from.
 # Everything production owns (title, client, owner, stage, links, files
 # location, revisions) stays editable.
@@ -143,7 +147,7 @@ def create_from_deal(deal_name):
     deal = frappe.get_doc("Deal", deal_name)
     if deal.stage != "Won":
         frappe.throw(
-            _("Only a won deal becomes a job — {0} is at {1}").format(
+            _("Only a won deal becomes a job - {0} is at {1}").format(
                 deal.name, deal.stage
             ),
             frappe.ValidationError,
@@ -188,7 +192,7 @@ class Job(Document):
         job_payment_milestone.apply_to(self, STAGES)
 
     def reject_snapshot_changes(self):
-        """The carried breakdown is what was won — a record, not a draft.
+        """The carried breakdown is what was won - a record, not a draft.
 
         Runs after Frappe has restored any permlevel field the session
         may not write, so a producer's save is compared against what
@@ -202,7 +206,7 @@ class Job(Document):
                 frappe.throw(
                     _(
                         "{0} is carried from deal {1} and cannot be edited on "
-                        "the job — re-price the deal instead."
+                        "the job - re-price the deal instead."
                     ).format(_(self.meta.get_label(field)), self.deal),
                     frappe.ValidationError,
                 )
@@ -211,7 +215,7 @@ class Job(Document):
                 frappe.throw(
                     _(
                         "The {0} carried from deal {1} cannot be edited on the "
-                        "job — re-price the deal instead."
+                        "job - re-price the deal instead."
                     ).format(_(self.meta.get_label(table)).lower(), self.deal),
                     frappe.ValidationError,
                 )
@@ -256,11 +260,11 @@ class Job(Document):
         append_stage_change(self)
 
     def log_revision(self, note):
-        """Record a revision round and reopen the work it asks for.
+        """Record a revision round and send the work back for the redo it asks for.
 
         One call, because the two halves are one event: a client asking
         for changes both counts against the included rounds *and* sends
-        the job back to the edit. The move is an ordinary stage change —
+        the job back to the edit. The move is an ordinary stage change -
         logged in the history, and free to be overridden by dragging the
         card somewhere else.
         """
@@ -279,8 +283,8 @@ class Job(Document):
     def expense_categories(self):
         """What an expense on this job may be categorised as.
 
-        Exactly the entries the client was quoted — the packages, plus
-        any cost line quoted on its own — which is what makes
+        Exactly the entries the client was quoted - the packages, plus
+        any cost line quoted on its own - which is what makes
         actual-vs-quoted per package fall out of ordinary expense
         logging (T8, story 32).
         """
@@ -292,7 +296,7 @@ class Job(Document):
         Frappe strips permlevel-1 fields from anything a producer session
         writes, so a producer's conversion would otherwise reset the rate
         to the field default. db_set writes regardless of field-level
-        permissions; reads stay founder-only via permlevel 1 — the same
+        permissions; reads stay founder-only via permlevel 1 - the same
         move Deal.store_founder_chain makes, for the same reason.
         """
         self.db_set("commission_pct", deal.commission_pct, update_modified=False)

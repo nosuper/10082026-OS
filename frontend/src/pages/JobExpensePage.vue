@@ -16,7 +16,7 @@
       {{ floatWording }}
     </p>
     <p v-else class="mt-0.5 text-sm text-gray-500">
-      No advance on this job yet — what you log comes back to you.
+      No advance on this job yet - what you log comes back to you.
     </p>
 
     <label class="mt-4 block text-xs font-medium text-gray-600">Amount</label>
@@ -47,7 +47,7 @@
         v-if="!(categories.data || []).length"
         class="text-sm text-gray-400"
       >
-        This job was quoted with no packages — everything lands uncategorised.
+        This job was quoted with no packages - everything lands uncategorised.
       </span>
     </div>
 

@@ -2,7 +2,7 @@
 
 Code, agent sessions and preview stacks all move into LXC 102 on the
 Proxmox node. A walkthrough needs a live site, and one shared bench could
-only hold one branch — deploying T6 destroyed T7's job data, because
+only hold one branch - deploying T6 destroyed T7's job data, because
 `bench migrate` deletes doctypes whose files vanish between branches. The
 fix is **one throwaway Docker Compose stack per ticket**, each on a
 deterministic port derived from the ticket name, created and destroyed by
@@ -13,7 +13,7 @@ of today's deploy cost is transport: archive the worktree, `scp` it to the
 node, `pct push` it into the container, delete every tracked file, extract,
 commit, fetch, checkout, rebuild, migrate. When the code already lives
 where Docker runs, that becomes `docker compose up` against a git worktree
-— and every agent tool call stops paying an ssh → `pct exec` → `docker exec`
+- and every agent tool call stops paying an ssh → `pct exec` → `docker exec`
 triple hop.
 
 Automated tests do not run on a preview stack. CI builds a fresh site per
@@ -28,7 +28,7 @@ human to click through.
   founder accepted the two costs that had been holding it back: moving to
   SSH-based sessions, and losing the DaVinci Resolve MCP, which only talks
   to Resolve on that machine. Linux end-to-end also retires a class of
-  Windows friction — CRLF translation on every `git add`, `-c
+  Windows friction - CRLF translation on every `git add`, `-c
   core.autocrlf=false` on archives, and the `frappeProxy` vite plugin that
   is disabled because its bench-path walk never terminates on Windows.
 - **Keep one shared stack and serialise.** Rejected: the founder wants to
@@ -43,13 +43,13 @@ human to click through.
 
 - LXC 102 grows to **8 cores / 16GB / 100G rootfs**. Cores overcommit
   harmlessly (the node already runs 23 vCPU across 12). The 16GB is a
-  config ceiling, not an allocation — the node only has ~13GB genuinely
+  config ceiling, not an allocation - the node only has ~13GB genuinely
   available, because a macOS VM pins 12.3GB with ballooning off. Stopping
   that VM is the only lever if this ever proves tight.
 - Sessions run over **VS Code Remote-SSH**, so an editor, a file tree and
   several concurrent Claude Code terminals all live on the box. The
   desktop app's browser pane and visual tooling are given up.
-- **The tar-and-extract deploy is gone entirely** — each preview is its
+- **The tar-and-extract deploy is gone entirely** - each preview is its
   own clone of the branch, so no files travel between machines and
   `/opt/auraos` no longer accumulates leftovers from unmerged branches.
   (Git worktrees were the first attempt and do not work here: `bench
@@ -63,6 +63,6 @@ human to click through.
   meaning anything: 56 rows committed by an earlier build made two
   unrelated tests fail for everyone afterwards.
 - Preview data is disposable and code is pushed to GitHub, so **nothing
-  here needs backing up** — which keeps development outside T13's Synology
+  here needs backing up** - which keeps development outside T13's Synology
   backup scope. What does now matter is that the box is a single point of
   failure for day-to-day work, where before it only held a test site.

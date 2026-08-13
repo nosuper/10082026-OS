@@ -18,7 +18,7 @@
         </Button>
       </div>
 
-      <!-- Every advance on its own line — a history, not a per-person
+      <!-- Every advance on its own line - a history, not a per-person
            sum (founder, A4 round 3). The per-holder float below stays:
            settlement closes a person's float, not a single line. -->
       <div class="overflow-x-auto">
@@ -181,7 +181,7 @@
               {{ row.spent_on }}
             </td>
             <td class="py-1 pr-2 text-gray-800">
-              {{ row.category || "—" }}
+              {{ row.category || "-" }}
             </td>
             <td class="py-1 pr-2 text-gray-700">
               {{ row.description }}
@@ -201,7 +201,7 @@
               <span
                 v-if="row.paid_from === FROM_COMPANY"
                 class="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600"
-                title="Paid by the company directly — settles no float"
+                title="Paid by the company directly - settles no float"
               >
                 company
               </span>
@@ -214,7 +214,7 @@
       <p v-if="!expenses.length" class="py-2 text-sm text-gray-400">Nothing logged yet.</p>
 
       <!-- One form, two shapes: the inline desktop row becomes the
-           big-thumb phone layout below `sm` on its own — no separate
+           big-thumb phone layout below `sm` on its own - no separate
            "log on phone" page to know about (founder, A4 round 3).
            Hidden until asked for (round 4). -->
       <div
@@ -275,10 +275,10 @@
       </div>
     </div>
 
-    <!-- Actual against quoted, per category — free, because the
+    <!-- Actual against quoted, per category - free, because the
          categories are the quote's own entries. Bars, not a bare
          table: how far along each budget is should read at a glance
-         (founder, A4 round 2 — "like the apps on the market"). -->
+         (founder, A4 round 2 - "like the apps on the market"). -->
     <div class="rounded-lg border bg-white p-3">
       <h2 class="mb-3 text-sm font-semibold text-gray-800">
         Where the money went
@@ -308,7 +308,7 @@
         </div>
       </div>
       <p class="mt-2 text-xs text-gray-500">
-        Quoted cost is what the job expected to pay out for that category —
+        Quoted cost is what the job expected to pay out for that category -
         not what the client is charged for it.
       </p>
     </div>
@@ -330,7 +330,7 @@ const props = defineProps({ name: { type: String, required: true } })
 // The job page's stat strip mirrors these numbers; it listens for this.
 const emit = defineEmits(["changed"])
 
-// Entry forms stay collapsed until asked for — the page reads first,
+// Entry forms stay collapsed until asked for - the page reads first,
 // writes second (founder, A4 round 4).
 const showAdvanceForm = ref(false)
 const showExpenseForm = ref(false)
@@ -360,7 +360,7 @@ const advanceRows = computed(() =>
 )
 
 // The one endpoint that answers what an expense may be categorised as,
-// shared with the phone screen — the actual-vs-quoted rows carry the
+// shared with the phone screen - the actual-vs-quoted rows carry the
 // same titles, but also the row for anything that landed outside them.
 const categories = createResource({
   url: "auraos.api.job_expense_categories",
@@ -389,7 +389,7 @@ function barWidth(row) {
 
 function barClass(row) {
   if (!row.actual) return "bg-gray-200"
-  // green, not emerald — emerald is outside frappe-ui's palette and
+  // green, not emerald - emerald is outside frappe-ui's palette and
   // renders transparent.
   return row.variance > 0 ? "bg-red-500" : "bg-green-500"
 }
@@ -463,8 +463,8 @@ const settle = createResource({
     confirming.value = null
     settled.value =
       result.direction === RETURN
-        ? `${result.recipient} returned ${vnd(result.amount)} — float closed.`
-        : `Paid ${result.recipient} ${vnd(-result.amount)} — float closed.`
+        ? `${result.recipient} returned ${vnd(result.amount)} - float closed.`
+        : `Paid ${result.recipient} ${vnd(-result.amount)} - float closed.`
     reload()
   },
   onError(err) {

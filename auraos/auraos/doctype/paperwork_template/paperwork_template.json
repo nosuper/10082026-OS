@@ -16,7 +16,7 @@
  ],
  "fields": [
   {
-   "description": "What the founder calls this paper \u2014 H\u1ee3p \u0111\u1ed3ng d\u1ecbch v\u1ee5, Bi\u00ean b\u1ea3n nghi\u1ec7m thu, Ph\u1ee5 l\u1ee5c",
+   "description": "What the founder calls this paper - H\u1ee3p \u0111\u1ed3ng d\u1ecbch v\u1ee5, Bi\u00ean b\u1ea3n nghi\u1ec7m thu, Ph\u1ee5 l\u1ee5c",
    "fieldname": "template_name",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -58,7 +58,7 @@
    "label": "Placeholders This Template Asks For"
   },
   {
-   "description": "Read from the file every time it is saved \u2014 edit the docx, not this",
+   "description": "Read from the file every time it is saved - edit the docx, not this",
    "fieldname": "placeholders",
    "fieldtype": "Small Text",
    "label": "Placeholders",

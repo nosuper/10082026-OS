@@ -1,17 +1,17 @@
-# T1 acceptance walkthrough — is the scaffold done?
+# T1 acceptance walkthrough - is the scaffold done?
 
-> **Outcome (2026-08-10): GO.** First pass found a real blocker — `/aura`
+> **Outcome (2026-08-10): GO.** First pass found a real blocker - `/aura`
 > was a white screen (missing `sites/assets/auraos` symlink; fixed in
 > init.sh + CI, with a new regression test asserting asset
 > servability). On re-test the founder confirmed: page renders with a
 > working button; Desk login works; a Founder-role user
 > (anhchung.work@gmail.com) can read/edit/comment on Founder Spike
 > Note; the Producer-role user (Linh) has no access. Mobile check and
-> fresh-machine boot were not exercised — accepted as-is. T1 merged.
+> fresh-machine boot were not exercised - accepted as-is. T1 merged.
 
-**Purpose:** decide whether ticket [#3 (T1: Scaffold)](https://github.com/nosuper/10082026-OS/issues/3) is complete — merge `feat/t1-scaffold` to `main` and start T2 — or send it back for fixes.
+**Purpose:** decide whether ticket [#3 (T1: Scaffold)](https://github.com/nosuper/10082026-OS/issues/3) is complete - merge `feat/t1-scaffold` to `main` and start T2 - or send it back for fixes.
 
-**From:** Claude (the implementing agent) — **To:** the founder, plus the next Claude session — **How your answers will be used:** the next session reads this file, treats every "yes" as a verified acceptance criterion, and merges (or fixes) accordingly.
+**From:** Claude (the implementing agent) - **To:** the founder, plus the next Claude session - **How your answers will be used:** the next session reads this file, treats every "yes" as a verified acceptance criterion, and merges (or fixes) accordingly.
 
 ## Context
 
@@ -19,7 +19,7 @@ T1's automated evidence is already in: CI is green (pure pytest 10/10, frontend 
 
 ## How to answer
 
-10–15 minutes at a browser on your LAN. Partial answers and "I don't know" are useful — flag anything unsure rather than skipping it. Answer inline under each `>`.
+10–15 minutes at a browser on your LAN. Partial answers and "I don't know" are useful - flag anything unsure rather than skipping it. Answer inline under each `>`.
 
 ## The placeholder page (the criterion CI proves only halfway)
 
@@ -53,7 +53,7 @@ _Why this matters: proves the app's schema actually installed into the site you'
 
 >
 
-### Create a second user with only the "Producer" role, log in as it, and try to reach Founder Spike Note — via the search bar and by URL (`/app/founder-spike-note`). Is it fully invisible/blocked?
+### Create a second user with only the "Producer" role, log in as it, and try to reach Founder Spike Note - via the search bar and by URL (`/app/founder-spike-note`). Is it fully invisible/blocked?
 
 _Why this matters: the automated proof covers document API, list API, REST, and global search. A human poking the actual UI is the last access path nobody scripted._
 
@@ -63,18 +63,18 @@ _Why this matters: the automated proof covers document API, list API, REST, and 
 
 ### Open README.md and follow only its instructions to check on the deployment (logs, restart). Could you do it without asking Claude?
 
-_Why this matters: the acceptance criterion is "instructions suited to evening-hobby maintenance" — the only qualified judge of that is you._
+_Why this matters: the acceptance criterion is "instructions suited to evening-hobby maintenance" - the only qualified judge of that is you._
 
 >
 
 ### Is one first-boot on your own machine or a fresh container worth doing before merge, or do you accept the LXC boot as proof the compose file works?
 
-_Why this matters: the compose path has been booted exactly once, on this LXC. Accepting that is fine — but it should be a decision, not an oversight._
+_Why this matters: the compose path has been booted exactly once, on this LXC. Accepting that is fine - but it should be a decision, not an oversight._
 
 >
 
 ## Anything else?
 
-### Anything you saw during the walkthrough — slow pages, odd wording, a worry about T2+ — that we didn't ask about?
+### Anything you saw during the walkthrough - slow pages, odd wording, a worry about T2+ - that we didn't ask about?
 
 >

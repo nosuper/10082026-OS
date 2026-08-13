@@ -1,4 +1,4 @@
-"""Seam tests for T3.1 (issue #20): collaboration on the deal card —
+"""Seam tests for T3.1 (issue #20): collaboration on the deal card -
 comments, file attachments, and labelled links.
 
 Runs via: bench --site <site> run-tests --app auraos

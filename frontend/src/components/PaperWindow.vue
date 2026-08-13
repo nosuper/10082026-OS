@@ -11,7 +11,7 @@
           class="mb-2 flex items-center gap-1.5 text-xs text-amber-700"
         >
           <FeatherIcon name="alert-triangle" class="h-3.5 w-3.5" />
-          {{ gapCount }} gap{{ gapCount > 1 ? "s" : "" }} highlighted — fill
+          {{ gapCount }} gap{{ gapCount > 1 ? "s" : "" }} highlighted - fill
           the record, or type over them here.
         </p>
 
@@ -157,7 +157,7 @@ defineExpose({ currentHtml: () => html.value, edited: () => mode.value === "edit
 .aura-paper td p {
   margin: 0;
 }
-/* A signature block is a borderless table — Word draws nothing, and
+/* A signature block is a borderless table - Word draws nothing, and
    neither do we (checked against the founder's own contracts). */
 .aura-paper table.borderless td,
 .aura-paper table.borderless th {

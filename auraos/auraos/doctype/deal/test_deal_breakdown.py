@@ -1,7 +1,7 @@
 """Seam and permission tests for T5 (issue #7): breakdown & quote editor.
 
 Seam: a persisted breakdown's stored computed values must agree with the
-pricing engine's outputs for the same inputs — the engine itself is the
+pricing engine's outputs for the same inputs - the engine itself is the
 oracle, so no number here is hand-computed.
 
 Permissions: commission (CMF), CM and the profit chain are founder-only
@@ -29,7 +29,7 @@ FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
 
 # One line per offered tax type (Cty 10% exists in the engine for xlsx
-# parity but is not offered on deals — T5 walkthrough decision), with
+# parity but is not offered on deals - T5 walkthrough decision), with
 # vendor MF and markup in play.
 LINES = [
     {
@@ -125,7 +125,7 @@ class TestDealBreakdown(FrappeTestCase):
         """Quote-level money, compared to the engine within rounding dust.
 
         Since T6 (issue #32) revenue is measured against the prices the
-        client is shown — each entry rounded to the đồng, then summed —
+        client is shown - each entry rounded to the đồng, then summed -
         while the engine sums unrounded line budgets. With no package
         override the two say the same thing, but they can differ by up
         to a đồng per line. Per-line values below stay exact.
@@ -442,7 +442,7 @@ class TestDealBreakdown(FrappeTestCase):
 
     def test_producer_save_refreshes_stored_founder_chain(self):
         # The dashboard numbers must track every edit, including edits a
-        # producer makes — while the commission itself stays theirs to
+        # producer makes - while the commission itself stays theirs to
         # neither see nor change.
         deal = make_breakdown_deal(commission_pct=7)
         frappe.set_user(PRODUCER)
@@ -529,7 +529,7 @@ class TestDealBreakdown(FrappeTestCase):
         )
         from frappe.utils import global_search
 
-        # Register hook-declared doctypes in Global Search Settings —
+        # Register hook-declared doctypes in Global Search Settings -
         # normally done by migrate, which CI's fresh site never runs.
         update_global_search_doctypes()
 

@@ -2,14 +2,14 @@
 
 The four seams the ticket names:
 
-- **Token access** — a valid token renders the page for a guest; an
+- **Token access** - a valid token renders the page for a guest; an
   invalid one 404s; the token is random per version.
-- **Version immutability** — a published version's content cannot change;
+- **Version immutability** - a published version's content cannot change;
   publishing again makes a new version and leaves the old one alone.
-- **Guest serialization boundary** — the page and the PDF carry packages,
+- **Guest serialization boundary** - the page and the PDF carry packages,
   descriptions and totals, and nothing of cost, margin or commission;
   Guest cannot reach Deal Quote through the document or list API either.
-- **Nudge condition** — a sent quote that stays quiet past the configured
+- **Nudge condition** - a sent quote that stays quiet past the configured
   window shows up in the nudge query; a confirmed one never does.
 
 Runs via: bench --site <site> run-tests --app auraos
@@ -43,7 +43,7 @@ from auraos.tests.utils import make_test_user
 
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
-# A System User with neither app role — the negative control.
+# A System User with neither app role - the negative control.
 OUTSIDER = "outsider@test.auraos.local"
 
 LINES = [
@@ -178,7 +178,7 @@ class TestDealQuote(FrappeTestCase):
 
     def test_a_line_in_no_package_is_quoted_as_its_own_entry(self):
         # The founder prices some items as standalone packages and
-        # quotes them straight (T6 walkthrough) — an unassigned line is
+        # quotes them straight (T6 walkthrough) - an unassigned line is
         # its own one-line entry, not an error.
         lines = [dict(row) for row in LINES]
         lines[1]["package"] = None
@@ -202,7 +202,7 @@ class TestDealQuote(FrappeTestCase):
 
     def test_rounding_a_package_up_raises_the_stored_margin(self):
         # Issue #32: the client pays the overridden price, so the
-        # margin, the margin % and the floor warning must move with it —
+        # margin, the margin % and the floor warning must move with it -
         # they used to be measured against the line-based total.
         deal = make_quotable_deal()
         before = frappe.get_doc("Deal", deal.name)
@@ -446,7 +446,7 @@ class TestDealQuote(FrappeTestCase):
             mark_quote_sent(quote.name)
 
     def test_an_accidental_confirm_can_be_undone(self):
-        # "If I marked confirmed by accident, no turning back" — marking
+        # "If I marked confirmed by accident, no turning back" - marking
         # it sent again is the way back, keeping the original send time.
         deal = make_quotable_deal()
         quote = publish(deal.name)
@@ -488,7 +488,7 @@ class TestDealQuote(FrappeTestCase):
 
     def test_republishing_does_not_cancel_the_nudge(self):
         # Re-pricing a quote the client is sitting on must not make the
-        # deal look untouched — that is the silence death T6 exists to
+        # deal look untouched - that is the silence death T6 exists to
         # stop (spec #2, story 6).
         deal = self.sent_quote_deal(days_ago=10)
         publish(deal.name)
@@ -588,7 +588,7 @@ class TestQuoteDetailLevels(FrappeTestCase):
         quote = publish(deal.name)
         html = squash(render_page(quote.token).get_data(as_text=True))
         # The internal unit cost and markup are not in the frozen rows at
-        # all, so they cannot render — pin it anyway. (Checked as field
+        # all, so they cannot render - pin it anyway. (Checked as field
         # names and figures, not bare words: a template comment may
         # legitimately say "markup".)
         self.assertNotIn(format_vnd(deal.cost_lines[0].unit_price), html)

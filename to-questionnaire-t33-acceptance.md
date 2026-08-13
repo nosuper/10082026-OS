@@ -1,8 +1,8 @@
-# T3.3 acceptance walkthrough — is the editable deals table done?
+# T3.3 acceptance walkthrough - is the editable deals table done?
 
 **Purpose:** decide whether [#27 (T3.3: Deals table UX)](https://github.com/nosuper/10082026-OS/issues/27) is complete, or whether inline editing, blank-row creation, configurable columns, or remembered views need fixes.
 
-**From:** Codex (the implementing agent) — **To:** the founder, plus the next agent session — **How your answers will be used:** the next session will treat each “yes” as a verified acceptance criterion and turn any failed or awkward check into a concrete fix.
+**From:** Codex (the implementing agent) - **To:** the founder, plus the next agent session - **How your answers will be used:** the next session will treat each “yes” as a verified acceptance criterion and turn any failed or awkward check into a concrete fix.
 
 ## Context
 
@@ -10,13 +10,13 @@ T3.3 changes `/aura/deals` so the Table view is a working surface rather than a 
 
 ## How to answer
 
-Allow 10–15 minutes in a browser. Open **http://192.168.1.94:8000/aura/deals** and hard-refresh first (**Ctrl+Shift+R**). Use a disposable deal where possible. Answer directly under each `>`. Partial answers and “I don’t know” are useful—flag uncertainty rather than skipping a check.
+Allow 10–15 minutes in a browser. Open **http://192.168.1.94:8000/aura/deals** and hard-refresh first (**Ctrl+Shift+R**). Use a disposable deal where possible. Answer directly under each `>`. Partial answers and “I don’t know” are useful-flag uncertainty rather than skipping a check.
 
 ## Inline editing
 
 ### Switch to Table, click a Company, Stage, Owner, Budget, Source, or Project Type cell, change it, then reload. Did the saved value survive the reload?
 
-_Why this matters: this is the main speed improvement—ordinary changes should no longer require opening and saving the full deal card._
+_Why this matters: this is the main speed improvement-ordinary changes should no longer require opening and saving the full deal card._
 
 >
 

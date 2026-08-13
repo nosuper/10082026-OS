@@ -49,7 +49,7 @@
    "label": "Unit 2"
   },
   {
-   "description": "The marked-up sell price — cost, markup and tax routing are never frozen into a quote",
+   "description": "The marked-up sell price - cost, markup and tax routing are never frozen into a quote",
    "fieldname": "quote_price",
    "fieldtype": "Currency",
    "in_list_view": 1,

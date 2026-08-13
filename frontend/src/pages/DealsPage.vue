@@ -148,7 +148,7 @@
               <span
                 v-if="silentDeals[deal.name]"
                 class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-                :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} — no reply after ${silence.data?.silence_days} days`"
+                :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} - no reply after ${silence.data?.silence_days} days`"
               >
                 <FeatherIcon name="clock" class="h-3 w-3" />
                 Silent
@@ -273,7 +273,7 @@
                 class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
                 @keydown.enter="createFromTable"
               />
-              <span v-else class="text-gray-300">—</span>
+              <span v-else class="text-gray-300">-</span>
             </td>
             <td class="sticky right-0 whitespace-nowrap bg-gray-50 px-2 py-1.5">
               <Button
@@ -414,7 +414,7 @@
               {{
                 query || ownerFilter
                   ? "No deals match your search."
-                  : "No deals yet — add one in the row above."
+                  : "No deals yet - add one in the row above."
               }}
             </td>
           </tr>
@@ -422,7 +422,7 @@
         </table>
       </div>
       <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
-        <span>Click any cell to edit it in place — Enter saves, Esc cancels.</span>
+        <span>Click any cell to edit it in place - Enter saves, Esc cancels.</span>
         <span v-if="tableBudgetTotal" class="tabular-nums">
           {{ sortedDeals.length }} deals · {{ vnd(tableBudgetTotal) }} ₫
         </span>
@@ -518,7 +518,7 @@ const deals = createListResource({
   auto: true,
 })
 
-// {deal: datetime it entered its current stage} — the age badge.
+// {deal: datetime it entered its current stage} - the age badge.
 const stageEntries = createResource({
   url: "auraos.api.deal_stage_entries",
   auto: true,
@@ -529,7 +529,7 @@ function stageAge(deal) {
 }
 
 // Quotes that have gone unanswered past the company's silence window
-// (spec #2, story 6) — the deal-killer the board is meant to surface.
+// (spec #2, story 6) - the deal-killer the board is meant to surface.
 const silence = createResource({
   url: "auraos.api.silent_quote_deals",
   auto: true,
@@ -629,7 +629,7 @@ const filteredDeals = computed(() => {
   })
 })
 
-// Pipeline value per column — the number the playbook's 3X coverage
+// Pipeline value per column - the number the playbook's 3X coverage
 // rule is read off of.
 const stageTotals = computed(() => {
   const totals = {}
@@ -967,7 +967,7 @@ const tableBudgetTotal = computed(() =>
 // -- drag & drop --
 
 const dragged = ref(null)
-// The column a card is currently held over — its highlight is the
+// The column a card is currently held over - its highlight is the
 // "you are about to drop here" answer.
 const dragOverStage = ref(null)
 const moveError = ref("")

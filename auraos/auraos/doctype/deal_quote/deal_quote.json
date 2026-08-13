@@ -94,7 +94,7 @@
    "read_only": 1
   },
   {
-   "description": "The bill-to block, frozen at publish — an invoice names both parties",
+   "description": "The bill-to block, frozen at publish - an invoice names both parties",
    "fieldname": "client_address",
    "fieldtype": "Small Text",
    "label": "Client Address",

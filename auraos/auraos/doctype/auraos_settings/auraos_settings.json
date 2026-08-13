@@ -47,13 +47,13 @@
    "non_negative": 1
   },
   {
-   "description": "What a client reads at the top of a quote. Read live at render time, so editing it changes every quote already sent \u2014 see docs/adr/0002-quote-branding-renders-live.md. Leave a field empty and its line does not print.",
+   "description": "What a client reads at the top of a quote. Read live at render time, so editing it changes every quote already sent - see docs/adr/0002-quote-branding-renders-live.md. Leave a field empty and its line does not print.",
    "fieldname": "company_section",
    "fieldtype": "Section Break",
    "label": "Company Identity"
   },
   {
-   "description": "Public, not private \u2014 a client with no account has to be able to load it",
+   "description": "Public, not private - a client with no account has to be able to load it",
    "fieldname": "logo",
    "fieldtype": "Attach Image",
    "label": "Logo"
@@ -101,7 +101,7 @@
    "label": "Bank"
   },
   {
-   "description": "Free text rather than the bank list on Party Company \u2014 one vocabulary copied a third time is worse than typing it once",
+   "description": "Free text rather than the bank list on Party Company - one vocabulary copied a third time is worse than typing it once",
    "fieldname": "bank_name",
    "fieldtype": "Data",
    "label": "Bank Name"

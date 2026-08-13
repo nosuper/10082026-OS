@@ -2,15 +2,15 @@
 
 Four seams:
 
-1. **Advances** — company cash recorded against a job and a recipient,
+1. **Advances** - company cash recorded against a job and a recipient,
    and only for people who can actually hold a float.
-2. **Quick expense entry** — the phone case: an amount and a category
+2. **Quick expense entry** - the phone case: an amount and a category
    is a complete expense, everything else defaults to what it almost
    always is.
-3. **Categories mirror the quote** — an expense's category is one of
+3. **Categories mirror the quote** - an expense's category is one of
    the entries the job was quoted, which is what makes actual-vs-quoted
    per package appear without anyone maintaining it.
-4. **Settlement** — advances minus what was spent out of them, named as
+4. **Settlement** - advances minus what was spent out of them, named as
    a direction, recorded as a transfer that closes the float.
 
 The arithmetic itself is pinned framework-free in tests/test_settlement.py;
@@ -39,7 +39,7 @@ from auraos.lib.settlement import EVEN, RETURN, TOP_UP, UNCATEGORISED
 from auraos.tests.utils import make_test_user
 
 # The packages won_deal() carries, and the two lines it quotes on their
-# own — together, every category an expense on that job may name.
+# own - together, every category an expense on that job may name.
 PACKAGES = ["Nhân sự", "Thiết bị"]
 STANDALONE = ["Studio", "Ăn uống đoàn"]
 
@@ -198,7 +198,7 @@ class TestExpensePhotos(MoneyTestCase):
     )
 
     def upload(self, name="receipt.png"):
-        """A private file with nothing attached to it yet — what the
+        """A private file with nothing attached to it yet - what the
         phone leaves behind when the receipt is photographed before the
         expense exists."""
         return frappe.get_doc(
@@ -283,7 +283,7 @@ class TestCategoriesMirrorTheQuote(MoneyTestCase):
     def test_the_categories_cannot_drift_away_from_the_expenses_on_them(self):
         """Renaming a package would silently reclassify every expense
         already logged against it. T7 froze the carried snapshot, which
-        is what stops that — pinned here because this ticket is what
+        is what stops that - pinned here because this ticket is what
         made it matter."""
         job = frappe.get_doc("Job", self.job)
         job.packages[0].title = "Crew"
@@ -300,7 +300,7 @@ class TestCategoriesMirrorTheQuote(MoneyTestCase):
         self.assertTrue(all(row["quoted"] > 0 for row in rows))
 
     def test_a_packages_quoted_cost_is_what_its_lines_will_hand_over(self):
-        """Cost after the vendor management fee plus VAT on an invoice —
+        """Cost after the vendor management fee plus VAT on an invoice -
         not the profit cost basis, which for the freelancer line is
         grossed up by PIT nobody pays on a shoot."""
         job = frappe.get_doc("Job", self.job)

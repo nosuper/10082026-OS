@@ -16,7 +16,7 @@
     </div>
 
     <!-- Fixed columns: the collection control carries the longest text
-         on the row ("Not requested — chưa yêu cầu") and an auto layout
+         on the row ("Not requested - chưa yêu cầu") and an auto layout
          gave the width to the amounts, clipping it mid-word. -->
     <div class="overflow-x-auto">
     <table v-if="rows.length" class="w-full min-w-[40rem] table-fixed text-sm">
@@ -93,7 +93,7 @@
                 :key="option.value"
                 :value="option.value"
               >
-                {{ option.value }} — {{ option.vi }}
+                {{ option.value }} - {{ option.vi }}
               </option>
             </select>
             <div v-if="row.name" class="mt-0.5 text-xs text-gray-500">
@@ -122,14 +122,14 @@
     </table>
     </div>
     <p v-if="!rows.length" class="py-2 text-sm text-gray-400">
-      No payment milestones — this job has nothing chasing the client.
+      No payment milestones - this job has nothing chasing the client.
     </p>
     <p
       v-if="plannedPct !== 100 && lockedPct"
       class="mt-1 text-xs text-amber-700"
     >
       {{ lockedPct }}% of the plan is already invoiced or paid and cannot
-      rebalance itself — adjust the open rows to bring the total to 100%.
+      rebalance itself - adjust the open rows to bring the total to 100%.
     </p>
 
     <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -143,7 +143,7 @@
         Save plan
       </Button>
       <span v-if="dirty" class="text-xs text-amber-700">
-        Unsaved changes — amounts refresh from the quote on save.
+        Unsaved changes - amounts refresh from the quote on save.
       </span>
     </div>
 
@@ -157,7 +157,7 @@
     <div v-if="invoiceText" class="mt-3 rounded-md border bg-gray-50 p-3">
       <div class="mb-1 flex items-center gap-2">
         <span class="text-xs font-semibold text-gray-700">
-          {{ copied ? "Copied — paste into Zalo" : "Invoice request for the accountant" }}
+          {{ copied ? "Copied - paste into Zalo" : "Invoice request for the accountant" }}
         </span>
         <button
           class="ml-auto rounded border bg-white px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
@@ -174,7 +174,7 @@
       </div>
       <pre class="whitespace-pre-wrap font-sans text-sm text-gray-800">{{ invoiceText }}</pre>
       <p class="mt-1 text-xs text-gray-500">
-        Copying does not change the milestone — mark it
+        Copying does not change the milestone - mark it
         <em>Requested</em> once you have actually sent it.
       </p>
     </div>
@@ -213,7 +213,7 @@ const milestones = createResource({
     }))
     // Deliberately not clearing `error`: a refused save reloads to show
     // what is actually stored, and clearing here wiped the very message
-    // explaining the refusal — the plan snapped back saying nothing.
+    // explaining the refusal - the plan snapped back saying nothing.
     // Each user action clears it when it starts instead.
   },
   onError(err) {
@@ -275,7 +275,7 @@ function isLocked(row) {
 
 // Editing one milestone's share rebalances the others so the plan
 // lands back on 100% by itself (founder, A4 round 3). Invoiced/Paid
-// rows never move — changing their % would rewrite an invoice the
+// rows never move - changing their % would rewrite an invoice the
 // client already holds.
 function rebalance(edited) {
   const movable = rows.value.filter((row) => row !== edited && !isLocked(row))

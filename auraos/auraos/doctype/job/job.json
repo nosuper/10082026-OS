@@ -71,7 +71,7 @@
    "reqd": 1
   },
   {
-   "description": "Shared folder for this job code — the one place its files live",
+   "description": "Shared folder for this job code - the one place its files live",
    "fieldname": "files_location",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -146,7 +146,7 @@
   },
   {
    "default": "0",
-   "description": "Set once the revision rounds pass the included ones — this round is a change order",
+   "description": "Set once the revision rounds pass the included ones - this round is a change order",
    "fieldname": "change_order_due",
    "fieldtype": "Check",
    "label": "Change Order",
@@ -164,7 +164,7 @@
    "label": "Payment Milestones"
   },
   {
-   "description": "What the client owes and when — amounts derived from the quoted total",
+   "description": "What the client owes and when - amounts derived from the quoted total",
    "fieldname": "payment_milestones",
    "fieldtype": "Table",
    "label": "Payment Milestones",

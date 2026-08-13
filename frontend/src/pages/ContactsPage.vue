@@ -136,7 +136,7 @@ const people = createListResource({
 })
 
 // What the paperwork needs to fill a contract without «thiếu: …» gap
-// markers — surfaced here so the holes are visible before generating,
+// markers - surfaced here so the holes are visible before generating,
 // not on the printed page.
 const COMPANY_DOCS = [
   ["tax_code", "tax code"],

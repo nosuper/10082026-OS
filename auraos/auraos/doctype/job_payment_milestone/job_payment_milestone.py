@@ -1,4 +1,4 @@
-"""Payment milestones on a job — the Frappe side (T10, issue #12).
+"""Payment milestones on a job - the Frappe side (T10, issue #12).
 
 The rules live in auraos.lib.milestones; this module is the adapter that
 applies them to a Job document, reads the company's payment terms, and
@@ -36,7 +36,7 @@ from auraos.settings import setting
 DEFAULT_PAYMENT_TERMS_DAYS = 7
 
 # What a screen may edit on a milestone. Amounts and every timestamp are
-# derived — the collection status moves through its own endpoint.
+# derived - the collection status moves through its own endpoint.
 EDITABLE_FIELDS = ("title", "pct", "trigger_stage")
 
 
@@ -55,7 +55,7 @@ def replanned(current, planned):
     Carrying the whole stored row keeps its identity, its collection
     status and the stamps it has already earned; only the editable
     planning fields are taken from the caller. `idx` is dropped on
-    purpose — the caller's order is the new order, and an idx carried
+    purpose - the caller's order is the new order, and an idx carried
     from before a deletion would collide with a surviving row's.
 
     A row the caller invented has nothing stored to carry, so it starts
@@ -71,7 +71,7 @@ def apply_to(job, stages):
     """Derive every milestone number on a job about to be saved.
 
     Amounts follow the quoted total, due dates follow the stage, and the
-    collection timestamps follow the status — so a hand-typed amount, a
+    collection timestamps follow the status - so a hand-typed amount, a
     stale due date or an invented "paid on" is overwritten rather than
     trusted. `stages` is passed in because the production flow belongs to
     the Job, not to its milestones.
@@ -105,7 +105,7 @@ def validate_plan(rows, stages):
             )
         # A blank trigger stage never reaches here: Frappe fills an empty
         # Select with its first option. Which is why the API checks the
-        # caller's own payload — see auraos.api.save_job_milestones.
+        # caller's own payload - see auraos.api.save_job_milestones.
         if row.trigger_stage not in stages:
             frappe.throw(
                 _("{0} is not a production stage").format(row.trigger_stage),
@@ -118,7 +118,7 @@ def validate_plan(rows, stages):
     if allocated > 100:
         frappe.throw(
             _(
-                "Payment milestones bill {0} of the quote — more than the "
+                "Payment milestones bill {0} of the quote - more than the "
                 "client agreed to"
             ).format(format_pct(allocated)),
             frappe.ValidationError,
@@ -166,7 +166,7 @@ def overdue():
     """Every milestone chasing the founder, oldest debt first.
 
     Reads child rows directly (get_all skips row-level permissions), so
-    the query is scoped to the jobs this session may actually list — the
+    the query is scoped to the jobs this session may actually list - the
     same shape as the deal board's tag map.
     """
     permitted = frappe.get_list("Job", pluck="name", limit_page_length=0)
@@ -231,7 +231,7 @@ def request_text(job, row):
     """The Zalo message asking the accountant for this milestone's invoice.
 
     The client's tax details are read off the Party Company the job
-    carries — the record that exists precisely so tax codes stop living
+    carries - the record that exists precisely so tax codes stop living
     in chat threads (spec #2, story 1).
     """
     client = (

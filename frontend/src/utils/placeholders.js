@@ -1,5 +1,5 @@
 // Placeholders live as {{client.tax_code}} in a template's stored
-// source — the fill pipeline's contract. In the editor they appear as
+// source - the fill pipeline's contract. In the editor they appear as
 // mention chips (the Google-Docs smart-chip pattern): readable, atomic,
 // deletable in one keystroke, and offered by typing @. These two
 // convert between the forms, so neither side knows about the other.

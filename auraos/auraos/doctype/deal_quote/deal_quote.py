@@ -1,7 +1,7 @@
 """A published quote version: the client-facing snapshot of a deal.
 
 Publishing freezes the deal's packages and totals into a new row with
-its own random token. Rows are immutable afterwards — "wrong version
+its own random token. Rows are immutable afterwards - "wrong version
 sent" (spec #2, story 21) is exactly the failure a mutable quote page
 causes, so the controller refuses every content change and leaves only
 the delivery status (sent / confirmed) writable.
@@ -70,21 +70,21 @@ class DealQuote(Document):
                 continue
             if self.get(field) != before.get(field):
                 frappe.throw(
-                    _("Quote {0} is published — {1} cannot change. Publish a new version instead.").format(
+                    _("Quote {0} is published - {1} cannot change. Publish a new version instead.").format(
                         self.name, field
                     ),
                     frappe.ValidationError,
                 )
         if packages_snapshot(self) != packages_snapshot(before):
             frappe.throw(
-                _("Quote {0} is published — its packages cannot change. Publish a new version instead.").format(
+                _("Quote {0} is published - its packages cannot change. Publish a new version instead.").format(
                     self.name
                 ),
                 frappe.ValidationError,
             )
         if lines_snapshot(self) != lines_snapshot(before):
             frappe.throw(
-                _("Quote {0} is published — its lines cannot change. Publish a new version instead.").format(
+                _("Quote {0} is published - its lines cannot change. Publish a new version instead.").format(
                     self.name
                 ),
                 frappe.ValidationError,
@@ -94,7 +94,7 @@ class DealQuote(Document):
         sync_deal_quote_state(self.deal)
 
     def mark_sent(self):
-        """Mark the version sent — and undo an accidental confirm.
+        """Mark the version sent - and undo an accidental confirm.
 
         Confirming used to be a one-way door (T6 walkthrough: "if I
         marked confirmed by accident, no turning back"). Marking sent
@@ -142,7 +142,7 @@ def next_version(deal):
     """One past the deal's highest version.
 
     Two simultaneous publishes on the same deal would compute the same
-    number and collide on the row name — a loud unique-key failure
+    number and collide on the row name - a loud unique-key failure
     rather than two quotes sharing a version.
     """
     latest = frappe.get_all(
@@ -169,7 +169,7 @@ def publish(deal_name, notes=None):
     entries = client_entries(deal)
     if not entries:
         frappe.throw(
-            _("Nothing to publish — add a cost line or a package first"),
+            _("Nothing to publish - add a cost line or a package first"),
             frappe.ValidationError,
         )
 
@@ -228,7 +228,7 @@ def frozen_lines(deal):
 
 
 def client_entries(deal):
-    """What the client is offered — the shared rule, applied to a Deal.
+    """What the client is offered - the shared rule, applied to a Deal.
 
     auraos.lib.quote owns the rule so the published quote and the
     breakdown's own totals cannot disagree about what the client sees.
@@ -298,7 +298,7 @@ def sync_deal_quote_state(deal_name):
         "Deal",
         deal_name,
         {
-            # The link is always the current version — that's the URL to
+            # The link is always the current version - that's the URL to
             # hand out; the status is the delivered one.
             "latest_quote": newest.name if newest else None,
             "quote_status": delivered.status if delivered else "Not Sent",
@@ -358,7 +358,7 @@ def find_by_token(token):
     Read past the permission layer on purpose (db.get_value and get_doc
     both skip it): the caller is Guest, and the token *is* the
     authorization. What Guest may then see is decided by client_context,
-    not by row permissions — Deal Quote grants Guest nothing, so
+    not by row permissions - Deal Quote grants Guest nothing, so
     /api/resource stays closed even to someone holding a valid token.
     """
     name = frappe.db.get_value("Deal Quote", {"token": token or ""}, "name")
@@ -366,7 +366,7 @@ def find_by_token(token):
 
 
 def resolve_token(token):
-    """find_by_token for callers with no page to render — the PDF
+    """find_by_token for callers with no page to render - the PDF
     endpoint, where a dead token is a 404 response, not a page."""
     quote = find_by_token(token)
     if not quote:
@@ -380,19 +380,19 @@ def page_url(token):
 
 
 def pdf_url(token):
-    """The PDF export of the same page — one definition, two callers."""
+    """The PDF export of the same page - one definition, two callers."""
     return f"/api/method/auraos.api.quote_pdf?token={token}"
 
 
 def client_context(quote):
     """The render context shared by the web page and the PDF export.
 
-    One builder, one whitelist (auraos.lib.quote.client_view) — the page
+    One builder, one whitelist (auraos.lib.quote.client_view) - the page
     and the PDF cannot drift apart, and neither can leak a field the
     whitelist doesn't name.
     """
     context = client_view(quote.as_dict())
-    # Who is making the offer — read live, through its own whitelist,
+    # Who is making the offer - read live, through its own whitelist,
     # off a different document (issue #42, ADR 0002). Never merged into
     # the quote's own keys: two documents, two boundaries.
     context["company"] = company_identity()
@@ -412,7 +412,7 @@ def stored_company_identity():
 
     Fetched per named field rather than as a document: `get_single_value`
     over the whitelist cannot pick up a setting nobody meant to publish,
-    which matters more here than the round trips — the same Single holds
+    which matters more here than the round trips - the same Single holds
     the margin floor.
     """
     return {
@@ -438,7 +438,7 @@ def record_open(quote_name, via="Page"):
 
     Inserted with ignore_permissions because the caller is Guest. Frappe
     rolls back GET requests unless asked not to, and the open *is* the
-    point of this request — flags.commit makes the request's own commit
+    point of this request - flags.commit makes the request's own commit
     run, rather than committing mid-render behind Frappe's back.
     """
     frappe.get_doc(

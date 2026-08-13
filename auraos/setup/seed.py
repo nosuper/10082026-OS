@@ -1,4 +1,4 @@
-"""Seed data for a preview stack — never real, never preserved.
+"""Seed data for a preview stack - never real, never preserved.
 
 A walkthrough should start with something to click, not an empty site:
 before this existed, every preview began with someone hand-building a
@@ -8,7 +8,7 @@ the silence nudge entirely because no aged quote existed to trigger it.
 **This file belongs to the branch.** The base below is what every
 feature needs; a ticket adds its own case to `FEATURE_SEEDS` in the same
 commit as the feature, so its screen is reachable the moment the stack
-boots. Everything here is idempotent — running it twice changes nothing.
+boots. Everything here is idempotent - running it twice changes nothing.
 
 Run by scripts/preview.sh; by hand:
 
@@ -37,7 +37,7 @@ DEALS = [
         "positioning": "Brand",
     },
     {
-        "title": "Social series — 6 tập",
+        "title": "Social series - 6 tập",
         "stage": "Breakdown",
         "project_type": "Social Video",
         "estimated_budget": 90_000_000,
@@ -92,9 +92,9 @@ COST_LINES = [
     },
 ]
 
-# The deal T7 wins and turns into a job — kept out of DEALS so the
+# The deal T7 wins and turns into a job - kept out of DEALS so the
 # pipeline board still shows a deal per interesting stage.
-WON_DEAL = "MV — Hà Anh Tuấn"
+WON_DEAL = "MV - Hà Anh Tuấn"
 
 # Two rounds used: the walkthrough's own third round is the chargeable one.
 REVISION_NOTES = [
@@ -102,7 +102,7 @@ REVISION_NOTES = [
     "Sửa màu tối hơn ở cảnh cuối",
 ]
 
-# How the seeded job gets paid — a three-stage collection, so the
+# How the seeded job gets paid - a three-stage collection, so the
 # walkthrough sees more than the standard 50/50 a conversion creates.
 MILESTONES = [
     {"title": "Đặt cọc", "pct": 30, "trigger_stage": "Pre-production"},
@@ -151,7 +151,7 @@ def run():
         print(f"seeded: {name}")
 
     frappe.db.commit()
-    print(f"seed complete — {len(deals)} deals on {company}")
+    print(f"seed complete - {len(deals)} deals on {company}")
 
 
 # -- base --
@@ -199,7 +199,7 @@ def ensure_founder_role():
     """Give Administrator the Founder role if nobody holds it.
 
     A deal's owner must hold an operating role, and that check reads
-    explicit Has Role rows — Administrator's implicit access to
+    explicit Has Role rows - Administrator's implicit access to
     everything does not count. On a fresh site nobody holds it, so
     seeding a deal would fail before it began.
     """
@@ -211,7 +211,7 @@ def ensure_founder_role():
 
 
 def founder():
-    """Whoever holds the Founder role — Administrator on a fresh site."""
+    """Whoever holds the Founder role - Administrator on a fresh site."""
     holders = founder_holders()
     return holders[0] if holders else "Administrator"
 
@@ -259,7 +259,7 @@ def ensure_breakdown(deal_name):
 def seed_t6_quote_delivery(deal_name):
     """T6: a published quote, sent long enough ago to be nudged.
 
-    Without this the silence badge cannot be seen at all — the founder
+    Without this the silence badge cannot be seen at all - the founder
     walked T6 and reported "No I don't see the badge" for exactly this
     reason.
     """
@@ -333,7 +333,7 @@ def back_to_feedback(job_name):
 
 # T6.1a: who the quote says it is from.
 #
-# No logo — a seeded image would be a binary blob in the repo for a
+# No logo - a seeded image would be a binary blob in the repo for a
 # walkthrough that is better served by the founder uploading the real
 # one and watching the letterhead change. Every text field is filled so
 # the empty-field rules can be checked by *clearing* one on the preview,
@@ -405,7 +405,7 @@ def seed_t10_payment_milestones(deal_name):
     """T10: a three-stage collection with one payment gone quiet.
 
     A converted job starts with both milestones unrequested and the
-    deposit only just due, so a fresh stack would show no nudge at all —
+    deposit only just due, so a fresh stack would show no nudge at all -
     the hole the T6 walkthrough fell into with the silence badge. This
     walks one job through the flow: the deposit collected, the shoot
     payment invoiced three weeks ago and still unpaid, the final not due
@@ -439,8 +439,8 @@ def seed_t10_payment_milestones(deal_name):
 
 # T11: a contract template with a hole in it on purpose.
 #
-# The walkthrough has to see the thing this ticket is about — a field
-# that could not be filled, marked on the page — and a template where
+# The walkthrough has to see the thing this ticket is about - a field
+# that could not be filled, marked on the page - and a template where
 # everything resolves would show only the happy half. `client.address`
 # is the gap: the seeded company has a tax code but no address, so the
 # founder can watch the marker disappear by filling the record in,
@@ -454,7 +454,7 @@ STARTER_CONTRACT = [
     "BÊN A (Bên thuê dịch vụ): {{client.company_name}}",
     "Mã số thuế: {{client.tax_code}}",
     "Địa chỉ: {{client.address}}",
-    "Người liên hệ: {{contact.full_name}} — {{contact.phone}}",
+    "Người liên hệ: {{contact.full_name}} - {{contact.phone}}",
     "",
     "Điều 1. Nội dung công việc",
     "Bên B thực hiện: {{job.title}} (mã công việc {{job.code}}).",
@@ -475,7 +475,7 @@ def seed_t11_paperwork(deal_name):
     """T11: a starter contract in the library, ready to generate from.
 
     Written here rather than committed as a .docx so the sample is
-    reviewable text in a diff instead of an opaque blob — and so the
+    reviewable text in a diff instead of an opaque blob - and so the
     walkthrough can compare what the template asks for with what comes
     out the other side.
     """
@@ -498,7 +498,7 @@ def seed_t11_paperwork(deal_name):
             "doctype": "Paperwork Template",
             "template_name": STARTER_TEMPLATE,
             "template_file": uploaded.file_url,
-            "notes": "Starter sample — replace with the company's real contract.",
+            "notes": "Starter sample - replace with the company's real contract.",
         }
     ).insert(ignore_permissions=True)
 
@@ -507,7 +507,7 @@ def seed_a1_stale_deal(deal_name):
     """A1: one deal aged past seven days in its stage.
 
     The board's age badge turns amber past STALE_DAYS, and a fresh seed
-    is all zero-day deals — without this row the walkthrough could only
+    is all zero-day deals - without this row the walkthrough could only
     be told the badge exists, the hole the T6 silence badge fell into.
     The *stage log* is backdated, not `modified`: the badge reads when
     the deal entered its current stage.
@@ -534,18 +534,18 @@ def seed_a1_stale_deal(deal_name):
 
 
 # A5 round 2: a freelancer contract in the library, written through the
-# web-editor path (template_source → built .docx) — so the walkthrough
+# web-editor path (template_source → built .docx) - so the walkthrough
 # sees both the editor's product and the freelancer picker on a job.
 FREELANCER_CONTRACT = "Hợp đồng cộng tác viên (mẫu)"
 
-# HTML, as the rich editor writes it — headings, bold labels, alignment
+# HTML, as the rich editor writes it - headings, bold labels, alignment
 # all survive into the built .docx via html_to_docx.
 FREELANCER_CONTRACT_SOURCE = "".join(
     [
         '<h2 style="text-align: center">HỢP ĐỒNG CỘNG TÁC VIÊN</h2>',
         "<p>Hôm nay, ngày {{today.day}} tháng {{today.month}} năm "
         "{{today.year}}, chúng tôi gồm:</p>",
-        "<p><strong>BÊN A (Bên thuê):</strong> công ty — theo giấy phép kinh doanh.</p>",
+        "<p><strong>BÊN A (Bên thuê):</strong> công ty - theo giấy phép kinh doanh.</p>",
         "<p><strong>BÊN B (Cộng tác viên):</strong> {{freelancer.full_name}}</p>",
         "<ul>",
         "<li>CCCD: {{freelancer.id_number}}</li>",
@@ -557,7 +557,7 @@ FREELANCER_CONTRACT_SOURCE = "".join(
         "<p>Bên B tham gia sản xuất: {{job.title}} (mã {{job.code}}).</p>",
         "<h3>Điều 2. Thanh toán</h3>",
         "<p>Thù lao theo thỏa thuận, khấu trừ 10% thuế TNCN theo quy định.</p>",
-        "<p>Chuyển khoản: {{freelancer.bank_name}} — "
+        "<p>Chuyển khoản: {{freelancer.bank_name}} - "
         "{{freelancer.bank_account_number}}.</p>",
         "<p><strong>ĐẠI DIỆN BÊN A</strong>          <strong>BÊN B</strong></p>",
     ]
@@ -574,7 +574,7 @@ def seed_a5_freelancer_contract(deal_name):
             "doctype": "Paperwork Template",
             "template_name": FREELANCER_CONTRACT,
             "template_source": FREELANCER_CONTRACT_SOURCE,
-            "notes": "Written in the web editor — edit it on the Paperwork page.",
+            "notes": "Written in the web editor - edit it on the Paperwork page.",
         }
     ).insert(ignore_permissions=True)
 

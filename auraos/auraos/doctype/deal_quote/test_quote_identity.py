@@ -6,7 +6,7 @@ rules without Frappe. What only a site can prove is the wiring:
 1. **The second guest boundary holds against the real Single.** AuraOS
    Settings carries the margin floor beside the company block. The
    render context a guest is handed must contain the block and not the
-   floor — through the whitelist, not through anyone remembering.
+   floor - through the whitelist, not through anyone remembering.
 2. **Branding renders live.** Editing the company name changes what an
    already-sent version displays, and creates no new version. This is a
    deliberate exception to quote-version immutability
@@ -109,7 +109,7 @@ class TestQuoteIdentity(FrappeTestCase):
         """Asserted against the quote body, not the whole page.
 
         Frappe's own chrome inlines SVG path data, and a short decimal
-        turns up inside it by coincidence — a search over the finished
+        turns up inside it by coincidence - a search over the finished
         page fails on noise while proving nothing about this template.
         """
         quote = publish(make_quotable_deal().name)
@@ -166,7 +166,13 @@ class TestQuoteIdentity(FrappeTestCase):
 
     def test_an_unfilled_field_prints_nothing_rather_than_its_label(self):
         set_identity(tax_code=None)
-        quote = publish(make_quotable_deal().name)
+        # A dedicated client with no tax code: the bill-to block prints
+        # "Tax code" for the CLIENT too, and on a lived-in site the
+        # shared test company carries a real one.
+        from auraos.auraos.doctype.deal.test_deal import make_company
+
+        client = make_company("Identity Probe Co")
+        quote = publish(make_quotable_deal(company=client.name).name)
 
         frappe.set_user("Guest")
         html = rendered(quote.token)
@@ -225,7 +231,7 @@ class TestQuoteIdentity(FrappeTestCase):
         self.assertEqual(reloaded.total, quote.total)
 
     def test_emptying_a_field_blanks_it_on_an_existing_quote(self):
-        """No per-version fallback to the old value — ADR 0002 says so."""
+        """No per-version fallback to the old value - ADR 0002 says so."""
         quote = publish(make_quotable_deal().name)
         frappe.db.set_single_value("AuraOS Settings", "phone", None)
 
@@ -253,7 +259,7 @@ class TestQuoteIdentity(FrappeTestCase):
     def test_the_signature_block_is_written_for_the_pdf_and_hidden_on_the_page(self):
         """Both parties sign, on the PDF only.
 
-        The block is in the one template, marked `visible-pdf` — the
+        The block is in the one template, marked `visible-pdf` - the
         class Frappe's PDF pipeline strips to unhide it. On the page the
         stylesheet in the same file keeps it hidden, which is why the
         markup being present is not the same as it being shown.
@@ -352,7 +358,7 @@ class TestQuoteIdentity(FrappeTestCase):
         continuation header stays off page 1 depends on wkhtmltopdf
         handing its header document a `page` query parameter, and on the
         script in the template parsing it in a WebKit old enough to lack
-        URLSearchParams — a mechanism that would break silently.
+        URLSearchParams - a mechanism that would break silently.
 
         Slow (it runs wkhtmltopdf over five pages) and worth it.
         """
@@ -383,7 +389,7 @@ class TestQuoteIdentity(FrappeTestCase):
 
         The stored value is site-relative (`/files/...`). wkhtmltopdf
         fetches it over HTTP, which only works because `get_pdf` runs
-        `scrub_urls` over the body first — that rewrite is the half of
+        `scrub_urls` over the body first - that rewrite is the half of
         this AC the page render does not exercise.
         """
         from frappe.utils.pdf import scrub_urls
@@ -401,7 +407,7 @@ class TestQuoteIdentity(FrappeTestCase):
         self.assertNotIn(f'src="{logo.file_url}"', scrub_urls(body))
 
     def public_logo(self):
-        """A logo a guest can load — private would 403 on the page."""
+        """A logo a guest can load - private would 403 on the page."""
         return frappe.get_doc(
             {
                 "doctype": "File",
