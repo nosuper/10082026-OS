@@ -94,6 +94,35 @@ red over, unplanned all-red?
 
 >
 
+## Round 3 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+R1, R2 passed. R3 brought four verdicts, all shipped: (1) editing a
+milestone's % rebalances the untouched rows to land on 100% by itself
+(Requested/Invoiced/Paid rows never move); (2) "Money out" renamed
+**Cash advanced**, and every advance now prints as its own dated line —
+a history, not a per-person sum — with the per-holder float kept under
+"Currently holding" for settlement; (3) the "log expense on phone" link
+is gone — the expense/advance forms reshape into the big-thumb stacked
+layout below `sm` automatically, and money tables scroll inside their
+cards on a phone; (4) covered by (2).
+
+### Round-3 checks
+
+**R3.1** Edit a milestone % on a plan with two-plus unpaid milestones —
+do the others follow so the total stays 100?
+
+>
+
+**R3.2** Cash advanced: does the dated history + "Currently holding"
+split read right?
+
+>
+
+**R3.3** Open the job on your phone — does the expense form come up
+big-thumb by itself now?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; A5 (paperwork, contacts, settings) starts
