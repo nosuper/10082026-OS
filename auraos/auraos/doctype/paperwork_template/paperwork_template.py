@@ -25,10 +25,35 @@ STAMP_FORMAT = "%Y%m%d-%H%M"
 
 class PaperworkTemplate(Document):
     def validate(self):
+        # A template written in the app carries its paragraphs in
+        # template_source; the .docx is built from them (A5 round 2 —
+        # the founder wanted templates viewable and editable on the
+        # website, not only uploaded from Word).
+        if (self.template_source or "").strip():
+            self.rebuild_from_source()
         # Reading the file on every save is what keeps `placeholders`
         # honest: replace the docx and the list follows, with no second
         # step for anyone to forget.
         self.placeholders = "\n".join(placeholders(self))
+
+    def rebuild_from_source(self):
+        before = self.get_doc_before_save()
+        unchanged = (
+            before
+            and before.template_source == self.template_source
+            and self.template_file
+        )
+        if unchanged:
+            return
+        built = frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": f"{self.template_name}.docx",
+                "is_private": 1,
+                "content": paperwork.build_docx(self.template_source.splitlines()),
+            }
+        ).insert()
+        self.template_file = built.file_url
 
 
 def placeholders(template):

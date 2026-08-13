@@ -15,7 +15,7 @@
       paperwork from these on any job.
     </div>
 
-    <!-- Upload -->
+    <!-- Upload, or write one right here -->
     <div v-if="library.data?.can_manage" class="mb-6 rounded-lg border bg-white p-4">
       <div class="flex flex-wrap items-end gap-2">
         <label class="text-sm text-gray-700">
@@ -49,10 +49,60 @@
         >
           Add to library
         </Button>
+        <Button v-if="!editor" class="ml-auto" @click="openEditor()">
+          Write one here
+        </Button>
       </div>
       <p class="mt-2 text-xs text-gray-500">
         Only .docx — a .doc renamed, or a PDF, is refused when saved.
       </p>
+    </div>
+
+    <!-- The web editor (A5 round 2): type the paper, click a
+         placeholder to drop it in at the cursor, save — the .docx is
+         built server-side. Templates written here stay editable here;
+         uploaded ones are edited in Word. -->
+    <div v-if="editor" class="mb-6 rounded-lg border bg-white p-4">
+      <div class="mb-2 flex flex-wrap items-center gap-2">
+        <h2 class="text-sm font-semibold text-gray-800">
+          {{ editor.name ? "Edit template" : "Write a template" }}
+        </h2>
+        <Button class="ml-auto" @click="editor = null">Cancel</Button>
+        <Button
+          variant="solid"
+          :disabled="!editor.template_name.trim() || !editor.template_source.trim()"
+          :loading="editorSaver.loading"
+          @click="saveEditor"
+        >
+          Save template
+        </Button>
+      </div>
+      <input
+        v-model="editor.template_name"
+        placeholder="Template name — e.g. Hợp đồng cộng tác viên"
+        class="mb-2 w-full rounded border-gray-200 px-2 py-1.5 text-sm sm:w-96"
+      />
+      <textarea
+        ref="editorArea"
+        v-model="editor.template_source"
+        rows="14"
+        spellcheck="false"
+        class="w-full rounded border-gray-200 px-3 py-2 font-mono text-sm leading-relaxed"
+        placeholder="HỢP ĐỒNG CỘNG TÁC VIÊN&#10;&#10;Hôm nay, ngày {{ '{{today.day}}' }}…"
+      ></textarea>
+      <p class="mb-1 mt-2 text-xs font-medium text-gray-600">
+        Click to insert at the cursor:
+      </p>
+      <div class="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
+        <button
+          v-for="field in library.data?.placeholders || []"
+          :key="field"
+          class="rounded bg-gray-50 px-1.5 py-0.5 font-mono text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-800"
+          @click="insertPlaceholder(field)"
+        >
+          {{ field }}
+        </button>
+      </div>
     </div>
 
     <!-- The library -->
@@ -67,7 +117,21 @@
           {{ row.template_name }}
         </a>
         <span v-if="row.disabled" class="text-xs text-gray-500">retired</span>
+        <span
+          v-if="row.template_source"
+          class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+          title="Written in the app — editable right here"
+        >
+          web
+        </span>
         <span class="ml-auto flex gap-1" v-if="library.data?.can_manage">
+          <button
+            v-if="row.template_source"
+            class="rounded border px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-50"
+            @click="openEditor(row)"
+          >
+            Edit
+          </button>
           <button
             class="rounded border px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
             @click="setDisabled(row, !row.disabled)"
@@ -121,6 +185,63 @@
       The library is empty.
     </p>
 
+    <!-- The registry (A5 round 2): every paper ever generated, in one
+         place — the files themselves hang off their jobs. -->
+    <div class="mt-6 rounded-lg border bg-white p-3">
+      <div class="mb-2 flex flex-wrap items-baseline gap-2">
+        <h2 class="text-sm font-semibold text-gray-800">Generated papers</h2>
+        <span v-if="papers.data?.length" class="text-xs text-gray-500">
+          {{ papers.data.length }}
+        </span>
+        <input
+          v-model.trim="paperSearch"
+          placeholder="Search…"
+          class="ml-auto w-48 rounded border-gray-200 px-2 py-1 text-sm"
+        />
+      </div>
+      <div v-if="filteredPapers.length" class="overflow-x-auto">
+        <table class="w-full min-w-[36rem] text-sm">
+          <thead class="text-left text-xs text-gray-600">
+            <tr>
+              <th class="py-1 font-medium">Paper</th>
+              <th class="py-1 font-medium">For</th>
+              <th class="py-1 font-medium">Job</th>
+              <th class="py-1 font-medium">Generated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in filteredPapers" :key="row.name" class="border-t">
+              <td class="py-1.5 pr-3">
+                <a
+                  :href="row.file_url"
+                  class="font-medium text-blue-700 hover:underline"
+                >
+                  {{ row.template_name || row.file_name }}
+                </a>
+              </td>
+              <td class="py-1.5 pr-3 text-gray-700">
+                {{ row.freelancer_label || row.vendor_label || "Client" }}
+              </td>
+              <td class="py-1.5 pr-3">
+                <router-link
+                  :to="`/jobs/${row.job}`"
+                  class="text-blue-700 hover:underline"
+                >
+                  {{ row.job }}
+                </router-link>
+              </td>
+              <td class="whitespace-nowrap py-1.5 tabular-nums text-gray-500">
+                {{ row.creation?.slice(0, 16) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="py-2 text-sm text-gray-400">
+        Nothing generated yet — papers made on a job appear here.
+      </p>
+    </div>
+
     <!-- The cheat sheet: what a template may ask for -->
     <details v-if="library.data" class="mt-6 rounded-lg border bg-white p-3">
       <summary class="cursor-pointer text-sm font-semibold text-gray-800">
@@ -142,7 +263,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue"
+import { computed, nextTick, ref } from "vue"
 import { Button, ErrorMessage, FeatherIcon, FileUploader, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 
@@ -231,4 +352,94 @@ function remove(row) {
   if (!window.confirm(`Delete the template "${row.template_name}"?`)) return
   deleter.submit({ doctype: "Paperwork Template", name: row.name })
 }
+
+// -- the web editor (A5 round 2) --
+
+const editor = ref(null)
+const editorArea = ref(null)
+
+function openEditor(row = null) {
+  editor.value = {
+    name: row?.name || null,
+    template_name: row?.template_name || "",
+    template_source: row?.template_source || "",
+  }
+}
+
+function insertPlaceholder(field) {
+  const area = editorArea.value
+  const token = braced(field)
+  if (!area) {
+    editor.value.template_source += token
+    return
+  }
+  const start = area.selectionStart ?? editor.value.template_source.length
+  const end = area.selectionEnd ?? start
+  const text = editor.value.template_source
+  editor.value.template_source = text.slice(0, start) + token + text.slice(end)
+  nextTick(() => {
+    area.focus()
+    area.selectionStart = area.selectionEnd = start + token.length
+  })
+}
+
+// set_value, not client.save: a partial doc through client.save would
+// blank every field it doesn't carry (notes, disabled, the file).
+const editorSaver = createResource({
+  url: "frappe.client.set_value",
+  onSuccess() {
+    editor.value = null
+    error.value = ""
+    library.reload()
+  },
+  onError: onFail,
+})
+
+const editorCreator = createResource({
+  url: "frappe.client.insert",
+  onSuccess() {
+    editor.value = null
+    error.value = ""
+    library.reload()
+  },
+  onError: onFail,
+})
+
+function saveEditor() {
+  const draft = editor.value
+  if (draft.name) {
+    editorSaver.submit({
+      doctype: "Paperwork Template",
+      name: draft.name,
+      fieldname: {
+        template_name: draft.template_name.trim(),
+        template_source: draft.template_source,
+      },
+    })
+  } else {
+    editorCreator.submit({
+      doc: {
+        doctype: "Paperwork Template",
+        template_name: draft.template_name.trim(),
+        template_source: draft.template_source,
+      },
+    })
+  }
+}
+
+// -- the registry of generated papers --
+
+const papers = createResource({ url: "auraos.api.generated_papers", auto: true })
+const paperSearch = ref("")
+
+const filteredPapers = computed(() => {
+  const rows = papers.data || []
+  const needle = paperSearch.value.toLowerCase()
+  if (!needle) return rows
+  return rows.filter((row) =>
+    [row.template_name, row.file_name, row.job, row.vendor_label, row.freelancer_label]
+      .filter(Boolean)
+      .some((text) => String(text).toLowerCase().includes(needle))
+  )
+})
 </script>

@@ -37,9 +37,20 @@
             class="mt-0.5 block w-48 rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
           >
             <option value="">— pick a person —</option>
-            <option v-for="row in contacts.data" :key="row.name" :value="row.name">
-              {{ row.full_name }}
-            </option>
+            <optgroup v-if="crew.length" label="On this job">
+              <option v-for="row in crew" :key="row.name" :value="row.name">
+                {{ row.full_name }}
+              </option>
+            </optgroup>
+            <optgroup :label="crew.length ? 'Everyone' : 'Contacts'">
+              <option
+                v-for="row in contactsOffJob"
+                :key="row.name"
+                :value="row.name"
+              >
+                {{ row.full_name }}
+              </option>
+            </optgroup>
           </select>
         </label>
 
@@ -193,10 +204,28 @@ const companies = createResource({
   onError: onFail,
 })
 
+// A freelancer contract is nearly always for someone already on the
+// job's cost lines — they come first, everyone else below.
+const parties = createResource({
+  url: "auraos.api.job_parties",
+  makeParams: () => ({ job: props.job }),
+  onError: onFail,
+})
+
+const crew = computed(() => parties.data?.freelancers || [])
+
+const contactsOffJob = computed(() => {
+  const onJob = new Set(crew.value.map((row) => row.name))
+  return (contacts.data || []).filter((row) => !onJob.has(row.name))
+})
+
 watch(
   template,
   (row) => {
-    if (row?.needs_freelancer && !contacts.data) contacts.submit()
+    if (row?.needs_freelancer && !contacts.data) {
+      contacts.submit()
+      parties.submit()
+    }
     if (row?.needs_vendor && !companies.data) companies.submit()
   },
   { immediate: true }

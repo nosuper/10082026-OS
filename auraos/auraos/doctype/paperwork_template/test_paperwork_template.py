@@ -429,3 +429,112 @@ class TestGeneratingPaperwork(FrappeTestCase):
             generate_job_paperwork(job=job.name, template=template.name)
 
         self.assertIn("Mẫu cũ", str(refusal.exception))
+
+
+class TestWebAuthoredTemplates(FrappeTestCase):
+    """A5 round 2: templates written in the app, not uploaded from Word."""
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+        existing = frappe.db.exists(
+            "Paperwork Template", {"template_name": "Web hợp đồng"}
+        )
+        if existing:
+            frappe.delete_doc("Paperwork Template", existing, force=True)
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def make_web_template(self, source=None):
+        return frappe.get_doc(
+            {
+                "doctype": "Paperwork Template",
+                "template_name": "Web hợp đồng",
+                "template_source": source
+                or "\n".join(
+                    [
+                        "HỢP ĐỒNG",
+                        "Bên B: {{freelancer.full_name}}",
+                        "Việc: {{job.title}}",
+                    ]
+                ),
+            }
+        ).insert(ignore_permissions=True)
+
+    def test_source_builds_the_docx_and_reads_its_placeholders(self):
+        template = self.make_web_template()
+        self.assertTrue(template.template_file)
+        from auraos.auraos.doctype.paperwork_template.paperwork_template import (
+            stored_placeholders,
+        )
+
+        self.assertIn("freelancer.full_name", stored_placeholders(template))
+        self.assertIn("job.title", stored_placeholders(template))
+        self.assertIn("Bên B:", read_text(template.template_file))
+
+    def test_editing_the_source_rebuilds_the_file(self):
+        template = self.make_web_template()
+        first_file = template.template_file
+        template.template_source = "CHỈ MỘT DÒNG: {{client.company_name}}"
+        template.save(ignore_permissions=True)
+        self.assertNotEqual(template.template_file, first_file)
+        self.assertEqual(
+            stored_names(template), ["client.company_name"]
+        )
+
+    def test_an_uploaded_template_keeps_working_with_no_source(self):
+        template = make_template()
+        self.assertFalse(template.get("template_source"))
+        self.assertIn("client.tax_code", stored_names(template))
+
+
+def stored_names(template):
+    from auraos.auraos.doctype.paperwork_template.paperwork_template import (
+        stored_placeholders,
+    )
+
+    return stored_placeholders(template)
+
+
+class TestGeneratedPaperRegistry(FrappeTestCase):
+    """A5 round 2: every generated paper lands in one findable registry."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def test_generating_writes_a_registry_row_with_who_it_was_for(self):
+        from auraos.api import generate_job_paperwork, generated_papers
+
+        template = make_template()
+        job = make_job()
+        person = frappe.get_doc(
+            {
+                "doctype": "Party Contact",
+                "full_name": "Registry Freelancer",
+                "phone": "0900000001",
+            }
+        ).insert(ignore_permissions=True)
+
+        frappe.set_user(PRODUCER)
+        result = generate_job_paperwork(
+            job.name, template.name, freelancer=person.name
+        )
+
+        rows = generated_papers()
+        mine = [row for row in rows if row.file_name == result["file_name"]]
+        self.assertEqual(len(mine), 1)
+        self.assertEqual(mine[0].job, job.name)
+        self.assertEqual(mine[0].freelancer, person.name)
+        self.assertEqual(mine[0].freelancer_label, "Registry Freelancer")
+        self.assertEqual(mine[0].template_name, template.template_name)

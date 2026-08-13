@@ -953,6 +953,7 @@ PAPERWORK_TEMPLATE_FIELDS = [
     "name",
     "template_name",
     "template_file",
+    "template_source",
     "notes",
     "disabled",
     "placeholders",
@@ -1031,6 +1032,23 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     document, filled = paperwork_template.generate(
         template, job, vendor=vendor, freelancer=freelancer
     )
+    # The registry row (A5 round 2): every paper ever generated, in one
+    # place, with who it was for — the file alone hangs off its job and
+    # is invisible from anywhere else.
+    frappe.get_doc(
+        {
+            "doctype": "Generated Paper",
+            "job": job,
+            "template": template,
+            "template_name": frappe.db.get_value(
+                "Paperwork Template", template, "template_name"
+            ),
+            "vendor": vendor or None,
+            "freelancer": freelancer or None,
+            "file_name": document.file_name,
+            "file_url": document.file_url,
+        }
+    ).insert()
     return {
         "name": document.name,
         "file_name": document.file_name,
@@ -1050,6 +1068,88 @@ def job_paperwork(job):
         fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
         order_by="creation desc",
     )
+
+
+@frappe.whitelist()
+def generated_papers():
+    """Every paper ever generated, newest first — the registry screen.
+
+    get_list, not get_all: row permissions apply, so this shows exactly
+    what the session may read.
+    """
+    frappe.has_permission("Generated Paper", "read", throw=True)
+    rows = frappe.get_list(
+        "Generated Paper",
+        fields=[
+            "name",
+            "job",
+            "template",
+            "template_name",
+            "vendor",
+            "freelancer",
+            "file_name",
+            "file_url",
+            "owner",
+            "creation",
+        ],
+        order_by="creation desc",
+        limit_page_length=0,
+    )
+    # Names, not codes, for the "who was this for" column.
+    vendors = {row.vendor for row in rows if row.vendor}
+    freelancers = {row.freelancer for row in rows if row.freelancer}
+    vendor_names = (
+        {
+            r.name: r.company_name
+            for r in frappe.get_all(
+                "Party Company",
+                filters={"name": ["in", list(vendors)]},
+                fields=["name", "company_name"],
+            )
+        }
+        if vendors
+        else {}
+    )
+    freelancer_names = (
+        {
+            r.name: r.full_name
+            for r in frappe.get_all(
+                "Party Contact",
+                filters={"name": ["in", list(freelancers)]},
+                fields=["name", "full_name"],
+            )
+        }
+        if freelancers
+        else {}
+    )
+    for row in rows:
+        row["vendor_label"] = vendor_names.get(row.vendor)
+        row["freelancer_label"] = freelancer_names.get(row.freelancer)
+    return rows
+
+
+@frappe.whitelist()
+def job_parties(job):
+    """The people this job's own breakdown names, for the paperwork
+    pickers: a freelancer contract is nearly always for someone already
+    on the job's cost lines, so they come first."""
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    contacts = []
+    seen = set()
+    for row in doc.cost_lines:
+        if row.source_contact and row.source_contact not in seen:
+            seen.add(row.source_contact)
+            contacts.append(row.source_contact)
+    if not contacts:
+        return {"freelancers": []}
+    rows = frappe.get_all(
+        "Party Contact",
+        filters={"name": ["in", contacts]},
+        fields=["name", "full_name"],
+    )
+    by_name = {row.name: row for row in rows}
+    return {"freelancers": [by_name[name] for name in contacts if name in by_name]}
 
 
 @frappe.whitelist()
