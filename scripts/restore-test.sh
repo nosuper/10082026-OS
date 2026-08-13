@@ -63,7 +63,7 @@ docker exec "$CONTAINER" bash -lc \
 
 counts=$(docker exec -i "$CONTAINER" bash -lc \
   "cd $BENCH_DIR && bench --site $SCRATCH_SITE console" <<'EOF' | grep -o 'RESTORE_TEST.*' || true
-print("RESTORE_TEST deals=%s jobs=%s quotes=%s" % (frappe.db.count("Deal"), frappe.db.count("Job"), frappe.db.count("Deal Quote")))
+print("RESTORE_TEST auraos=%s deals=%s jobs=%s quotes=%s" % ("auraos" in frappe.get_installed_apps(), frappe.db.count("Deal"), frappe.db.count("Job"), frappe.db.count("Deal Quote")))
 EOF
 )
 
@@ -72,10 +72,13 @@ if [ -z "$counts" ]; then
   exit 1
 fi
 
-deals=$(printf '%s' "$counts" | sed 's/.*deals=\([0-9]*\).*/\1/')
-if [ "${deals:-0}" -eq 0 ]; then
-  log "FAIL: $(basename "$archive") restored with zero deals - backup looks empty"
-  exit 1
-fi
-
-log "OK $(basename "$archive") → $counts"
+# The proof is the schema coming back whole - the app present and its
+# tables answering. Record counts are reported, not judged: a fresh
+# production site legitimately holds zero deals before go-live.
+case "$counts" in
+  *auraos=True*) log "OK $(basename "$archive") → $counts" ;;
+  *)
+    log "FAIL: $(basename "$archive") restored without the auraos app - schema did not come back"
+    exit 1
+    ;;
+esac
