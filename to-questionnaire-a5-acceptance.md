@@ -167,6 +167,28 @@ edited draft save what you approved?
 
 >
 
+## Round 6 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+(1) @ now suggests for real — frappe-ui's own popup dies silently in a
+modal, so the editor has its own dropdown: type @, keep typing to
+filter, click to insert the chip. (2) Uploaded Word files keep their
+look on screen: a symmetric docx→HTML reader carries bold/italic/
+underline/alignment/line-breaks into every preview; Word-only styling
+stays in the file, which the untouched-draft Generate still uses
+byte-for-byte.
+
+### Round-6 checks
+
+**R6.1** Editor: type `@fre` — dropdown at the caret, filtering as you
+type, click inserts a chip?
+
+>
+
+**R6.2** Click your uploaded contract's title — does the preview keep
+its bold headings and alignment now?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
