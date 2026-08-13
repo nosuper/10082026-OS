@@ -4,53 +4,66 @@
 
 **From:** Claude (the implementing agent) — **To:** the founder — **How your answers will be used:** the next Claude session reads this file top to bottom, treats every passed step as a verified acceptance criterion, turns each design answer into either code or a follow-up ticket, and acts on the verdict at the bottom.
 
-## Context
+## Context — round 2
 
-The last schema change before go-live: `tier` and `positioning` on every deal, so the quarterly reviews (margin by tier, 70/20/10 mix) have data from the first real deal. The tier suggests itself — positioning-segment job types are Tier 3 whatever they pay, then the budget thresholds (Settings, 50/200 triệu default) decide — and your explicit choice always wins. Positioning is yours alone to set.
+Round 1 asked you to fill **two** fields; you called that confusing, and you were right. The playbook already holds the correlation (§2.2: *positioning segment → Tier 3 bất kể giá trị*), so now **positioning is the input, tier is the output**:
+
+- The deal form asks **one** question — Positioning (Cash / Bridge / Brand) — the strategic call only you can make.
+- **Tier derives itself** and shows as a live chip in the form: Brand (or a job type flagged as positioning-segment) → Tier 3 whatever it pays; otherwise the budget thresholds (50/200 triệu, Settings). It keeps tracking as budget or positioning change.
+- You can still **pin** a tier by hand in the table (e.g. ≥2 shoot days → Tier 2 — a fact the system can't see). A pinned tier never gets re-derived; clearing it hands it back to the rules.
 
 ## How to answer
 
 **Rough effort:** ~4 minutes. Test at **http://192.168.1.94:8000/aura**, Ctrl+Shift+R.
 
-## 1. The suggestion
+## 1. One question, tier follows live
 
-**Do this:** create a deal with budget `30000000` — check its Tier in the dialog after saving. Repeat with `60000000` and `250000000`.
-**Expect:** Tier 1 / Tier 2 / Tier 3, filled in by themselves.
-
-Pass / fail:
-
->
-
-## 2. Your word wins
-
-**Do this:** on one of those deals, set Tier manually to something else and save; change the budget; save again.
-**Expect:** your tier stays.
+**Do this:** open New Deal — type budget `30000000`, watch the Tier chip; change to `250000000`; then set Positioning to Brand with budget back at `30000000`.
+**Expect:** chip reads Tier 1 → Tier 3 → Tier 3 (Brand wins over money), updating as you type. No tier select anywhere in the form.
 
 Pass / fail:
 
 >
 
-## 3. The board reads it
+## 2. Tier follows the deal, not just the form
+
+**Do this:** save a deal at `30000000` (Tier 1); later edit it and raise the budget to `250000000`.
+**Expect:** tier moves to Tier 3 by itself — it's derived, not frozen at creation.
+
+Pass / fail:
+
+>
+
+## 3. Pinning by hand
+
+**Do this:** in the deals **table**, set that deal's Tier column to Tier 2 (pretend it has 2 shoot days); then change its budget again.
+**Expect:** Tier 2 stays — the form shows "pinned by hand". Clear the Tier cell (blank option) and the rules take it back.
+
+Pass / fail:
+
+>
+
+## 4. The board reads it
 
 **Do this:** look at the deals board and table.
-**Expect:** tier chips on cards (T1 gray / T2 blue / T3 violet, positioning in the tooltip); Tier and Positioning columns editable inline in the table.
+**Expect:** tier chips on cards (T1 gray / T2 blue / T3 violet, positioning in the tooltip); Positioning column editable inline; Tier column only for pinning.
 
 Pass / fail:
 
 >
 
-## 4. Your thresholds
+## 5. Your thresholds
 
-**Do this:** Settings → Tier thresholds — change Tier 2 to `100000000`, save, create a deal at `90000000`.
-**Expect:** suggested Tier 1. (Put it back after.)
+**Do this:** Settings → Tier thresholds — change Tier 2 to `100000000`, save, open New Deal at `90000000`.
+**Expect:** chip reads Tier 1. (Put it back after.)
 
 Pass / fail:
 
 >
 
-## 5. Positioning-segment job types
+## 6. Positioning-segment job types
 
-Which Project Types should count as *đúng định vị* (auto Tier 3)? Today none are flagged — tell me the list (e.g. TVC?) and I'll flag them, or you can tick "Positioning Segment" on the Project Type in the Desk yourself.
+Which Project Types should count as *đúng định vị* (auto Tier 3 even when Positioning is left empty)? Today none are flagged — tell me the list (e.g. TVC?) and I'll flag them, or you can tick "Positioning Segment" on the Project Type in the Desk yourself.
 
 >
 

@@ -551,8 +551,8 @@ class TestDealTableEditing(FrappeTestCase):
 
 
 class TestTierSuggestion(FrappeTestCase):
-    """Phase B (playbook §2.2): the tier fills itself, the founder's
-    word wins."""
+    """Phase B (playbook §2.2): positioning is the input, tier is the
+    output — derived by the rules unless someone pins it by hand."""
 
     @classmethod
     def setUpClass(cls):
@@ -586,6 +586,31 @@ class TestTierSuggestion(FrappeTestCase):
         deal.estimated_budget = 400_000_000
         deal.save()
         self.assertEqual(deal.tier, "Tier 1")
+
+    def test_an_auto_tier_follows_the_budget_as_it_changes(self):
+        deal = make_deal(title="Budget đổi", estimated_budget=30_000_000)
+        self.assertEqual(deal.tier, "Tier 1")
+        deal.estimated_budget = 250_000_000
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 3")
+
+    def test_brand_positioning_is_tier_3_whatever_it_pays(self):
+        deal = make_deal(
+            title="Passion nhỏ", estimated_budget=10_000_000, positioning="Brand"
+        )
+        self.assertEqual(deal.tier, "Tier 3")
+
+    def test_clearing_a_pinned_tier_hands_it_back_to_the_rules(self):
+        deal = make_deal(
+            title="Bỏ pin", estimated_budget=300_000_000, tier="Tier 1"
+        )
+        deal.tier = ""
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 3")
+        # ...and it keeps tracking afterwards.
+        deal.estimated_budget = 60_000_000
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 2")
 
     def test_a_positioning_job_type_is_tier_3_whatever_it_pays(self):
         frappe.db.set_value("Project Type", "TVC", "is_positioning", 1)

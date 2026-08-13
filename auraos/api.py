@@ -1270,6 +1270,25 @@ def set_tier_thresholds(tier2=None, tier3=None):
 
 
 @frappe.whitelist()
+def preview_tier(estimated_budget=0, project_type=None, positioning=None):
+    """The tier the rules would assign — the deal form's live chip.
+
+    Computed here, not in the browser, so a producer session (which has
+    no read permission on Settings) sees the outcome without ever
+    learning the thresholds themselves.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    from auraos.auraos.doctype.deal.deal import derive_tier
+
+    return (
+        derive_tier(
+            float(estimated_budget or 0), project_type or None, positioning or None
+        )
+        or ""
+    )
+
+
+@frappe.whitelist()
 def get_quote_silence_days():
     frappe.has_permission("AuraOS Settings", "read", throw=True)
     return deal_quote.silence_days()

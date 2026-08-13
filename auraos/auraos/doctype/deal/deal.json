@@ -21,6 +21,7 @@
   "column_break_details",
   "project_type",
   "tier",
+  "tier_is_manual",
   "positioning",
   "deal_tags",
   "links_section",
@@ -158,12 +159,20 @@
    "options": "Project Type"
   },
   {
-   "description": "Suggested from the estimated budget (thresholds in Settings) and positioning-segment job types when left empty; the founder's word wins (playbook \u00a72.2)",
+   "description": "Derived, not chosen (playbook \u00a72.2): Brand positioning or a positioning-segment job type \u2192 Tier 3 whatever it pays, otherwise the budget thresholds in Settings. Setting it by hand pins it; clearing it hands it back to the rules.",
    "fieldname": "tier",
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Tier",
    "options": "\nTier 1\nTier 2\nTier 3"
+  },
+  {
+   "default": "0",
+   "description": "Set when someone writes the tier by hand; a pinned tier is never re-derived",
+   "fieldname": "tier_is_manual",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Tier Set By Hand"
   },
   {
    "description": "The 70/20/10 lens (playbook \u00a76.1): cash feeds the machine, bridge leans toward the positioning, brand IS the positioning",

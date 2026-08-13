@@ -95,10 +95,10 @@
         Tier thresholds (VND)
       </label>
       <p class="mt-1 text-xs text-gray-500">
-        A new deal's tier is suggested from its estimated budget: Tier 2
-        from the first number, Tier 3 from the second (playbook §2.2).
-        Positioning-segment job types are Tier 3 regardless. You can
-        always overrule the suggestion on the deal.
+        Every deal's tier is derived (playbook §2.2): Brand positioning —
+        or a positioning-segment job type — means Tier 3 whatever it
+        pays; otherwise Tier 2 from the first number, Tier 3 from the
+        second. Hand-setting a tier on a deal pins it against the rules.
       </p>
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <label class="text-xs text-gray-500">

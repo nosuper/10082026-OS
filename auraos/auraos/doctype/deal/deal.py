@@ -95,6 +95,30 @@ def tier3_threshold():
     return setting("tier3_threshold", None) or DEFAULT_TIER3_THRESHOLD
 
 
+def derive_tier(estimated_budget=0, project_type=None, positioning=None):
+    """The tier the playbook's rules (§2.2) assign to a deal.
+
+    Positioning is the input, tier is the output: Brand work — or a job
+    type flagged as the positioning segment — is Tier 3 whatever it
+    pays; everything else follows the two budget thresholds. No budget
+    and no positioning signal means no tier yet.
+    """
+    if positioning == "Brand":
+        return "Tier 3"
+    if project_type and frappe.db.get_value(
+        "Project Type", project_type, "is_positioning"
+    ):
+        return "Tier 3"
+    budget = estimated_budget or 0
+    if not budget:
+        return None
+    if budget >= tier3_threshold():
+        return "Tier 3"
+    if budget >= tier2_threshold():
+        return "Tier 2"
+    return "Tier 1"
+
+
 def floor_breached(margin_fraction):
     """Whether the quote's margin falls below the global floor.
 
@@ -152,33 +176,26 @@ class Deal(Document):
         self.validate_owner()
         self.validate_lost_reason()
         self.validate_packages()
-        self.suggest_tier()
+        self.apply_tier()
         self.compute_breakdown()
 
-    def suggest_tier(self):
-        """Fill an empty tier from the playbook's rules (§2.2).
+    def apply_tier(self):
+        """Keep the tier derived unless someone pinned it by hand.
 
-        Suggestion, not law: only an empty field is written, so the
-        founder's word always wins. Highest rule that fires: a
-        positioning-segment job type is Tier 3 whatever it pays; then
-        the two budget thresholds (Settings, defaults 50/200 triệu).
+        One strategic question — positioning — plus the budget decides
+        the tier (derive_tier), so it tracks the deal as those change.
+        Writing the tier directly pins it (tier_is_manual) and the rules
+        leave it alone; clearing it hands it back to the rules.
         """
-        if self.tier:
+        previous = self.get_doc_before_save()
+        stored_tier = previous.tier if previous else None
+        if (self.tier or None) != (stored_tier or None):
+            self.tier_is_manual = 1 if self.tier else 0
+        if self.tier_is_manual:
             return
-        if self.project_type and frappe.db.get_value(
-            "Project Type", self.project_type, "is_positioning"
-        ):
-            self.tier = "Tier 3"
-            return
-        budget = self.estimated_budget or 0
-        if not budget:
-            return
-        if budget >= tier3_threshold():
-            self.tier = "Tier 3"
-        elif budget >= tier2_threshold():
-            self.tier = "Tier 2"
-        else:
-            self.tier = "Tier 1"
+        self.tier = derive_tier(
+            self.estimated_budget, self.project_type, self.positioning
+        )
 
     def validate_owner(self):
         if self.deal_owner and not holds_operating_role(self.deal_owner):
