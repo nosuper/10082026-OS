@@ -83,23 +83,32 @@
         </span>
       </div>
 
-      <p v-if="row.unknown_placeholders.length" class="mt-1 text-xs text-amber-700">
-        ⚠ Asks for {{ row.unknown_placeholders.join(", ") }} — no such
-        placeholder, so it prints as a gap marker. Fix the docx and upload
-        it again.
+      <p
+        v-if="row.unknown_placeholders.length"
+        class="mt-1 flex items-start gap-1 text-xs text-amber-700"
+      >
+        <FeatherIcon name="alert-triangle" class="mt-0.5 h-3 w-3 shrink-0" />
+        <span>
+          Asks for {{ row.unknown_placeholders.join(", ") }} — no such
+          placeholder, so it prints as a gap marker. Fix the docx and upload
+          it again.
+        </span>
       </p>
 
-      <p v-if="row.placeholders.length" class="mt-1 text-xs text-gray-500">
-        Fills:
+      <div
+        v-if="row.placeholders.length"
+        class="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-gray-500"
+      >
+        <span>Fills:</span>
         <code
           v-for="field in row.placeholders"
           :key="field"
-          class="mr-1"
-          :class="row.unknown_placeholders.includes(field) ? 'text-amber-700' : ''"
+          class="rounded bg-gray-50 px-1 py-0.5"
+          :class="row.unknown_placeholders.includes(field) ? 'bg-amber-50 text-amber-700' : ''"
         >
           {{ field }}
         </code>
-      </p>
+      </div>
       <p v-else class="mt-1 text-xs text-gray-400">
         No placeholders — this prints exactly as designed.
       </p>
@@ -134,7 +143,7 @@
 
 <script setup>
 import { ref } from "vue"
-import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, FileUploader, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 const DOCX =

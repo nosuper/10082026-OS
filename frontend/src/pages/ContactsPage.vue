@@ -14,6 +14,9 @@
           @click="activeTab = tab.value"
         >
           {{ tab.label }}
+          <span class="ml-1 text-xs font-normal tabular-nums text-gray-400">
+            {{ tab.value === "companies" ? (companies.data || []).length : (people.data || []).length }}
+          </span>
         </button>
       </div>
       <FormControl
@@ -35,7 +38,10 @@
       </div>
     </div>
 
-    <div class="rounded-lg border bg-white">
+    <!-- ListView's root is w-max: with no widths it grows past the card
+         and clips its last column. Explicit widths keep it inside; the
+         wrapper scrolls as the phone-size fallback. -->
+    <div class="overflow-x-auto rounded-lg border bg-white">
       <ListView
         :columns="columns"
         :rows="filteredRows"
@@ -98,7 +104,15 @@ watch(roleFilter, (role) => {
 
 const companies = createListResource({
   doctype: "Party Company",
-  fields: ["name", "company_name", "tax_code", "phone", "email"],
+  fields: [
+    "name",
+    "company_name",
+    "tax_code",
+    "phone",
+    "email",
+    "address",
+    "bank_account_number",
+  ],
   orderBy: "modified desc",
   pageLength: 500,
   auto: true,
@@ -106,24 +120,55 @@ const companies = createListResource({
 
 const people = createListResource({
   doctype: "Party Contact",
-  fields: ["name", "full_name", "company", "phone", "email"],
+  fields: [
+    "name",
+    "full_name",
+    "company",
+    "phone",
+    "email",
+    "id_number",
+    "tax_code",
+    "bank_account_number",
+  ],
   orderBy: "modified desc",
   pageLength: 500,
   auto: true,
 })
 
+// What the paperwork needs to fill a contract without «thiếu: …» gap
+// markers — surfaced here so the holes are visible before generating,
+// not on the printed page.
+const COMPANY_DOCS = [
+  ["tax_code", "tax code"],
+  ["address", "address"],
+  ["bank_account_number", "bank"],
+]
+
+const PERSON_DOCS = [
+  ["id_number", "CCCD"],
+  ["tax_code", "tax code"],
+  ["bank_account_number", "bank"],
+]
+
+function docsLabel(row, spec) {
+  const missing = spec.filter(([field]) => !row[field]).map(([, label]) => label)
+  return missing.length ? `missing ${missing.join(", ")}` : "complete"
+}
+
 const COMPANY_COLUMNS = [
-  { label: "Company", key: "company_name" },
-  { label: "Tax Code", key: "tax_code" },
-  { label: "Phone", key: "phone" },
-  { label: "Email", key: "email" },
+  { label: "Company", key: "company_name", width: "220px" },
+  { label: "Tax Code", key: "tax_code", width: "120px" },
+  { label: "Phone", key: "phone", width: "140px" },
+  { label: "Email", key: "email", width: "220px" },
+  { label: "Paperwork", key: "docs_label", width: "200px" },
 ]
 
 const PEOPLE_COLUMNS = [
-  { label: "Name", key: "full_name" },
-  { label: "Company", key: "company_label" },
-  { label: "Phone", key: "phone" },
-  { label: "Email", key: "email" },
+  { label: "Name", key: "full_name", width: "200px" },
+  { label: "Company", key: "company_label", width: "180px" },
+  { label: "Phone", key: "phone", width: "140px" },
+  { label: "Email", key: "email", width: "200px" },
+  { label: "Paperwork", key: "docs_label", width: "200px" },
 ]
 
 const columns = computed(() =>
@@ -139,10 +184,14 @@ const companyNames = computed(() => {
 const filteredRows = computed(() => {
   const rows =
     activeTab.value === "companies"
-      ? companies.data || []
+      ? (companies.data || []).map((c) => ({
+          ...c,
+          docs_label: docsLabel(c, COMPANY_DOCS),
+        }))
       : (people.data || []).map((p) => ({
           ...p,
           company_label: companyNames.value[p.company] || "",
+          docs_label: docsLabel(p, PERSON_DOCS),
         }))
   const q = search.value.trim().toLowerCase()
   if (!q) return rows
