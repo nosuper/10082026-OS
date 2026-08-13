@@ -25,7 +25,7 @@ The gate before production wiring (D) and go-live (E). What happened in it:
 
 Pass / fail:
 
->
+> Pass (founder, 2026-08-13)
 
 ## 2. The simulated trail reads true
 
@@ -34,7 +34,7 @@ Pass / fail:
 
 Pass / fail:
 
->
+> Fail-note (founder): "no job code so I can't see where DEAL-0028 is" - record codes are not visible/searchable in the lists. Fix follows the merge.
 
 ## 3. The dash
 
@@ -43,7 +43,7 @@ Pass / fail:
 
 Pass / fail:
 
->
+> Pass (founder, 2026-08-13)
 
 ## Note for later phases (no action now)
 
@@ -51,7 +51,7 @@ Production-site settings (margin floor 20, silence 5, terms 7, tier thresholds, 
 
 ## Verdict
 
-- [ ] **GO** - merge it; Phase D (production wiring + backups) starts
+- [x] **GO** - merge it; Phase D (production wiring + backups) starts (founder, 2026-08-13 - with the record-code note above)
 - [ ] **GO with notes**
 - [ ] **NO-GO** - fix the failed steps first
 
