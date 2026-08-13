@@ -89,6 +89,42 @@
         </Button>
         <span v-if="termsSaved" class="text-xs text-green-700">Saved.</span>
       </div>
+      <hr class="my-5" />
+
+      <label class="block text-sm font-medium text-gray-800">
+        Tier thresholds (VND)
+      </label>
+      <p class="mt-1 text-xs text-gray-500">
+        A new deal's tier is suggested from its estimated budget: Tier 2
+        from the first number, Tier 3 from the second (playbook §2.2).
+        Positioning-segment job types are Tier 3 regardless. You can
+        always overrule the suggestion on the deal.
+      </p>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <label class="text-xs text-gray-500">
+          Tier 2 from
+          <VndInput
+            v-model="tier2"
+            class="mt-0.5 block w-36 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+          />
+        </label>
+        <label class="text-xs text-gray-500">
+          Tier 3 from
+          <VndInput
+            v-model="tier3"
+            class="mt-0.5 block w-36 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+          />
+        </label>
+        <Button
+          class="self-end"
+          variant="solid"
+          :loading="tierSaver.loading"
+          @click="saveTiers"
+        >
+          Save
+        </Button>
+        <span v-if="tiersSaved" class="self-end text-xs text-green-700">Saved.</span>
+      </div>
 
       <ErrorMessage class="mt-2" :message="error" />
     </div>
@@ -164,6 +200,7 @@
 <script setup>
 import { reactive, ref } from "vue"
 import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
+import VndInput from "../components/VndInput.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 // Mirrors auraos.lib.quote.COMPANY_FIELDS, minus the logo, which has its
@@ -253,6 +290,43 @@ const silenceSaver = createResource({
 function saveSilence() {
   silenceSaved.value = false
   silenceSaver.submit({ days: silenceDays.value || 0 })
+}
+
+// -- tier thresholds (Phase B) --
+
+const tier2 = ref("")
+const tier3 = ref("")
+const tiersSaved = ref(false)
+
+createResource({
+  url: "auraos.api.get_tier_thresholds",
+  auto: true,
+  onSuccess(value) {
+    tier2.value = value.tier2
+    tier3.value = value.tier3
+  },
+  onError() {
+    denied.value = true
+  },
+})
+
+const tierSaver = createResource({
+  url: "auraos.api.set_tier_thresholds",
+  onSuccess(value) {
+    tier2.value = value.tier2
+    tier3.value = value.tier3
+    tiersSaved.value = true
+    error.value = ""
+  },
+  onError(err) {
+    tiersSaved.value = false
+    error.value = frappeErrorMessage(err)
+  },
+})
+
+function saveTiers() {
+  tiersSaved.value = false
+  tierSaver.submit({ tier2: tier2.value || 0, tier3: tier3.value || 0 })
 }
 
 const paymentTermsDays = ref(7)

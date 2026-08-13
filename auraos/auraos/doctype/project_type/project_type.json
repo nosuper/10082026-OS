@@ -5,7 +5,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "type_name"
+  "type_name",
+  "is_positioning"
  ],
  "fields": [
   {
@@ -15,6 +16,13 @@
    "label": "Type Name",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "default": "0",
+   "description": "Job types the company wants to be known for \u2014 any deal of this type is suggested Tier 3 regardless of budget (playbook \u00a72.2)",
+   "fieldname": "is_positioning",
+   "fieldtype": "Check",
+   "label": "Positioning Segment"
   }
  ],
  "index_web_pages_for_search": 0,

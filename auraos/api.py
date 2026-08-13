@@ -1249,6 +1249,27 @@ def set_margin_floor(pct):
 
 
 @frappe.whitelist()
+def get_tier_thresholds():
+    """The two tier boundaries, defaults applied (playbook §2.2)."""
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    from auraos.auraos.doctype.deal.deal import tier2_threshold, tier3_threshold
+
+    return {"tier2": float(tier2_threshold()), "tier3": float(tier3_threshold())}
+
+
+@frappe.whitelist()
+def set_tier_thresholds(tier2=None, tier3=None):
+    """Store the founder's own tier boundaries; 0 falls back to the
+    playbook defaults."""
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.tier2_threshold = float(tier2 or 0)
+    settings.tier3_threshold = float(tier3 or 0)
+    settings.save()
+    return get_tier_thresholds()
+
+
+@frappe.whitelist()
 def get_quote_silence_days():
     frappe.has_permission("AuraOS Settings", "read", throw=True)
     return deal_quote.silence_days()

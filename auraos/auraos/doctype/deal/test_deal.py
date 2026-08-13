@@ -548,3 +548,69 @@ class TestDealTableEditing(FrappeTestCase):
             create_deal_table_row(
                 {"title": "Forbidden", "company": company.name}
             )
+
+
+class TestTierSuggestion(FrappeTestCase):
+    """Phase B (playbook §2.2): the tier fills itself, the founder's
+    word wins."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def test_budget_bands_suggest_the_tier(self):
+        self.assertEqual(
+            make_deal(title="B nhỏ", estimated_budget=30_000_000).tier, "Tier 1"
+        )
+        # Boundaries are inclusive: "từ 50 triệu" means 50 triệu counts.
+        self.assertEqual(
+            make_deal(title="B vừa", estimated_budget=50_000_000).tier, "Tier 2"
+        )
+        self.assertEqual(
+            make_deal(title="B lớn", estimated_budget=200_000_000).tier, "Tier 3"
+        )
+
+    def test_the_founders_explicit_tier_survives(self):
+        deal = make_deal(
+            title="Chốt tay", estimated_budget=300_000_000, tier="Tier 1"
+        )
+        self.assertEqual(deal.tier, "Tier 1")
+        deal.estimated_budget = 400_000_000
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 1")
+
+    def test_a_positioning_job_type_is_tier_3_whatever_it_pays(self):
+        frappe.db.set_value("Project Type", "TVC", "is_positioning", 1)
+        try:
+            deal = make_deal(
+                title="TVC bé", estimated_budget=10_000_000, project_type="TVC"
+            )
+            self.assertEqual(deal.tier, "Tier 3")
+        finally:
+            frappe.db.set_value("Project Type", "TVC", "is_positioning", 0)
+
+    def test_custom_thresholds_from_settings_are_honored(self):
+        frappe.db.set_single_value("AuraOS Settings", "tier2_threshold", 100_000_000)
+        try:
+            frappe.get_cached_doc("AuraOS Settings")  # refresh cache
+            frappe.clear_document_cache("AuraOS Settings", "AuraOS Settings")
+            deal = make_deal(title="Ngưỡng riêng", estimated_budget=90_000_000)
+            self.assertEqual(deal.tier, "Tier 1")
+        finally:
+            frappe.db.set_single_value("AuraOS Settings", "tier2_threshold", 0)
+            frappe.clear_document_cache("AuraOS Settings", "AuraOS Settings")
+
+    def test_no_budget_and_no_type_suggests_nothing(self):
+        self.assertFalse(make_deal(title="Trống trơn").tier)
+
+    def test_positioning_field_is_stored_as_given(self):
+        deal = make_deal(title="Định vị", positioning="Bridge")
+        self.assertEqual(deal.positioning, "Bridge")

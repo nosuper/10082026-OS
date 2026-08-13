@@ -69,6 +69,18 @@
             :options="projectTypeOptions"
             v-model="form.project_type"
           />
+          <FormControl
+            type="select"
+            label="Tier (auto-suggested if empty)"
+            :options="TIER_OPTIONS"
+            v-model="form.tier"
+          />
+          <FormControl
+            type="select"
+            label="Positioning (70/20/10)"
+            :options="POSITIONING_OPTIONS"
+            v-model="form.positioning"
+          />
           <div>
             <div class="mb-1.5 text-xs text-gray-600">Tags</div>
             <div class="flex flex-wrap items-center gap-1.5">
@@ -316,6 +328,22 @@ const saveError = ref("")
 // name/modified/stage_history survive the round trip.
 let serverDoc = null
 const stageHistory = ref([])
+
+// Suggestion happens server-side (budget thresholds + positioning job
+// types); leaving this empty lets it.
+const TIER_OPTIONS = [
+  { label: "", value: "" },
+  { label: "Tier 1 — cơm áo", value: "Tier 1" },
+  { label: "Tier 2 — trung bình", value: "Tier 2" },
+  { label: "Tier 3 — đúng định vị", value: "Tier 3" },
+]
+
+const POSITIONING_OPTIONS = [
+  { label: "", value: "" },
+  { label: "Cash — nuôi bộ máy (~70%)", value: "Cash" },
+  { label: "Bridge — gần định vị (~20%)", value: "Bridge" },
+  { label: "Brand — đúng định vị (~10%)", value: "Brand" },
+]
 
 const ownerOptions = computed(() => [
   { label: "", value: "" },

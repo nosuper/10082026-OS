@@ -75,6 +75,26 @@ def margin_floor_pct():
     return frappe.db.get_single_value("AuraOS Settings", "margin_floor_pct") or 0
 
 
+# The playbook's opening suggestion (§2.2), until the founder stores
+# their own numbers in Settings. Read through auraos.settings.setting so
+# an unset field falls back here rather than reading as a 0 threshold
+# that would make every deal Tier 3.
+DEFAULT_TIER2_THRESHOLD = 50_000_000
+DEFAULT_TIER3_THRESHOLD = 200_000_000
+
+
+def tier2_threshold():
+    from auraos.settings import setting
+
+    return setting("tier2_threshold", None) or DEFAULT_TIER2_THRESHOLD
+
+
+def tier3_threshold():
+    from auraos.settings import setting
+
+    return setting("tier3_threshold", None) or DEFAULT_TIER3_THRESHOLD
+
+
 def floor_breached(margin_fraction):
     """Whether the quote's margin falls below the global floor.
 
@@ -132,7 +152,33 @@ class Deal(Document):
         self.validate_owner()
         self.validate_lost_reason()
         self.validate_packages()
+        self.suggest_tier()
         self.compute_breakdown()
+
+    def suggest_tier(self):
+        """Fill an empty tier from the playbook's rules (§2.2).
+
+        Suggestion, not law: only an empty field is written, so the
+        founder's word always wins. Highest rule that fires: a
+        positioning-segment job type is Tier 3 whatever it pays; then
+        the two budget thresholds (Settings, defaults 50/200 triệu).
+        """
+        if self.tier:
+            return
+        if self.project_type and frappe.db.get_value(
+            "Project Type", self.project_type, "is_positioning"
+        ):
+            self.tier = "Tier 3"
+            return
+        budget = self.estimated_budget or 0
+        if not budget:
+            return
+        if budget >= tier3_threshold():
+            self.tier = "Tier 3"
+        elif budget >= tier2_threshold():
+            self.tier = "Tier 2"
+        else:
+            self.tier = "Tier 1"
 
     def validate_owner(self):
         if self.deal_owner and not holds_operating_role(self.deal_owner):

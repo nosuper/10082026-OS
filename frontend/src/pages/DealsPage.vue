@@ -124,6 +124,14 @@
               >
                 {{ deal.project_type }}
               </span>
+              <span
+                v-if="deal.tier"
+                class="rounded px-1.5 py-0.5 text-xs"
+                :class="tierClass(deal.tier)"
+                :title="deal.positioning ? `${deal.tier} · ${deal.positioning}` : deal.tier"
+              >
+                {{ deal.tier.replace("Tier ", "T") }}
+              </span>
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <span
@@ -500,6 +508,8 @@ const deals = createListResource({
     "project_type",
     "quote_status",
     "quote_sent_on",
+    "tier",
+    "positioning",
     "modified",
     "creation",
   ],
@@ -661,6 +671,8 @@ const COLUMNS = [
     editable: true,
     type: "select",
   },
+  { key: "tier", label: "Tier", editable: true, type: "select" },
+  { key: "positioning", label: "Positioning", editable: true, type: "select" },
   { key: "quote_status", label: "Quote" },
   { key: "tags", label: "Tags", editable: true, type: "text" },
   { key: "modified", label: "Updated" },
@@ -736,6 +748,22 @@ function optionsFor(key) {
   }
   if (key === "project_type") {
     return [blankOption, ...(projectTypes.data || []).map(namedOption)]
+  }
+  if (key === "tier") {
+    return [
+      blankOption,
+      { label: "Tier 1", value: "Tier 1" },
+      { label: "Tier 2", value: "Tier 2" },
+      { label: "Tier 3", value: "Tier 3" },
+    ]
+  }
+  if (key === "positioning") {
+    return [
+      blankOption,
+      { label: "Cash", value: "Cash" },
+      { label: "Bridge", value: "Bridge" },
+      { label: "Brand", value: "Brand" },
+    ]
   }
   return []
 }
@@ -915,6 +943,13 @@ const sortedDeals = computed(() => {
 
 function formatBudget(value) {
   return value ? vnd(value) : ""
+}
+
+// Tier badges: quiet for the daily bread, louder as it climbs.
+function tierClass(tier) {
+  if (tier === "Tier 3") return "bg-violet-50 font-medium text-violet-700"
+  if (tier === "Tier 2") return "bg-blue-50 text-blue-700"
+  return "bg-gray-100 text-gray-600"
 }
 
 const dealsByStage = computed(() => {

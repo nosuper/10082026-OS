@@ -34,18 +34,21 @@ DEALS = [
         "stage": "Brief Received",
         "project_type": "TVC",
         "estimated_budget": 220_000_000,
+        "positioning": "Brand",
     },
     {
         "title": "Social series — 6 tập",
         "stage": "Breakdown",
         "project_type": "Social Video",
         "estimated_budget": 90_000_000,
+        "positioning": "Bridge",
     },
     {
         "title": "Phim doanh nghiệp Vinamilk",
         "stage": "Negotiation",
         "project_type": "TVC",
         "estimated_budget": 150_000_000,
+        "positioning": "Cash",
     },
 ]
 
@@ -214,7 +217,12 @@ def founder():
 
 
 def ensure_deal(
-    company, title, stage, project_type=None, estimated_budget=150_000_000
+    company,
+    title,
+    stage,
+    project_type=None,
+    estimated_budget=150_000_000,
+    positioning=None,
 ):
     existing = frappe.db.exists("Deal", {"title": title})
     if existing:
@@ -228,6 +236,7 @@ def ensure_deal(
             "deal_owner": founder(),
             "project_type": project_type,
             "estimated_budget": estimated_budget,
+            "positioning": positioning,
         }
     ).insert(ignore_permissions=True).name
 
