@@ -9,7 +9,12 @@
 set -euo pipefail
 
 BENCH_DIR=/home/frappe/frappe-bench
-SITE=dev.localhost
+# Parametrized for the production overlay (compose.prod.yaml); the
+# defaults keep dev, e2e and CI exactly as they were.
+SITE="${AURA_SITE:-dev.localhost}"
+DB_ROOT_PW="${AURA_DB_ROOT_PW:-admin}"
+ADMIN_PW="${AURA_ADMIN_PW:-admin}"
+DEV_MODE="${AURA_DEV_MODE:-1}"
 
 if [ ! -f "$BENCH_DIR/sites/common_site_config.json" ]; then
     # python3.12: the image defaults to 3.14, which Frappe v15 does not support.
@@ -35,10 +40,12 @@ fi
 if [ ! -d "sites/$SITE" ]; then
     bench new-site "$SITE" \
         --mariadb-user-host-login-scope='%' \
-        --db-root-password admin \
-        --admin-password admin
+        --db-root-password "$DB_ROOT_PW" \
+        --admin-password "$ADMIN_PW"
     bench --site "$SITE" install-app auraos
-    bench --site "$SITE" set-config developer_mode 1
+    if [ "$DEV_MODE" = "1" ]; then
+        bench --site "$SITE" set-config developer_mode 1
+    fi
     bench --site "$SITE" clear-cache
 fi
 
