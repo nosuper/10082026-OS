@@ -953,6 +953,7 @@ PAPERWORK_TEMPLATE_FIELDS = [
     "name",
     "template_name",
     "template_file",
+    "template_source",
     "notes",
     "disabled",
     "placeholders",
@@ -1031,6 +1032,7 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     document, filled = paperwork_template.generate(
         template, job, vendor=vendor, freelancer=freelancer
     )
+    _register_paper(job, template, vendor, freelancer, document)
     return {
         "name": document.name,
         "file_name": document.file_name,
@@ -1050,6 +1052,173 @@ def job_paperwork(job):
         fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
         order_by="creation desc",
     )
+
+
+def _register_paper(job, template, vendor, freelancer, document):
+    """The registry row (A5 round 2): every paper ever generated, in
+    one place, with who it was for — the file alone hangs off its job
+    and is invisible from anywhere else."""
+    frappe.get_doc(
+        {
+            "doctype": "Generated Paper",
+            "job": job,
+            "template": template,
+            "template_name": frappe.db.get_value(
+                "Paperwork Template", template, "template_name"
+            ),
+            "vendor": vendor or None,
+            "freelancer": freelancer or None,
+            "file_name": document.file_name,
+            "file_url": document.file_url,
+        }
+    ).insert()
+
+
+@frappe.whitelist()
+def save_job_paperwork_draft(job, template, html, vendor=None, freelancer=None):
+    """The draft as edited on screen, kept as a .docx on the job (A5
+    round 4) — what the founder approved, not the raw fill.
+
+    vendor/freelancer ride along only for the registry: the html is
+    already filled and edited; nothing is substituted here.
+    """
+    _check_job_permission(job, "write")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    document = paperwork_template.attach_draft(template, job, html)
+    _register_paper(job, template, vendor, freelancer, document)
+    return {
+        "name": document.name,
+        "file_name": document.file_name,
+        "file_url": document.file_url,
+    }
+
+
+@frappe.whitelist()
+def preview_template(template):
+    """A template read before anything else (A5 round 5): its own HTML
+    for a web one, its text for an uploaded Word file — placeholders
+    visible as written."""
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    doc = frappe.get_doc("Paperwork Template", template)
+    return {
+        "html": paperwork_template.template_html(doc),
+        "web": bool((doc.get("template_source") or "").strip()),
+        "file_url": doc.template_file,
+    }
+
+
+@frappe.whitelist()
+def preview_paper(file_url):
+    """A paper already on a job, read on screen before any download
+    (A5 round 5). Only files hanging off a job the session may read."""
+    row = frappe.db.get_value(
+        "File",
+        {"file_url": file_url},
+        ["name", "attached_to_doctype", "attached_to_name"],
+        as_dict=True,
+    )
+    if not row or row.attached_to_doctype != "Job" or not row.attached_to_name:
+        frappe.throw(_("No such paper"), frappe.DoesNotExistError)
+    _check_job_permission(row.attached_to_name, "read")
+    content = frappe.get_doc("File", row.name).get_content()
+    return {"html": paperwork_template.paper_html(content)}
+
+
+@frappe.whitelist()
+def preview_job_paperwork(job, template, vendor=None, freelancer=None):
+    """The paper on screen before anything is generated (A5 round 3).
+
+    Read on the job is enough — nothing is attached; the screen shows
+    what generate would print, gap markers highlighted, and offers the
+    browser's own print dialog.
+    """
+    _check_job_permission(job, "read")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    return paperwork_template.preview(
+        template, job, vendor=vendor, freelancer=freelancer
+    )
+
+
+@frappe.whitelist()
+def generated_papers():
+    """Every paper ever generated, newest first — the registry screen.
+
+    get_list, not get_all: row permissions apply, so this shows exactly
+    what the session may read.
+    """
+    frappe.has_permission("Generated Paper", "read", throw=True)
+    rows = frappe.get_list(
+        "Generated Paper",
+        fields=[
+            "name",
+            "job",
+            "template",
+            "template_name",
+            "vendor",
+            "freelancer",
+            "file_name",
+            "file_url",
+            "owner",
+            "creation",
+        ],
+        order_by="creation desc",
+        limit_page_length=0,
+    )
+    # Names, not codes, for the "who was this for" column.
+    vendors = {row.vendor for row in rows if row.vendor}
+    freelancers = {row.freelancer for row in rows if row.freelancer}
+    vendor_names = (
+        {
+            r.name: r.company_name
+            for r in frappe.get_all(
+                "Party Company",
+                filters={"name": ["in", list(vendors)]},
+                fields=["name", "company_name"],
+            )
+        }
+        if vendors
+        else {}
+    )
+    freelancer_names = (
+        {
+            r.name: r.full_name
+            for r in frappe.get_all(
+                "Party Contact",
+                filters={"name": ["in", list(freelancers)]},
+                fields=["name", "full_name"],
+            )
+        }
+        if freelancers
+        else {}
+    )
+    for row in rows:
+        row["vendor_label"] = vendor_names.get(row.vendor)
+        row["freelancer_label"] = freelancer_names.get(row.freelancer)
+    return rows
+
+
+@frappe.whitelist()
+def job_parties(job):
+    """The people this job's own breakdown names, for the paperwork
+    pickers: a freelancer contract is nearly always for someone already
+    on the job's cost lines, so they come first."""
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    contacts = []
+    seen = set()
+    for row in doc.cost_lines:
+        if row.source_contact and row.source_contact not in seen:
+            seen.add(row.source_contact)
+            contacts.append(row.source_contact)
+    if not contacts:
+        return {"freelancers": []}
+    rows = frappe.get_all(
+        "Party Contact",
+        filters={"name": ["in", contacts]},
+        fields=["name", "full_name"],
+    )
+    by_name = {row.name: row for row in rows}
+    return {"freelancers": [by_name[name] for name in contacts if name in by_name]}
 
 
 @frappe.whitelist()

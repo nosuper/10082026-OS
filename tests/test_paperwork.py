@@ -458,3 +458,172 @@ def test_every_value_the_vocabulary_offers_is_a_string_or_none():
     )
 
     assert all(v is None or isinstance(v, str) for v in values.values())
+
+
+# -- A5 round 3: HTML-authored templates, previews, printable fills --
+
+
+from auraos.lib.paperwork import (  # noqa: E402
+    docx_paragraph_texts,
+    fill_html,
+    html_to_docx,
+    looks_like_html,
+)
+
+
+def test_html_builds_a_docx_with_its_formatting():
+    docx = html_to_docx(
+        '<h2 style="text-align: center">HỢP ĐỒNG</h2>'
+        "<p>Bên B: <strong>{{freelancer.full_name}}</strong></p>"
+        "<ul><li>CCCD: 123</li><li>MST: 456</li></ul>"
+    )
+    xml = zipfile.ZipFile(BytesIO(docx)).read("word/document.xml").decode()
+    assert "HỢP ĐỒNG" in xml
+    assert '<w:jc w:val="center"/>' in xml
+    assert "<w:b/>" in xml
+    # Prefix and text are separate runs; read the paragraph as a reader would.
+    assert "• CCCD: 123" in docx_paragraph_texts(docx)
+    # The placeholder survives as text, ready for fill_docx.
+    assert "{{freelancer.full_name}}" in xml
+
+
+def test_html_docx_paragraphs_read_back_in_order():
+    docx = html_to_docx("<p>một</p><p>hai</p><ol><li>ba</li><li>bốn</li></ol>")
+    assert docx_paragraph_texts(docx) == ["một", "hai", "1. ba", "2. bốn"]
+
+
+def test_fill_html_drops_values_in_and_marks_the_gaps():
+    filled = fill_html(
+        "<p>Tên: {{freelancer.full_name}} — CCCD: {{freelancer.id_number}}"
+        " — {{no.such_field}}</p>",
+        {"freelancer.full_name": "Ngô Quay Phim", "freelancer.id_number": None},
+    )
+    assert "Ngô Quay Phim" in filled.html
+    assert "«thiếu: freelancer.id_number»" in filled.html
+    assert "«không có trường: no.such_field»" in filled.html
+    assert '<mark data-gap="1">' in filled.html
+    assert filled.missing == ("freelancer.id_number",)
+    assert filled.unknown == ("no.such_field",)
+
+
+def test_fill_html_escapes_record_values():
+    filled = fill_html(
+        "<p>{{client.company_name}}</p>",
+        {"client.company_name": 'Công ty <script>alert("x")</script>'},
+    )
+    assert "<script>" not in filled.html
+    assert "&lt;script&gt;" in filled.html
+
+
+def test_looks_like_html_separates_the_two_source_kinds():
+    assert looks_like_html("<p>hi</p>")
+    assert looks_like_html("  \n<h1>hi</h1>")
+    assert not looks_like_html("DÒNG MỘT\nDÒNG HAI")
+
+
+# -- A5 round 6: the symmetric reader — a docx back as styled HTML --
+
+
+from auraos.lib.paperwork import docx_to_html, highlight_gaps  # noqa: E402
+
+
+def test_docx_reads_back_with_its_emphasis_and_alignment():
+    docx = html_to_docx(
+        '<h2 style="text-align: center"><strong>HỢP ĐỒNG</strong></h2>'
+        "<p>Bên B: <strong>Ngô Quay Phim</strong> — <em>freelancer</em></p>"
+        "<p><u>Điều 1</u></p>"
+    )
+    html = docx_to_html(docx)
+    assert 'style="text-align: center"' in html
+    assert "<strong>HỢP ĐỒNG</strong>" in html
+    assert "<strong>Ngô Quay Phim</strong>" in html
+    assert "<em>freelancer</em>" in html
+    assert "<u>Điều 1</u>" in html
+
+
+def test_docx_line_breaks_survive_the_round_trip():
+    docx = html_to_docx("<p>dòng một<br>dòng hai</p>")
+    assert "dòng một<br>dòng hai" in docx_to_html(docx)
+
+
+def test_highlight_gaps_wraps_only_the_markers():
+    html = highlight_gaps("<p>Tên: «thiếu: freelancer.full_name» xong</p>")
+    assert '<mark data-gap="1">«thiếu: freelancer.full_name»</mark>' in html
+    assert html.count("<mark") == 1
+
+
+def test_docx_tables_come_back_as_tables_in_order():
+    # A fee schedule between two paragraphs must stay between them.
+    body = (
+        "<w:p><w:r><w:t>Trước bảng</w:t></w:r></w:p>"
+        "<w:tbl><w:tr>"
+        "<w:tc><w:p><w:r><w:t>Hạng mục</w:t></w:r></w:p></w:tc>"
+        "<w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>20.000.000</w:t></w:r></w:p></w:tc>"
+        "</w:tr></w:tbl>"
+        "<w:p><w:r><w:t>Sau bảng</w:t></w:r></w:p>"
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        f'wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    )
+    docx = docx_with({"word/document.xml": document})
+    html = docx_to_html(docx)
+    assert html.index("Trước bảng") < html.index("<table") < html.index("Sau bảng")
+    assert "<td><p>Hạng mục</p></td>" in html
+    assert "<strong>20.000.000</strong>" in html
+    # The table's own paragraphs are not repeated outside it.
+    assert html.count("Hạng mục") == 1
+
+
+def test_a_signature_block_table_stays_borderless_on_screen():
+    # Word draws nothing for a table with no borders and no style —
+    # the founder's real signature blocks (A5 round 7).
+    body = (
+        "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>"
+        "<w:tr><w:tc><w:p><w:r><w:t>ĐẠI DIỆN BÊN A</w:t></w:r></w:p></w:tc>"
+        "<w:tc><w:p><w:r><w:t>ĐẠI DIỆN BÊN B</w:t></w:r></w:p></w:tc>"
+        "</w:tr></w:tbl>"
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        f'wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    )
+    html = docx_to_html(docx_with({"word/document.xml": document}))
+    assert '<table class="borderless">' in html
+
+
+def test_a_fee_schedule_with_single_borders_keeps_its_grid():
+    body = (
+        "<w:tbl><w:tblPr><w:tblBorders>"
+        '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
+        "</w:tblBorders></w:tblPr>"
+        "<w:tr><w:tc><w:p><w:r><w:t>STT</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        f'wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    )
+    html = docx_to_html(docx_with({"word/document.xml": document}))
+    assert "<table><tbody>" in html
+
+
+def test_editor_tables_survive_into_the_docx_and_back():
+    docx = html_to_docx(
+        "<p>Trên bảng</p>"
+        '<table class="borderless"><tbody><tr>'
+        "<td><p><strong>BÊN A</strong></p></td><td><p>BÊN B</p></td>"
+        "</tr></tbody></table>"
+    )
+    xml = zipfile.ZipFile(BytesIO(docx)).read("word/document.xml").decode()
+    assert "<w:tbl>" in xml
+    assert "<w:tblBorders>" not in xml  # borderless in, borderless out
+    html = docx_to_html(docx)
+    assert '<table class="borderless">' in html
+    assert "<strong>BÊN A</strong>" in html
+
+    bordered = html_to_docx("<table><tbody><tr><td><p>x</p></td></tr></tbody></table>")
+    bordered_xml = zipfile.ZipFile(BytesIO(bordered)).read("word/document.xml").decode()
+    assert "<w:tblBorders>" in bordered_xml

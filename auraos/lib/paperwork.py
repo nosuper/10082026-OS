@@ -35,6 +35,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any, Iterable, Mapping, Sequence
 from xml.sax.saxutils import escape, unescape
@@ -426,6 +427,408 @@ _ROOT_RELS = (
     'Target="word/document.xml"/>'
     "</Relationships>"
 )
+
+
+@dataclass(frozen=True)
+class FilledHtml:
+    """A web preview of a paper and everything it could not fill."""
+
+    html: str
+    missing: tuple[str, ...] = ()
+    unknown: tuple[str, ...] = ()
+
+
+def fill_html(source: str, values: Mapping[str, Any]) -> FilledHtml:
+    """The template's own HTML with values dropped in — the on-screen
+    preview and print view (A5 round 3).
+
+    Values are escaped on the way in: they come from records, and a
+    company name must never execute as markup. An unfillable name keeps
+    the exact «…» marker the printed docx would carry, wrapped in
+    ``<mark data-gap>`` so the screen can highlight it.
+    """
+    report = _Report()
+
+    def replace(match: re.Match) -> str:
+        name = match.group(1)
+        known = name in values
+        value = values.get(name)
+        if value is None or value == "":
+            report.note(name, known)
+            marker = (MISSING_MARKER if known else UNKNOWN_MARKER).format(name=name)
+            return f'<mark data-gap="1">{escape(marker)}</mark>'
+        return escape(str(value))
+
+    return FilledHtml(
+        html=PLACEHOLDER.sub(replace, source),
+        missing=tuple(report.missing),
+        unknown=tuple(report.unknown),
+    )
+
+
+# -- building a .docx from HTML written in the app's editor --
+
+# The subset the web editor produces that survives into the paper.
+# Anything else degrades to its text — a paper is clauses and headings,
+# not a layout engine.
+_HEADING_SIZES = {"h1": 32, "h2": 28, "h3": 26}  # half-points
+_ALIGNMENTS = {"center": "center", "right": "right", "justify": "both"}
+
+
+class _HtmlPaper(HTMLParser):
+    """Parses the editor's HTML into paragraphs of formatted runs."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.elements: list[dict] = []
+        self._runs: list[dict] = []
+        self._bold = 0
+        self._italic = 0
+        self._underline = 0
+        self._size: int | None = None
+        self._align: str | None = None
+        self._lists: list[dict] = []
+        self._in_block = False
+        # Table state (A5 round 7): a signature block is a table too.
+        self._table: dict | None = None
+        self._row: list | None = None
+        self._cell: list | None = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("strong", "b"):
+            self._bold += 1
+        elif tag in ("em", "i"):
+            self._italic += 1
+        elif tag == "u":
+            self._underline += 1
+        elif tag == "br":
+            self._runs.append({"break": True})
+        elif tag in ("ul", "ol"):
+            self._lists.append({"ordered": tag == "ol", "count": 0})
+        elif tag == "table":
+            self._close_block()
+            self._table = {
+                "bordered": "borderless" not in (attrs.get("class") or ""),
+                "rows": [],
+            }
+        elif tag == "tr" and self._table is not None:
+            self._row = []
+        elif tag in ("td", "th") and self._row is not None:
+            self._cell = []
+        elif tag in ("p", "h1", "h2", "h3", "li"):
+            self._open_block(tag, attrs)
+
+    def handle_endtag(self, tag):
+        if tag in ("strong", "b"):
+            self._bold = max(0, self._bold - 1)
+        elif tag in ("em", "i"):
+            self._italic = max(0, self._italic - 1)
+        elif tag == "u":
+            self._underline = max(0, self._underline - 1)
+        elif tag in ("ul", "ol"):
+            if self._lists:
+                self._lists.pop()
+        elif tag in ("td", "th"):
+            self._close_block()
+            if self._row is not None and self._cell is not None:
+                self._row.append(self._cell)
+            self._cell = None
+        elif tag == "tr":
+            if self._table is not None and self._row is not None:
+                self._table["rows"].append(self._row)
+            self._row = None
+        elif tag == "table":
+            if self._table is not None:
+                self.elements.append({"kind": "table", **self._table})
+            self._table = None
+        elif tag in ("p", "h1", "h2", "h3", "li"):
+            self._close_block()
+
+    def handle_data(self, data):
+        if not data:
+            return
+        # Text outside any block (legacy plain fragments) still prints.
+        if not self._in_block and data.strip():
+            self._open_block("p", {})
+        if self._in_block:
+            self._runs.append(
+                {
+                    "text": data,
+                    "bold": self._bold > 0 or self._size is not None,
+                    "italic": self._italic > 0,
+                    "underline": self._underline > 0,
+                    "size": self._size,
+                }
+            )
+
+    def _open_block(self, tag, attrs):
+        self._close_block()
+        self._in_block = True
+        self._size = _HEADING_SIZES.get(tag)
+        style = attrs.get("style") or ""
+        self._align = next(
+            (
+                word_value
+                for css_value, word_value in _ALIGNMENTS.items()
+                if f"text-align: {css_value}" in style
+                or f"text-align:{css_value}" in style
+            ),
+            None,
+        )
+        if tag == "li" and self._lists:
+            entry = self._lists[-1]
+            entry["count"] += 1
+            prefix = f"{entry['count']}. " if entry["ordered"] else "• "
+            indent = "    " * (len(self._lists) - 1)
+            self._runs.append({"text": indent + prefix, "bold": False,
+                               "italic": False, "underline": False, "size": None})
+
+    def _close_block(self):
+        if not self._in_block:
+            return
+        paragraph = {"kind": "p", "align": self._align, "runs": self._runs}
+        # A block inside an open cell belongs to the cell.
+        (self._cell if self._cell is not None else self.elements).append(
+            paragraph
+        )
+        self._runs = []
+        self._in_block = False
+        self._size = None
+        self._align = None
+
+    def close(self):
+        super().close()
+        self._close_block()
+
+
+def _run_xml(run: dict) -> str:
+    if run.get("break"):
+        return "<w:r><w:br/></w:r>"
+    props = ""
+    if run.get("bold"):
+        props += "<w:b/>"
+    if run.get("italic"):
+        props += "<w:i/>"
+    if run.get("underline"):
+        props += '<w:u w:val="single"/>'
+    if run.get("size"):
+        props += f'<w:sz w:val="{run["size"]}"/><w:szCs w:val="{run["size"]}"/>'
+    rpr = f"<w:rPr>{props}</w:rPr>" if props else ""
+    return f'<w:r>{rpr}<w:t xml:space="preserve">{escape(run["text"])}</w:t></w:r>'
+
+
+def _paragraph_xml(paragraph: dict) -> str:
+    ppr = (
+        f'<w:pPr><w:jc w:val="{paragraph["align"]}"/></w:pPr>'
+        if paragraph.get("align")
+        else ""
+    )
+    runs = "".join(_run_xml(run) for run in paragraph["runs"])
+    return f"<w:p>{ppr}{runs}</w:p>"
+
+
+_TABLE_BORDERS_XML = "<w:tblBorders>" + "".join(
+    f'<w:{side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV")
+) + "</w:tblBorders>"
+
+
+def _table_xml(table: dict) -> str:
+    properties = (
+        "<w:tblPr>"
+        + (_TABLE_BORDERS_XML if table.get("bordered") else "")
+        + '<w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+    )
+    rows = []
+    for row in table["rows"]:
+        cells = []
+        for cell in row:
+            # Word refuses a cell without a paragraph.
+            body = "".join(_paragraph_xml(p) for p in cell) or "<w:p/>"
+            cells.append(f"<w:tc>{body}</w:tc>")
+        rows.append(f"<w:tr>{''.join(cells)}</w:tr>")
+    return f"<w:tbl>{properties}{''.join(rows)}</w:tbl>"
+
+
+def _element_xml(element: dict) -> str:
+    if element.get("kind") == "table":
+        return _table_xml(element)
+    return _paragraph_xml(element)
+
+
+def html_to_docx(source: str) -> bytes:
+    """A .docx built from the web editor's HTML (A5 round 3).
+
+    Word's own vocabulary for what the editor offers: bold, italic,
+    underline, three heading sizes, alignment, bullet and numbered
+    lists (as visible prefixes) — and tables, bordered unless the
+    table carries class="borderless" (round 7: a signature block is a
+    borderless table). Placeholders pass through as text and are
+    filled exactly like an uploaded template's.
+    """
+    parser = _HtmlPaper()
+    parser.feed(source)
+    parser.close()
+    body = "".join(_element_xml(e) for e in parser.elements) or "<w:p/>"
+    if parser.elements and parser.elements[-1].get("kind") == "table":
+        # Word wants the body to end on a paragraph.
+        body += "<w:p/>"
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        'wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _CONTENT_TYPES)
+        archive.writestr("_rels/.rels", _ROOT_RELS)
+        archive.writestr("word/document.xml", document)
+    return out.getvalue()
+
+
+# Reading a .docx back for the screen (A5 round 6): the founder's
+# uploaded contracts must not lose their look in a preview. The same
+# subset html_to_docx writes is read back — bold, italic, underline,
+# alignment, line breaks — so the two converters are symmetric.
+_RUN = re.compile(r"<w:r(?:\s[^>]*)?>.*?</w:r>", re.DOTALL)
+_RUN_PROPS = re.compile(r"<w:rPr>.*?</w:rPr>", re.DOTALL)
+_PARA_PROPS = re.compile(r"<w:pPr>.*?</w:pPr>", re.DOTALL)
+_JC = re.compile(r'<w:jc\s[^>]*w:val="([^"]+)"')
+_BR = re.compile(r"<w:br\s*/>")
+
+_JC_TO_CSS = {"center": "center", "right": "right", "end": "right", "both": "justify"}
+
+
+def _flag_on(props: str, tag: str) -> bool:
+    match = re.search(rf"<w:{tag}(\s[^>]*)?/?>", props)
+    if not match:
+        return False
+    attrs = match.group(1) or ""
+    return 'w:val="0"' not in attrs and 'w:val="false"' not in attrs and 'w:val="none"' not in attrs
+
+
+def _run_to_html(run_xml: str) -> str:
+    text = "".join(_TEXT.findall(run_xml))
+    breaks = "<br>" * len(_BR.findall(run_xml))
+    if not text:
+        return breaks
+    props_match = _RUN_PROPS.search(run_xml)
+    props = props_match.group(0) if props_match else ""
+    html = text  # already XML-escaped in the docx, which is valid HTML
+    if _flag_on(props, "b"):
+        html = f"<strong>{html}</strong>"
+    if _flag_on(props, "i"):
+        html = f"<em>{html}</em>"
+    if _flag_on(props, "u"):
+        html = f"<u>{html}</u>"
+    return breaks + html
+
+
+_TABLE = re.compile(r"<w:tbl(?:\s[^>]*)?>.*?</w:tbl>", re.DOTALL)
+_TABLE_ROW = re.compile(r"<w:tr(?:\s[^>]*)?>.*?</w:tr>", re.DOTALL)
+_TABLE_CELL = re.compile(r"<w:tc(?:\s[^>]*)?>.*?</w:tc>", re.DOTALL)
+_TABLE_PR = re.compile(r"<w:tblPr>.*?</w:tblPr>", re.DOTALL)
+_TABLE_BORDERS = re.compile(r"<w:tblBorders>.*?</w:tblBorders>", re.DOTALL)
+_BORDER_DRAWN = re.compile(
+    r'<w:(?:top|bottom|left|right|insideH|insideV)\s[^>]*w:val="(?!none|nil)'
+)
+_TABLE_STYLE = re.compile(r"<w:tblStyle\s")
+
+
+def _table_bordered(tbl: str) -> bool:
+    """Whether Word would draw this table's grid.
+
+    Checked against the founder's real contracts (A5 round 7): a fee
+    schedule carries <w:tblBorders> with w:val="single"; a signature
+    block has no tblBorders and no table style at all — Word draws
+    nothing, and neither must the preview.
+    """
+    pr_match = _TABLE_PR.search(tbl)
+    pr = pr_match.group(0) if pr_match else ""
+    borders = _TABLE_BORDERS.search(pr)
+    if borders:
+        return bool(_BORDER_DRAWN.search(borders.group(0)))
+    # No explicit borders: a referenced table style (Word's TableGrid
+    # etc.) usually draws them; a bare table draws none.
+    return bool(_TABLE_STYLE.search(pr))
+
+
+def _paragraph_to_html(para: str) -> str:
+    props_match = _PARA_PROPS.search(para)
+    jc = _JC.search(props_match.group(0)) if props_match else None
+    align = _JC_TO_CSS.get(jc.group(1)) if jc else None
+    style = f' style="text-align: {align}"' if align else ""
+    runs = "".join(_run_to_html(run) for run in _RUN.findall(para))
+    return f"<p{style}>{runs}</p>"
+
+
+def _table_to_html(tbl: str) -> str:
+    rows = []
+    for row in _TABLE_ROW.findall(tbl):
+        cells = []
+        for cell in _TABLE_CELL.findall(row):
+            inner = "".join(
+                _paragraph_to_html(para) for para in _PARAGRAPH.findall(cell)
+            )
+            cells.append(f"<td>{inner}</td>")
+        rows.append(f"<tr>{''.join(cells)}</tr>")
+    kind = "" if _table_bordered(tbl) else ' class="borderless"'
+    return f"<table{kind}><tbody>{''.join(rows)}</tbody></table>"
+
+
+def docx_to_html(data: bytes) -> str:
+    """A .docx as screen HTML, keeping what the screen can keep.
+
+    Words, emphasis, alignment — and tables, in document order (a
+    contract's fee schedule is a table; dropping it reads as a
+    different document, A5 round 7). Word-only refinements (exact
+    fonts, images) stay in the file.
+    """
+    archive = _archive(data)
+    xml = archive.read("word/document.xml").decode("utf-8")
+
+    # Tables and paragraphs interleave in the body; render each in its
+    # place, and never render a table's own paragraphs twice.
+    table_spans = [(m.start(), m.end()) for m in _TABLE.finditer(xml)]
+
+    def inside_table(position: int) -> bool:
+        return any(start <= position < end for start, end in table_spans)
+
+    pieces = []
+    for match in _TABLE.finditer(xml):
+        pieces.append((match.start(), _table_to_html(match.group(0))))
+    for match in _PARAGRAPH.finditer(xml):
+        if not inside_table(match.start()):
+            pieces.append((match.start(), _paragraph_to_html(match.group(0))))
+    return "".join(html for _, html in sorted(pieces, key=lambda item: item[0]))
+
+
+def highlight_gaps(html: str) -> str:
+    """Wrap the «…» markers so a screen can highlight them."""
+    return re.sub(r"(«[^»]*»)", r'<mark data-gap="1">\1</mark>', html)
+
+
+def docx_paragraph_texts(data: bytes) -> list[str]:
+    """Every paragraph's visible text, in order.
+
+    The preview of an uploaded template: its formatting stays in the
+    .docx, but every word — and every gap marker — belongs on screen
+    before anything is generated (A5 round 3).
+    """
+    archive = _archive(data)
+    xml = archive.read("word/document.xml").decode("utf-8")
+    return [
+        unescape("".join(_TEXT.findall(paragraph)))
+        for paragraph in _PARAGRAPH.findall(xml)
+    ]
+
+
+def looks_like_html(source: str) -> bool:
+    """Which builder a template_source belongs to: the web editor's
+    HTML, or the legacy plain paragraphs the first seeds used."""
+    return (source or "").lstrip().startswith("<")
 
 
 def build_docx(paragraphs: Sequence[str]) -> bytes:

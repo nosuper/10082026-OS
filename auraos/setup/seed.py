@@ -524,6 +524,52 @@ def seed_a1_stale_deal(deal_name):
     )
 
 
+# A5 round 2: a freelancer contract in the library, written through the
+# web-editor path (template_source → built .docx) — so the walkthrough
+# sees both the editor's product and the freelancer picker on a job.
+FREELANCER_CONTRACT = "Hợp đồng cộng tác viên (mẫu)"
+
+# HTML, as the rich editor writes it — headings, bold labels, alignment
+# all survive into the built .docx via html_to_docx.
+FREELANCER_CONTRACT_SOURCE = "".join(
+    [
+        '<h2 style="text-align: center">HỢP ĐỒNG CỘNG TÁC VIÊN</h2>',
+        "<p>Hôm nay, ngày {{today.day}} tháng {{today.month}} năm "
+        "{{today.year}}, chúng tôi gồm:</p>",
+        "<p><strong>BÊN A (Bên thuê):</strong> công ty — theo giấy phép kinh doanh.</p>",
+        "<p><strong>BÊN B (Cộng tác viên):</strong> {{freelancer.full_name}}</p>",
+        "<ul>",
+        "<li>CCCD: {{freelancer.id_number}}</li>",
+        "<li>Mã số thuế cá nhân: {{freelancer.tax_code}}</li>",
+        "<li>Địa chỉ: {{freelancer.permanent_address}}</li>",
+        "<li>Điện thoại: {{freelancer.phone}}</li>",
+        "</ul>",
+        "<h3>Điều 1. Công việc</h3>",
+        "<p>Bên B tham gia sản xuất: {{job.title}} (mã {{job.code}}).</p>",
+        "<h3>Điều 2. Thanh toán</h3>",
+        "<p>Thù lao theo thỏa thuận, khấu trừ 10% thuế TNCN theo quy định.</p>",
+        "<p>Chuyển khoản: {{freelancer.bank_name}} — "
+        "{{freelancer.bank_account_number}}.</p>",
+        "<p><strong>ĐẠI DIỆN BÊN A</strong>          <strong>BÊN B</strong></p>",
+    ]
+)
+
+
+def seed_a5_freelancer_contract(deal_name):
+    if frappe.db.exists(
+        "Paperwork Template", {"template_name": FREELANCER_CONTRACT}
+    ):
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Paperwork Template",
+            "template_name": FREELANCER_CONTRACT,
+            "template_source": FREELANCER_CONTRACT_SOURCE,
+            "notes": "Written in the web editor — edit it on the Paperwork page.",
+        }
+    ).insert(ignore_permissions=True)
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T6.1a company identity": seed_t6_1a_company_identity,
@@ -532,4 +578,5 @@ FEATURE_SEEDS = {
     "T10 payment milestones": seed_t10_payment_milestones,
     "T11 paperwork templates": seed_t11_paperwork,
     "A1 stale deal": seed_a1_stale_deal,
+    "A5 freelancer contract": seed_a5_freelancer_contract,
 }

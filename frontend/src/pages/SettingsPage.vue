@@ -7,8 +7,14 @@
     </div>
 
     <div v-else class="rounded-lg border bg-white p-4">
-      <label class="block text-sm font-medium text-gray-800">
+      <label class="flex items-center gap-2 text-sm font-medium text-gray-800">
         Global margin floor %
+        <span
+          v-if="!floorPct"
+          class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-800"
+        >
+          currently off
+        </span>
       </label>
       <p class="mt-1 text-xs text-gray-500">
         Quotes whose margin falls below this warn every role — without
@@ -29,8 +35,14 @@
       </div>
       <hr class="my-5" />
 
-      <label class="block text-sm font-medium text-gray-800">
+      <label class="flex items-center gap-2 text-sm font-medium text-gray-800">
         Quote silence nudge (days)
+        <span
+          v-if="!silenceDays"
+          class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-800"
+        >
+          currently off
+        </span>
       </label>
       <p class="mt-1 text-xs text-gray-500">
         A sent quote with no reply after this many days is flagged on the
@@ -51,8 +63,14 @@
       </div>
       <hr class="my-5" />
 
-      <label class="block text-sm font-medium text-gray-800">
+      <label class="flex items-center gap-2 text-sm font-medium text-gray-800">
         Payment terms (days)
+        <span
+          v-if="!paymentTermsDays"
+          class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-800"
+        >
+          currently off
+        </span>
       </label>
       <p class="mt-1 text-xs text-gray-500">
         A payment milestone still uncollected this many days after it falls

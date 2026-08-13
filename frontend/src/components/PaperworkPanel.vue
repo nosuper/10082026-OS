@@ -37,9 +37,20 @@
             class="mt-0.5 block w-48 rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
           >
             <option value="">— pick a person —</option>
-            <option v-for="row in contacts.data" :key="row.name" :value="row.name">
-              {{ row.full_name }}
-            </option>
+            <optgroup v-if="crew.length" label="On this job">
+              <option v-for="row in crew" :key="row.name" :value="row.name">
+                {{ row.full_name }}
+              </option>
+            </optgroup>
+            <optgroup :label="crew.length ? 'Everyone' : 'Contacts'">
+              <option
+                v-for="row in contactsOffJob"
+                :key="row.name"
+                :value="row.name"
+              >
+                {{ row.full_name }}
+              </option>
+            </optgroup>
           </select>
         </label>
 
@@ -56,10 +67,27 @@
           </select>
         </label>
 
-        <Button variant="solid" :loading="generator.loading" @click="generate">
-          Generate
+        <!-- One door: every paper is read before it exists — Generate
+             lives inside the window (founder, A5 round 5). -->
+        <Button
+          variant="solid"
+          :loading="previewer.loading"
+          @click="openPreview"
+        >
+          Preview
         </Button>
       </div>
+
+      <PaperWindow
+        ref="draftWindow"
+        :modelValue="!!preview"
+        :title="draftTitle"
+        :content="preview?.html || ''"
+        save-label="Generate .docx"
+        :saving="draftSaver.loading || generator.loading"
+        @update:modelValue="(open) => !open && (preview = null)"
+        @save="generateFromWindow"
+      />
 
       <p v-if="template?.unknown_placeholders?.length" class="mt-2 text-xs text-amber-700">
         ⚠ This template asks for
@@ -75,12 +103,14 @@
         class="mt-3 rounded-md border p-2 text-sm"
         :class="gaps.length ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'"
       >
-        <a
-          :href="generated.file_url"
-          class="font-medium text-blue-700 hover:underline"
+        <!-- Opens the reading window like every other paper — no
+             surprise downloads (founder, A5 round 7). -->
+        <button
+          class="text-left font-medium text-blue-700 hover:underline"
+          @click="openDocument(generated)"
         >
           {{ generated.file_name }}
-        </a>
+        </button>
         <p v-if="!gaps.length" class="mt-1 text-xs text-green-800">
           Every placeholder filled — ready to print.
         </p>
@@ -113,9 +143,12 @@
       <tbody>
         <tr v-for="row in documents.data" :key="row.name" class="border-t">
           <td class="py-1 pr-2">
-            <a :href="row.file_url" class="text-blue-700 hover:underline">
+            <button
+              class="text-left text-blue-700 hover:underline"
+              @click="openDocument(row)"
+            >
               {{ row.file_name }}
-            </a>
+            </button>
           </td>
           <td class="py-1 pr-2 whitespace-nowrap tabular-nums text-gray-600">
             {{ row.creation?.slice(0, 16) }}
@@ -125,6 +158,15 @@
       </tbody>
     </table>
 
+    <!-- Reading window for papers already on the job. -->
+    <PaperWindow
+      :modelValue="!!docWindow"
+      :title="docWindow?.title"
+      :content="docWindow?.content || ''"
+      :download-url="docWindow?.downloadUrl || ''"
+      @update:modelValue="(open) => !open && (docWindow = null)"
+    />
+
     <ErrorMessage class="mt-2" :message="error" />
   </div>
 </template>
@@ -132,6 +174,7 @@
 <script setup>
 import { computed, ref, watch } from "vue"
 import { Button, ErrorMessage, createResource } from "frappe-ui"
+import PaperWindow from "./PaperWindow.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 const props = defineProps({
@@ -193,10 +236,28 @@ const companies = createResource({
   onError: onFail,
 })
 
+// A freelancer contract is nearly always for someone already on the
+// job's cost lines — they come first, everyone else below.
+const parties = createResource({
+  url: "auraos.api.job_parties",
+  makeParams: () => ({ job: props.job }),
+  onError: onFail,
+})
+
+const crew = computed(() => parties.data?.freelancers || [])
+
+const contactsOffJob = computed(() => {
+  const onJob = new Set(crew.value.map((row) => row.name))
+  return (contacts.data || []).filter((row) => !onJob.has(row.name))
+})
+
 watch(
   template,
   (row) => {
-    if (row?.needs_freelancer && !contacts.data) contacts.submit()
+    if (row?.needs_freelancer && !contacts.data) {
+      contacts.submit()
+      parties.submit()
+    }
     if (row?.needs_vendor && !companies.data) companies.submit()
   },
   { immediate: true }
@@ -220,6 +281,90 @@ const generator = createResource({
   },
 })
 
+// -- the draft window: read, edit, print, generate (A5 rounds 3–5) --
+
+const preview = ref(null)
+const draftWindow = ref(null)
+
+const previewer = createResource({
+  url: "auraos.api.preview_job_paperwork",
+  onSuccess(result) {
+    error.value = ""
+    preview.value = result
+  },
+  onError(err) {
+    preview.value = null
+    onFail(err)
+  },
+})
+
+const draftTitle = computed(
+  () => `Draft — ${template.value?.template_name || "paper"}`
+)
+
+function openPreview() {
+  preview.value = null
+  previewer.submit({
+    job: props.job,
+    template: chosen.value,
+    vendor: vendor.value || null,
+    freelancer: freelancer.value || null,
+  })
+}
+
+const draftSaver = createResource({
+  url: "auraos.api.save_job_paperwork_draft",
+  onSuccess(result) {
+    error.value = ""
+    preview.value = null
+    generated.value = { ...result, missing: [], unknown: [] }
+    documents.reload()
+  },
+  onError: onFail,
+})
+
+// Generate lives inside the window. An untouched draft generates from
+// the original file — an uploaded Word template keeps its exact
+// formatting that way; an edited draft is what the founder approved,
+// so the edit wins and builds through the HTML→Word translator.
+function generateFromWindow(html) {
+  if (draftWindow.value?.edited()) {
+    draftSaver.submit({
+      job: props.job,
+      template: chosen.value,
+      html,
+      vendor: vendor.value || null,
+      freelancer: freelancer.value || null,
+    })
+  } else {
+    preview.value = null
+    generate()
+  }
+}
+
+// -- reading papers already on the job --
+
+const docWindow = ref(null)
+let pendingDoc = null
+
+const docPreviewer = createResource({
+  url: "auraos.api.preview_paper",
+  onSuccess(data) {
+    error.value = ""
+    docWindow.value = {
+      title: pendingDoc?.file_name || "Paper",
+      content: data.html || "<p>(File này không phải văn bản .docx)</p>",
+      downloadUrl: pendingDoc?.file_url || "",
+    }
+  },
+  onError: onFail,
+})
+
+function openDocument(row) {
+  pendingDoc = row
+  docPreviewer.submit({ file_url: row.file_url })
+}
+
 function generate() {
   generated.value = null
   generator.submit({
@@ -230,3 +375,14 @@ function generate() {
   })
 }
 </script>
+
+<style>
+/* The preview's gap markers — v-html content is out of Tailwind's
+   reach, so the highlight is plain CSS. */
+.aura-paper mark[data-gap] {
+  background-color: #fde68a;
+  color: #92400e;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+</style>

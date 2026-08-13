@@ -8,6 +8,7 @@
  "field_order": [
   "template_name",
   "template_file",
+  "template_source",
   "disabled",
   "notes",
   "placeholders_section",
@@ -15,7 +16,7 @@
  ],
  "fields": [
   {
-   "description": "What the founder calls this paper — Hợp đồng dịch vụ, Biên bản nghiệm thu, Phụ lục",
+   "description": "What the founder calls this paper \u2014 H\u1ee3p \u0111\u1ed3ng d\u1ecbch v\u1ee5, Bi\u00ean b\u1ea3n nghi\u1ec7m thu, Ph\u1ee5 l\u1ee5c",
    "fieldname": "template_name",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -30,6 +31,12 @@
    "fieldtype": "Attach",
    "label": "Template File",
    "reqd": 1
+  },
+  {
+   "description": "Present only on templates written in the app: the paragraph text the .docx is built from. Editing this rebuilds the file. Uploaded templates have no source and are edited in Word.",
+   "fieldname": "template_source",
+   "fieldtype": "Long Text",
+   "label": "Template Source"
   },
   {
    "default": "0",
@@ -51,7 +58,7 @@
    "label": "Placeholders This Template Asks For"
   },
   {
-   "description": "Read from the file every time it is saved — edit the docx, not this",
+   "description": "Read from the file every time it is saved \u2014 edit the docx, not this",
    "fieldname": "placeholders",
    "fieldtype": "Small Text",
    "label": "Placeholders",

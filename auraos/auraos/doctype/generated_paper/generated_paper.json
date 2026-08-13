@@ -1,0 +1,130 @@
+{
+ "actions": [],
+ "autoname": "format:GP-{#####}",
+ "creation": "2026-08-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job",
+  "template",
+  "template_name",
+  "column_break_head",
+  "vendor",
+  "freelancer",
+  "file_section",
+  "file_name",
+  "file_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "job",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Job",
+   "options": "Job",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Template",
+   "options": "Paperwork Template",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen at generation — the registry entry outlives a renamed or deleted template",
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Template Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Set when the paper was generated for a vendor",
+   "fieldname": "vendor",
+   "fieldtype": "Link",
+   "label": "Vendor",
+   "options": "Party Company",
+   "read_only": 1
+  },
+  {
+   "description": "Set when the paper was generated for a freelancer",
+   "fieldname": "freelancer",
+   "fieldtype": "Link",
+   "label": "Freelancer",
+   "options": "Party Contact",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_section",
+   "fieldtype": "Section Break",
+   "label": "File"
+  },
+  {
+   "fieldname": "file_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "File Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_url",
+   "fieldtype": "Data",
+   "label": "File URL",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Generated Paper",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Founder",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Producer",
+   "share": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
