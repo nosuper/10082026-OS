@@ -4,10 +4,11 @@
       <h2 class="text-sm font-semibold text-gray-800">Payment milestones</h2>
       <span
         v-if="overdueCount"
-        class="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-800"
+        class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-800"
         :title="`Uncollected more than ${termsDays} days after falling due`"
       >
-        ⚠ {{ overdueCount }} overdue
+        <FeatherIcon name="alert-circle" class="h-3 w-3" />
+        {{ overdueCount }} overdue
       </span>
       <span class="ml-auto text-xs" :class="planClass">
         {{ plannedPct }}% of the quote planned
@@ -17,7 +18,8 @@
     <!-- Fixed columns: the collection control carries the longest text
          on the row ("Not requested — chưa yêu cầu") and an auto layout
          gave the width to the amounts, clipping it mid-word. -->
-    <table v-if="rows.length" class="w-full table-fixed text-sm">
+    <div class="overflow-x-auto">
+    <table v-if="rows.length" class="w-full min-w-[40rem] table-fixed text-sm">
       <thead class="text-left text-xs text-gray-600">
         <tr>
           <th class="w-1/6 py-1 font-medium">Milestone</th>
@@ -44,11 +46,15 @@
           </td>
           <td class="py-1 pr-2">
             <input
-              v-model.number="row.pct"
+              :value="row.pct"
               type="number"
               min="0"
               step="5"
               class="w-16 rounded border-gray-200 px-1 py-0.5 text-right text-sm tabular-nums"
+              @input="
+                ((row.pct = $event.target.valueAsNumber || 0),
+                rebalance(row))
+              "
             />
           </td>
           <td class="py-1 pr-2">
@@ -104,18 +110,26 @@
               Invoice request
             </button>
             <button
-              class="ml-1 rounded border px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-50"
+              class="ml-1 rounded border p-1 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
               title="Remove this milestone"
               @click="rows.splice(index, 1)"
             >
-              ✕
+              <FeatherIcon name="x" class="h-3 w-3" />
             </button>
           </td>
         </tr>
       </tbody>
     </table>
-    <p v-else class="py-2 text-sm text-gray-400">
+    </div>
+    <p v-if="!rows.length" class="py-2 text-sm text-gray-400">
       No payment milestones — this job has nothing chasing the client.
+    </p>
+    <p
+      v-if="plannedPct !== 100 && lockedPct"
+      class="mt-1 text-xs text-amber-700"
+    >
+      {{ lockedPct }}% of the plan is already invoiced or paid and cannot
+      rebalance itself — adjust the open rows to bring the total to 100%.
     </p>
 
     <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -169,13 +183,16 @@
 
 <script setup>
 import { ref, computed, watch } from "vue"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
 import { COLLECTION_STATUSES, PAID, overdueLabel } from "../data/milestones"
 
 const props = defineProps({ job: { type: String, required: true } })
+
+// The job page's stat strip mirrors these numbers; it listens for this.
+const emit = defineEmits(["changed"])
 
 const error = ref("")
 const rows = ref([])
@@ -222,6 +239,15 @@ const overdueCount = computed(
   () => rows.value.filter((row) => row.overdue).length
 )
 
+// Why a plan may refuse to rebalance itself: the share already sitting
+// with invoiced/paid milestones. Without this line the auto-balance
+// just looks broken on a fully collected job (founder, A4 round 4).
+const lockedPct = computed(() =>
+  rows.value
+    .filter((row) => LOCKED_STATUSES.includes(row.status))
+    .reduce((sum, row) => sum + (Number(row.pct) || 0), 0)
+)
+
 const dirty = computed(() => {
   const plan = (row) => [row.name || "", row.title || "", Number(row.pct) || 0, row.trigger_stage || ""]
   const mine = rows.value.map(plan)
@@ -239,6 +265,43 @@ function addRow() {
   })
 }
 
+// Statuses whose money is already committed on paper: an invoiced or
+// paid milestone's share is history and never rebalances itself.
+const LOCKED_STATUSES = ["Invoiced", "Paid"]
+
+function isLocked(row) {
+  return LOCKED_STATUSES.includes(row.status)
+}
+
+// Editing one milestone's share rebalances the others so the plan
+// lands back on 100% by itself (founder, A4 round 3). Invoiced/Paid
+// rows never move — changing their % would rewrite an invoice the
+// client already holds.
+function rebalance(edited) {
+  const movable = rows.value.filter((row) => row !== edited && !isLocked(row))
+  if (!movable.length) return
+  const fixed = rows.value
+    .filter((row) => row !== edited && !movable.includes(row))
+    .reduce((sum, row) => sum + (Number(row.pct) || 0), 0)
+  const target = Math.max(0, 100 - (Number(edited.pct) || 0) - fixed)
+  const current = movable.reduce((sum, row) => sum + (Number(row.pct) || 0), 0)
+  let running = 0
+  movable.forEach((row, index) => {
+    let share
+    if (index === movable.length - 1) {
+      // Whole percents, remainder on the last movable row, so the plan
+      // closes on exactly 100.
+      share = Math.max(0, target - running)
+    } else if (current > 0) {
+      share = Math.round(((Number(row.pct) || 0) / current) * target)
+    } else {
+      share = Math.round(target / movable.length)
+    }
+    row.pct = share
+    running += share
+  })
+}
+
 const saver = createResource({
   url: "auraos.api.save_job_milestones",
   onSuccess() {
@@ -246,6 +309,7 @@ const saver = createResource({
     // time gets its server name here, and everything keyed off that
     // name (the invoice text, the status control) needs it.
     milestones.reload()
+    emit("changed")
   },
   onError(err) {
     // The typed plan is left alone on purpose: a refusal is usually a
@@ -273,6 +337,7 @@ const statusSetter = createResource({
   onSuccess() {
     error.value = ""
     milestones.reload()
+    emit("changed")
   },
   onError(err) {
     error.value = frappeErrorMessage(err)

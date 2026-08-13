@@ -1,5 +1,6 @@
 <template>
   <input
+    ref="input"
     :value="display"
     type="text"
     inputmode="numeric"
@@ -12,7 +13,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import { parseVnd, vnd } from "../utils/money"
 
 // A money field that always reads the way money is written: the user
@@ -24,6 +25,12 @@ const props = defineProps({
 })
 
 const emit = defineEmits(["update:modelValue", "enter", "esc", "blur"])
+
+const input = ref(null)
+
+// Callers that focus the field on mount (the phone expense screen)
+// reach the real input through the component boundary.
+defineExpose({ focus: () => input.value?.focus() })
 
 const display = computed(() =>
   props.modelValue === "" || props.modelValue == null

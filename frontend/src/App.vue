@@ -49,6 +49,7 @@ createResource({
 })
 
 const nav = computed(() => [
+  { label: "Home", route: "/" },
   { label: "Deals", route: "/deals" },
   { label: "Jobs", route: "/jobs" },
   { label: "Contacts", route: "/contacts" },
