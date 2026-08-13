@@ -213,6 +213,25 @@ the window (not download)?
 
 >
 
+## Round 8 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+The uploaded contract library (docs/samples, kept out of git — real
+data) drove the fix: borders now come from the document itself.
+docx→HTML reads each table's border settings — your signature blocks
+render borderless, your fee schedules keep their grid — and the
+HTML→Word translator writes tables too (bordered by default,
+borderless when marked), so an edited draft no longer drops or
+re-borders a signature block. An editor border-toggle button remains
+open — for now a borderless table only enters a web template via an
+uploaded original or an edited draft of one.
+
+### Round-8 checks
+
+**R8.1** Preview your real HDDV/BBNT templates — khối ký tên không kẻ
+khung, bảng hạng mục có kẻ khung, cả trên màn hình lẫn khi Print?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
