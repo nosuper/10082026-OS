@@ -189,6 +189,30 @@ its bold headings and alignment now?
 
 >
 
+## Round 7 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+(1) The generated file's link in the success note now opens the
+reading window — the last click-to-download is gone. (2) docx→HTML
+learned tables: fee schedules and signature blocks render as real
+bordered tables, in document order, on screen and in print. Verified
+against the founder's own uploaded contract (1 table, 24 bold runs,
+11 centered lines all present). On the platform question, see the
+answer given in-session: the limits are docx-in-browser limits, not
+Frappe's — recommendation is to keep this stack to go-live and revisit
+a self-hosted ONLYOFFICE only if daily use demands full Word fidelity.
+
+### Round-7 checks
+
+**R7.1** Generate a paper — does its filename in the green note open
+the window (not download)?
+
+>
+
+**R7.2** Your uploaded contract's preview — bảng và khối ký tên hiện
+đủ chưa, in ra có kẻ khung không?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
