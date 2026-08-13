@@ -1032,23 +1032,7 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     document, filled = paperwork_template.generate(
         template, job, vendor=vendor, freelancer=freelancer
     )
-    # The registry row (A5 round 2): every paper ever generated, in one
-    # place, with who it was for — the file alone hangs off its job and
-    # is invisible from anywhere else.
-    frappe.get_doc(
-        {
-            "doctype": "Generated Paper",
-            "job": job,
-            "template": template,
-            "template_name": frappe.db.get_value(
-                "Paperwork Template", template, "template_name"
-            ),
-            "vendor": vendor or None,
-            "freelancer": freelancer or None,
-            "file_name": document.file_name,
-            "file_url": document.file_url,
-        }
-    ).insert()
+    _register_paper(job, template, vendor, freelancer, document)
     return {
         "name": document.name,
         "file_name": document.file_name,
@@ -1068,6 +1052,45 @@ def job_paperwork(job):
         fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
         order_by="creation desc",
     )
+
+
+def _register_paper(job, template, vendor, freelancer, document):
+    """The registry row (A5 round 2): every paper ever generated, in
+    one place, with who it was for — the file alone hangs off its job
+    and is invisible from anywhere else."""
+    frappe.get_doc(
+        {
+            "doctype": "Generated Paper",
+            "job": job,
+            "template": template,
+            "template_name": frappe.db.get_value(
+                "Paperwork Template", template, "template_name"
+            ),
+            "vendor": vendor or None,
+            "freelancer": freelancer or None,
+            "file_name": document.file_name,
+            "file_url": document.file_url,
+        }
+    ).insert()
+
+
+@frappe.whitelist()
+def save_job_paperwork_draft(job, template, html, vendor=None, freelancer=None):
+    """The draft as edited on screen, kept as a .docx on the job (A5
+    round 4) — what the founder approved, not the raw fill.
+
+    vendor/freelancer ride along only for the registry: the html is
+    already filled and edited; nothing is substituted here.
+    """
+    _check_job_permission(job, "write")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    document = paperwork_template.attach_draft(template, job, html)
+    _register_paper(job, template, vendor, freelancer, document)
+    return {
+        "name": document.name,
+        "file_name": document.file_name,
+        "file_url": document.file_url,
+    }
 
 
 @frappe.whitelist()

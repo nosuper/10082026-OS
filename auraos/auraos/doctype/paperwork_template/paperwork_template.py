@@ -184,6 +184,32 @@ def _mark_gaps(text):
     return re.sub(r"(«[^»]*»)", r'<mark data-gap="1">\1</mark>', text)
 
 
+def attach_draft(template_name, job_name, html):
+    """An on-screen draft, kept as a .docx on the job (A5 round 4).
+
+    The PandaDoc-shaped flow: fill the template, let the founder edit
+    the draft on screen, and what they approved — not the raw fill —
+    becomes the job's paper. Built through the same HTML→Word
+    translator the web editor uses.
+    """
+    template = loaded_template(template_name)
+    job = frappe.get_doc("Job", job_name)
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": FILENAME.format(
+                job=job.name,
+                template=template.template_name,
+                stamp=frappe.utils.now_datetime().strftime(STAMP_FORMAT),
+            ),
+            "attached_to_doctype": "Job",
+            "attached_to_name": job.name,
+            "is_private": 1,
+            "content": paperwork.html_to_docx(html),
+        }
+    ).insert()
+
+
 def generate(template_name, job_name, vendor=None, freelancer=None):
     """Fill a template for a job and attach the result to that job.
 

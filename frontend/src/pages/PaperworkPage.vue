@@ -58,54 +58,62 @@
       </p>
     </div>
 
-    <!-- The web editor (A5 round 2): type the paper, click a
-         placeholder to drop it in at the cursor, save — the .docx is
+    <!-- The web editor (A5 round 2, a modal since round 4): a document
+         window like the tools the founder knows — type the paper, click
+         a placeholder to drop it in at the cursor, save; the .docx is
          built server-side. Templates written here stay editable here;
          uploaded ones are edited in Word. -->
-    <div v-if="editor" class="mb-6 rounded-lg border bg-white p-4">
-      <div class="mb-2 flex flex-wrap items-center gap-2">
-        <h2 class="text-sm font-semibold text-gray-800">
-          {{ editor.name ? "Edit template" : "Write a template" }}
-        </h2>
-        <Button class="ml-auto" @click="editor = null">Cancel</Button>
-        <Button
-          variant="solid"
-          :disabled="!editor.template_name.trim() || !editor.template_source.trim()"
-          :loading="editorSaver.loading"
-          @click="saveEditor"
-        >
-          Save template
-        </Button>
-      </div>
-      <input
-        v-model="editor.template_name"
-        placeholder="Template name — e.g. Hợp đồng cộng tác viên"
-        class="mb-2 w-full rounded border-gray-200 px-2 py-1.5 text-sm sm:w-96"
-      />
-      <!-- Rich, like a document, not a code box (founder, A5 round 3):
-           headings, bold, lists and alignment survive into the built
-           .docx via html_to_docx. -->
-      <TextEditor
-        ref="editorRef"
-        :content="editor.template_source"
-        :fixed-menu="true"
-        editor-class="prose prose-sm min-h-[18rem] max-w-none rounded-b border border-t-0 border-gray-200 px-4 py-3 focus:outline-none"
-        @change="(html) => (editor.template_source = html)"
-      />
-      <p class="mb-1 mt-2 text-xs font-medium text-gray-600">
-        Click to insert at the cursor:
-      </p>
-      <div class="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
-        <button
-          v-for="field in library.data?.placeholders || []"
-          :key="field"
-          class="rounded bg-gray-50 px-1.5 py-0.5 font-mono text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-800"
-          @click="insertPlaceholder(field)"
-        >
-          {{ field }}
-        </button>
-      </div>
-    </div>
+    <Dialog
+      :modelValue="!!editor"
+      :options="{
+        title: editor?.name ? 'Edit template' : 'Write a template',
+        size: '4xl',
+      }"
+      @update:modelValue="(open) => !open && (editor = null)"
+    >
+      <template #body-content>
+        <div v-if="editor">
+          <input
+            v-model="editor.template_name"
+            placeholder="Template name — e.g. Hợp đồng cộng tác viên"
+            class="mb-2 w-full rounded border-gray-200 px-2 py-1.5 text-sm sm:w-96"
+          />
+          <TextEditor
+            ref="editorRef"
+            :content="editor.template_source"
+            :fixed-menu="true"
+            editor-class="prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b border border-t-0 border-gray-200 px-6 py-4 focus:outline-none"
+            @change="(html) => (editor.template_source = html)"
+          />
+          <p class="mb-1 mt-2 text-xs font-medium text-gray-600">
+            Click to insert at the cursor:
+          </p>
+          <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+            <button
+              v-for="field in library.data?.placeholders || []"
+              :key="field"
+              class="rounded bg-gray-50 px-1.5 py-0.5 font-mono text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-800"
+              @click="insertPlaceholder(field)"
+            >
+              {{ field }}
+            </button>
+          </div>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button @click="editor = null">Cancel</Button>
+          <Button
+            variant="solid"
+            :disabled="!editor?.template_name.trim() || !editor?.template_source.trim()"
+            :loading="editorSaver.loading || editorCreator.loading"
+            @click="saveEditor"
+          >
+            Save template
+          </Button>
+        </div>
+      </template>
+    </Dialog>
 
     <!-- The library -->
     <div
@@ -289,6 +297,7 @@
 import { computed, ref } from "vue"
 import {
   Button,
+  Dialog,
   ErrorMessage,
   FeatherIcon,
   FileUploader,

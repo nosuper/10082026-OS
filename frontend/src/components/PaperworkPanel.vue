@@ -68,32 +68,57 @@
         </label>
 
         <Button :loading="previewer.loading" @click="openPreview">
-          Preview
+          Preview & edit
         </Button>
         <Button variant="solid" :loading="generator.loading" @click="generate">
           Generate
         </Button>
       </div>
 
-      <!-- The paper before it exists (A5 round 3): read every value on
-           screen, print straight from the browser — the .docx is only
-           for the records once it's right. -->
-      <div v-if="preview" class="mt-3 rounded-md border">
-        <div class="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-3 py-1.5">
-          <span class="text-xs font-semibold text-gray-700">Preview</span>
-          <span v-if="previewGaps.length" class="text-xs text-amber-700">
-            {{ previewGaps.length }} gap{{ previewGaps.length > 1 ? "s" : "" }} highlighted
-          </span>
-          <span v-else class="text-xs text-green-700">Every field filled</span>
-          <Button class="ml-auto" @click="printPreview">Print</Button>
-          <Button @click="preview = null">Close</Button>
-        </div>
-        <div
-          ref="previewBody"
-          class="aura-paper prose prose-sm max-w-none px-6 py-5"
-          v-html="preview.html"
-        ></div>
-      </div>
+      <!-- The draft window (A5 round 4, PandaDoc-shaped): the filled
+           paper opens as a full document editor — fix a name, tweak a
+           clause — then print it, or keep the edited draft as the
+           job's .docx. -->
+      <Dialog
+        :modelValue="!!preview"
+        :options="{ title: draftTitle, size: '4xl' }"
+        @update:modelValue="(open) => !open && (preview = null)"
+      >
+        <template #body-content>
+          <div v-if="preview">
+            <p
+              v-if="draftGapCount"
+              class="mb-2 flex items-center gap-1.5 text-xs text-amber-700"
+            >
+              <FeatherIcon name="alert-triangle" class="h-3.5 w-3.5" />
+              {{ draftGapCount }} gap{{ draftGapCount > 1 ? "s" : "" }}
+              highlighted — fill the record (or type over them here).
+            </p>
+            <p v-else class="mb-2 text-xs text-green-700">
+              Every field filled.
+            </p>
+            <TextEditor
+              :content="preview.html"
+              :fixed-menu="true"
+              editor-class="aura-paper prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded border border-gray-200 px-6 py-4 focus:outline-none"
+              @change="(html) => (draftHtml = html)"
+            />
+          </div>
+        </template>
+        <template #actions>
+          <div class="flex flex-wrap justify-end gap-2">
+            <Button @click="printPreview">Print</Button>
+            <Button
+              variant="solid"
+              :loading="draftSaver.loading"
+              @click="saveDraft"
+            >
+              Save .docx to job
+            </Button>
+            <Button @click="preview = null">Close</Button>
+          </div>
+        </template>
+      </Dialog>
 
       <p v-if="template?.unknown_placeholders?.length" class="mt-2 text-xs text-amber-700">
         ⚠ This template asks for
@@ -165,7 +190,14 @@
 
 <script setup>
 import { computed, ref, watch } from "vue"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import {
+  Button,
+  Dialog,
+  ErrorMessage,
+  FeatherIcon,
+  TextEditor,
+  createResource,
+} from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 const props = defineProps({
@@ -272,16 +304,17 @@ const generator = createResource({
   },
 })
 
-// -- preview & print (A5 round 3) --
+// -- the draft window: preview, edit, print, keep (A5 rounds 3–4) --
 
 const preview = ref(null)
-const previewBody = ref(null)
+const draftHtml = ref("")
 
 const previewer = createResource({
   url: "auraos.api.preview_job_paperwork",
   onSuccess(result) {
     error.value = ""
     preview.value = result
+    draftHtml.value = result.html
   },
   onError(err) {
     preview.value = null
@@ -289,10 +322,15 @@ const previewer = createResource({
   },
 })
 
-const previewGaps = computed(() => [
-  ...(preview.value?.missing || []),
-  ...(preview.value?.unknown || []),
-])
+const draftTitle = computed(
+  () => `Draft — ${template.value?.template_name || "paper"}`
+)
+
+// Live off the edited draft, not the original fill: typing over a
+// marker resolves it.
+const draftGapCount = computed(
+  () => (draftHtml.value.match(/data-gap/g) || []).length
+)
 
 function openPreview() {
   preview.value = null
@@ -304,8 +342,29 @@ function openPreview() {
   })
 }
 
+const draftSaver = createResource({
+  url: "auraos.api.save_job_paperwork_draft",
+  onSuccess(result) {
+    error.value = ""
+    preview.value = null
+    generated.value = { ...result, missing: [], unknown: [] }
+    documents.reload()
+  },
+  onError: onFail,
+})
+
+function saveDraft() {
+  draftSaver.submit({
+    job: props.job,
+    template: chosen.value,
+    html: draftHtml.value || preview.value?.html || "",
+    vendor: vendor.value || null,
+    freelancer: freelancer.value || null,
+  })
+}
+
 function printPreview() {
-  const body = previewBody.value?.innerHTML || preview.value?.html || ""
+  const body = draftHtml.value || preview.value?.html || ""
   const printWindow = window.open("", "_blank")
   if (!printWindow) return
   printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8">
