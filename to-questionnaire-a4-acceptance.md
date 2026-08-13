@@ -153,8 +153,10 @@ screen, and does Quick expense log correctly?
 
 ## Verdict
 
-- [ ] **GO** — merge it; A5 (paperwork, contacts, settings) starts
+- [x] **GO** — merge it; A5 (paperwork, contacts, settings) starts
 - [ ] **GO with notes**
 - [ ] **NO-GO** — fix the failed steps first
 
 >
+
+> GO given in-session 2026-08-13 ("ok go tieeps di") after round 4.
