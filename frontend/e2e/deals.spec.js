@@ -165,6 +165,11 @@ test("two users keep distinct view and column preferences in one browser context
     await openColumns(page)
     await page.getByRole("checkbox", { name: "Source" }).uncheck()
     await page.getByRole("button", { name: "Board", exact: true }).click()
+    // Wait for the click to land (and its preference to persist) before
+    // swapping users — switching mid-flight flaked this spec twice.
+    await expect(
+      page.getByRole("button", { name: "Board", exact: true })
+    ).toHaveClass(/bg-white/)
 
     await become(administrator)
     await expect(columnHeader(page, "Budget (VND)")).toHaveCount(0)
