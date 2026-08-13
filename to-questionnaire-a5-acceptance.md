@@ -135,6 +135,38 @@ edited, and appear in Generated papers?
 
 >
 
+## Round 5 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+The rule "titles open a reading window; actions live inside" is now
+everywhere: template titles (uploaded ones preview as text, and Edit
+converts them to web templates with placeholders carried over),
+Generated-papers rows, and the job's documents table. The standalone
+Generate button is gone — Preview opens the filled draft and Generate
+sits inside it (untouched draft → original file with its Word
+formatting; edited draft → what you approved). In the editor,
+placeholders are @chips: type @ for suggestions, click a palette chip
+to insert; saved back as {{…}}.
+
+### Round-5 checks
+
+**R5.1** Click every kind of title — uploaded template, web template,
+generated paper, document on the job. Does each open a window with
+Print/Download (and Edit where it belongs), nothing downloading
+directly?
+
+>
+
+**R5.2** In the editor, type @ — do the field suggestions appear, and
+do inserted chips survive save & regenerate?
+
+>
+
+**R5.3** Job → Preview → Generate inside the window: does the
+untouched draft keep your uploaded contract's exact formatting, and an
+edited draft save what you approved?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
