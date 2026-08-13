@@ -18,7 +18,8 @@
     <!-- Fixed columns: the collection control carries the longest text
          on the row ("Not requested — chưa yêu cầu") and an auto layout
          gave the width to the amounts, clipping it mid-word. -->
-    <table v-if="rows.length" class="w-full table-fixed text-sm">
+    <div class="overflow-x-auto">
+    <table v-if="rows.length" class="w-full min-w-[40rem] table-fixed text-sm">
       <thead class="text-left text-xs text-gray-600">
         <tr>
           <th class="w-1/6 py-1 font-medium">Milestone</th>
@@ -45,11 +46,15 @@
           </td>
           <td class="py-1 pr-2">
             <input
-              v-model.number="row.pct"
+              :value="row.pct"
               type="number"
               min="0"
               step="5"
               class="w-16 rounded border-gray-200 px-1 py-0.5 text-right text-sm tabular-nums"
+              @input="
+                ((row.pct = $event.target.valueAsNumber || 0),
+                rebalance(row))
+              "
             />
           </td>
           <td class="py-1 pr-2">
@@ -115,7 +120,8 @@
         </tr>
       </tbody>
     </table>
-    <p v-else class="py-2 text-sm text-gray-400">
+    </div>
+    <p v-if="!rows.length" class="py-2 text-sm text-gray-400">
       No payment milestones — this job has nothing chasing the client.
     </p>
 
@@ -240,6 +246,38 @@ function addRow() {
     pct: Math.max(0, 100 - plannedPct.value),
     trigger_stage: STAGES[0],
     status: "Not requested",
+  })
+}
+
+// Editing one milestone's share rebalances the others so the plan
+// lands back on 100% by itself (founder, A4 round 3). Only rows the
+// collection hasn't touched may move — a Requested/Invoiced/Paid
+// milestone's share is already out with the client.
+function rebalance(edited) {
+  const movable = rows.value.filter(
+    (row) =>
+      row !== edited && (row.status || "Not requested") === "Not requested"
+  )
+  if (!movable.length) return
+  const fixed = rows.value
+    .filter((row) => row !== edited && !movable.includes(row))
+    .reduce((sum, row) => sum + (Number(row.pct) || 0), 0)
+  const target = Math.max(0, 100 - (Number(edited.pct) || 0) - fixed)
+  const current = movable.reduce((sum, row) => sum + (Number(row.pct) || 0), 0)
+  let running = 0
+  movable.forEach((row, index) => {
+    let share
+    if (index === movable.length - 1) {
+      // Whole percents, remainder on the last movable row, so the plan
+      // closes on exactly 100.
+      share = Math.max(0, target - running)
+    } else if (current > 0) {
+      share = Math.round(((Number(row.pct) || 0) / current) * target)
+    } else {
+      share = Math.round(target / movable.length)
+    }
+    row.pct = share
+    running += share
   })
 }
 

@@ -1,23 +1,53 @@
 <template>
   <div class="space-y-4">
-    <!-- Floats and settlement: who is holding company cash right now -->
+    <!-- Advances as a history, floats and settlement -->
     <div class="rounded-lg border bg-white p-3">
       <div class="mb-2 flex flex-wrap items-baseline gap-2">
-        <h2 class="text-sm font-semibold text-gray-800">Money out</h2>
+        <h2 class="text-sm font-semibold text-gray-800">Cash advanced</h2>
         <span class="text-xs text-gray-500">
           {{ vnd(money.data?.spent_total || 0) }} spent of
           {{ vnd(money.data?.quoted_total || 0) }} quoted ·
           {{ vnd(money.data?.advanced_total || 0) }} advanced
         </span>
-        <router-link
-          :to="`/jobs/${name}/expense`"
-          class="ml-auto text-sm font-medium text-blue-700 hover:underline"
-        >
-          Log expense on phone →
-        </router-link>
       </div>
 
-      <table v-if="floats.length" class="w-full text-sm">
+      <!-- Every advance on its own line — a history, not a per-person
+           sum (founder, A4 round 3). The per-holder float below stays:
+           settlement closes a person's float, not a single line. -->
+      <div class="overflow-x-auto">
+      <table v-if="advanceRows.length" class="w-full min-w-[28rem] text-sm">
+        <thead class="text-left text-xs text-gray-600">
+          <tr>
+            <th class="py-1 font-medium">Date</th>
+            <th class="py-1 font-medium">To</th>
+            <th class="py-1 text-right font-medium">Amount</th>
+            <th class="py-1 pl-3 font-medium">Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in advanceRows" :key="row.name" class="border-t">
+            <td class="whitespace-nowrap py-1 pr-2 tabular-nums text-gray-600">
+              {{ row.transferred_on }}
+            </td>
+            <td class="py-1 pr-2 text-gray-900">{{ row.recipient }}</td>
+            <td class="py-1 text-right tabular-nums">{{ vnd(row.amount) }}</td>
+            <td class="py-1 pl-3 text-gray-500">{{ row.note }}</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <p v-if="!advanceRows.length" class="py-2 text-sm text-gray-400">
+        No cash advanced on this job yet.
+      </p>
+
+      <h3
+        v-if="floats.length"
+        class="mt-3 border-t pt-3 text-xs font-semibold uppercase text-gray-500"
+      >
+        Currently holding
+      </h3>
+      <div v-if="floats.length" class="overflow-x-auto">
+      <table class="w-full min-w-[32rem] text-sm">
         <thead class="text-left text-xs text-gray-600">
           <tr>
             <th class="py-1 font-medium">Holding</th>
@@ -69,21 +99,18 @@
           </tr>
         </tbody>
       </table>
-      <p v-else class="py-2 text-sm text-gray-400">
-        Nobody is holding cash for this job.
-      </p>
-
+      </div>
       <p v-if="settled" class="mt-1 text-xs text-blue-700">{{ settled }}</p>
 
       <!-- Recording an advance is the founder's move -->
       <div
         v-if="money.data?.may_advance"
-        class="mt-3 flex flex-wrap items-center gap-2 border-t pt-3"
+        class="mt-3 grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center"
       >
         <span class="text-xs font-medium text-gray-700">Advance</span>
         <select
           v-model="advanceForm.recipient"
-          class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
+          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
         >
           <option value="">Who receives it…</option>
           <option v-for="user in users.data || []" :key="user.name" :value="user.name">
@@ -93,14 +120,15 @@
         <VndInput
           v-model="advanceForm.amount"
           placeholder="Amount"
-          class="w-36 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+          class="w-full rounded border-gray-200 px-3 py-2.5 text-right text-xl tabular-nums sm:w-36 sm:px-2 sm:py-1 sm:text-sm"
         />
         <input
           v-model="advanceForm.note"
           placeholder="Note (optional)"
-          class="min-w-0 flex-1 rounded border-gray-200 px-2 py-1 text-sm"
+          class="w-full min-w-0 rounded border-gray-200 px-2 py-2 text-sm sm:flex-1 sm:py-1"
         />
         <Button
+          class="w-full sm:w-auto"
           variant="solid"
           :disabled="!advanceForm.recipient || !parseVnd(advanceForm.amount)"
           :loading="advance.loading"
@@ -115,7 +143,8 @@
     <div class="rounded-lg border bg-white p-3">
       <h2 class="mb-2 text-sm font-semibold text-gray-800">Expenses</h2>
 
-      <table v-if="expenses.length" class="w-full text-sm">
+      <div class="overflow-x-auto">
+      <table v-if="expenses.length" class="w-full min-w-[32rem] text-sm">
         <thead class="text-left text-xs text-gray-600">
           <tr>
             <th class="py-1 font-medium">Date</th>
@@ -160,17 +189,23 @@
           </tr>
         </tbody>
       </table>
-      <p v-else class="py-2 text-sm text-gray-400">Nothing logged yet.</p>
+      </div>
+      <p v-if="!expenses.length" class="py-2 text-sm text-gray-400">Nothing logged yet.</p>
 
-      <div class="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+      <!-- One form, two shapes: the inline desktop row becomes the
+           big-thumb phone layout below `sm` on its own — no separate
+           "log on phone" page to know about (founder, A4 round 3). -->
+      <div
+        class="mt-3 grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center"
+      >
         <VndInput
           v-model="expenseForm.amount"
           placeholder="Amount"
-          class="w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+          class="w-full rounded border-gray-200 px-3 py-2.5 text-right text-xl tabular-nums sm:w-32 sm:px-2 sm:py-1 sm:text-sm"
         />
         <select
           v-model="expenseForm.category"
-          class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
+          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
         >
           <option value="">Uncategorised</option>
           <option
@@ -184,11 +219,11 @@
         <input
           v-model="expenseForm.description"
           placeholder="What was it for?"
-          class="min-w-0 flex-1 rounded border-gray-200 px-2 py-1 text-sm"
+          class="w-full min-w-0 rounded border-gray-200 px-2 py-2 text-sm sm:flex-1 sm:py-1"
         />
         <select
           v-model="expenseForm.paid_by"
-          class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
+          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
         >
           <option value="">paid by me</option>
           <option v-for="user in users.data || []" :key="user.name" :value="user.name">
@@ -197,7 +232,7 @@
         </select>
         <select
           v-model="expenseForm.paid_from"
-          class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
+          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
           :class="expenseForm.paid_from ? '' : 'border-amber-400'"
           title="Whose money was it? An advance settles with the person holding it; the company's settles with nobody."
         >
@@ -206,6 +241,7 @@
           <option :value="FROM_COMPANY">company paid</option>
         </select>
         <Button
+          class="w-full sm:w-auto"
           variant="solid"
           :disabled="!parseVnd(expenseForm.amount) || !expenseForm.paid_from"
           :loading="expense.loading"
@@ -288,6 +324,12 @@ const users = createResource({ url: "auraos.api.operating_users", auto: true })
 
 const floats = computed(() => money.data?.floats || [])
 const expenses = computed(() => money.data?.expenses || [])
+// Newest first: the question is "what just went out", not archaeology.
+const advanceRows = computed(() =>
+  [...(money.data?.advances || [])].sort((a, b) =>
+    String(b.transferred_on || "").localeCompare(String(a.transferred_on || ""))
+  )
+)
 
 // The one endpoint that answers what an expense may be categorised as,
 // shared with the phone screen — the actual-vs-quoted rows carry the
