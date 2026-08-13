@@ -11,6 +11,7 @@
       <h1 class="text-lg font-semibold text-gray-900">
         {{ deal.data?.title || name }}
       </h1>
+      <span class="text-sm tabular-nums text-gray-400">{{ name }}</span>
       <span
         v-if="deal.data"
         class="rounded-full px-2 py-0.5 text-xs"

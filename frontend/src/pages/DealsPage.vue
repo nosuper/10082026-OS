@@ -89,15 +89,21 @@
               <div class="min-w-0 flex-1">
                 <div
                   class="truncate text-sm font-medium text-gray-900"
-                  :title="deal.title"
+                  :title="`${deal.title} (${deal.name})`"
                 >
                   {{ deal.title }}
                 </div>
-                <div
-                  v-if="deal.company"
-                  class="mt-0.5 truncate text-xs text-gray-500"
-                >
-                  {{ companyNames[deal.company] || deal.company }}
+                <!-- The record code, findable: quote numbers and chat
+                     messages cite DEAL-xxxx, so the card must answer
+                     to it (C walkthrough note). The search box already
+                     matches it. -->
+                <div class="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+                  <span v-if="deal.company" class="truncate">
+                    {{ companyNames[deal.company] || deal.company }}
+                  </span>
+                  <span class="ml-auto shrink-0 tabular-nums text-[10px] text-gray-400">
+                    {{ deal.name }}
+                  </span>
                 </div>
               </div>
               <button
@@ -347,10 +353,14 @@
                 <div class="group flex items-center gap-1.5">
                   <button
                     class="text-left font-medium text-blue-700 hover:underline"
+                    :title="deal.name"
                     @click.stop="openEdit(deal)"
                   >
                     {{ deal.title }}
                   </button>
+                  <span class="shrink-0 tabular-nums text-[10px] text-gray-400">
+                    {{ deal.name }}
+                  </span>
                   <button
                     class="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100"
                     title="Edit title inline"
