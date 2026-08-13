@@ -113,6 +113,28 @@ chọn freelancer — gaps amber đúng chỗ? Print ra giấy đẹp?
 
 >
 
+## Round 4 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+Editor and preview both become **document windows** (4xl modals), and
+the preview is now a full rich editor holding the filled paper — the
+PandaDoc shape: template → filled draft → approve. Type over a gap and
+the counter follows; **Print** prints the edited draft; **Save .docx
+to job** keeps exactly what you approved (built through the same
+HTML→Word translator) and registers it under Generated papers. The
+standing instruction — research a feature's market UX before building
+it — is recorded in my working memory.
+
+### Round-4 checks
+
+**R4.1** Paperwork → click a web template: does it open as a proper
+document window now?
+
+**R4.2** Job → Preview & edit: edit the filled draft (type over a gap),
+Print, and Save .docx to job — does the saved file match what you
+edited, and appear in Generated papers?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
