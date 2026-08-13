@@ -623,6 +623,70 @@ def html_to_docx(source: str) -> bytes:
     return out.getvalue()
 
 
+# Reading a .docx back for the screen (A5 round 6): the founder's
+# uploaded contracts must not lose their look in a preview. The same
+# subset html_to_docx writes is read back — bold, italic, underline,
+# alignment, line breaks — so the two converters are symmetric.
+_RUN = re.compile(r"<w:r(?:\s[^>]*)?>.*?</w:r>", re.DOTALL)
+_RUN_PROPS = re.compile(r"<w:rPr>.*?</w:rPr>", re.DOTALL)
+_PARA_PROPS = re.compile(r"<w:pPr>.*?</w:pPr>", re.DOTALL)
+_JC = re.compile(r'<w:jc\s[^>]*w:val="([^"]+)"')
+_BR = re.compile(r"<w:br\s*/>")
+
+_JC_TO_CSS = {"center": "center", "right": "right", "end": "right", "both": "justify"}
+
+
+def _flag_on(props: str, tag: str) -> bool:
+    match = re.search(rf"<w:{tag}(\s[^>]*)?/?>", props)
+    if not match:
+        return False
+    attrs = match.group(1) or ""
+    return 'w:val="0"' not in attrs and 'w:val="false"' not in attrs and 'w:val="none"' not in attrs
+
+
+def _run_to_html(run_xml: str) -> str:
+    text = "".join(_TEXT.findall(run_xml))
+    breaks = "<br>" * len(_BR.findall(run_xml))
+    if not text:
+        return breaks
+    props_match = _RUN_PROPS.search(run_xml)
+    props = props_match.group(0) if props_match else ""
+    html = text  # already XML-escaped in the docx, which is valid HTML
+    if _flag_on(props, "b"):
+        html = f"<strong>{html}</strong>"
+    if _flag_on(props, "i"):
+        html = f"<em>{html}</em>"
+    if _flag_on(props, "u"):
+        html = f"<u>{html}</u>"
+    return breaks + html
+
+
+def docx_to_html(data: bytes) -> str:
+    """A .docx as screen HTML, keeping what the screen can keep.
+
+    Word-only refinements (exact fonts, tables, images) stay in the
+    file; the words, their emphasis and their alignment come through —
+    a preview that drops bold from a contract heading reads as a
+    different document (A5 round 6).
+    """
+    archive = _archive(data)
+    xml = archive.read("word/document.xml").decode("utf-8")
+    paragraphs = []
+    for para in _PARAGRAPH.findall(xml):
+        props_match = _PARA_PROPS.search(para)
+        jc = _JC.search(props_match.group(0)) if props_match else None
+        align = _JC_TO_CSS.get(jc.group(1)) if jc else None
+        style = f' style="text-align: {align}"' if align else ""
+        runs = "".join(_run_to_html(run) for run in _RUN.findall(para))
+        paragraphs.append(f"<p{style}>{runs}</p>")
+    return "".join(paragraphs)
+
+
+def highlight_gaps(html: str) -> str:
+    """Wrap the «…» markers so a screen can highlight them."""
+    return re.sub(r"(«[^»]*»)", r'<mark data-gap="1">\1</mark>', html)
+
+
 def docx_paragraph_texts(data: bytes) -> list[str]:
     """Every paragraph's visible text, in order.
 

@@ -80,14 +80,37 @@
           />
           <!-- Placeholders appear as @chips; typing @ suggests them
                (founder, A5 round 5). Stored back as {{…}} on save. -->
-          <TextEditor
-            ref="editorRef"
-            :content="editor.template_source"
-            :fixed-menu="true"
-            :mentions="mentionItems"
-            editor-class="aura-paper prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b border border-t-0 border-gray-200 px-6 py-4 focus:outline-none"
-            @change="(html) => (editor.template_source = html)"
-          />
+          <!-- relative: the dialog panel is transformed, which hijacks
+               position:fixed — the dropdown anchors to the editor box
+               instead. -->
+          <div class="relative">
+            <TextEditor
+              ref="editorRef"
+              :content="editor.template_source"
+              :fixed-menu="true"
+              :mentions="mentionItems"
+              editor-class="aura-paper prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b border border-t-0 border-gray-200 px-6 py-4 focus:outline-none"
+              @change="(html) => (editor.template_source = html)"
+              @transaction="onEditorTransaction"
+            />
+            <!-- Our own @-suggestions: type @ and keep typing to
+                 filter; click inserts the field as a chip. (frappe-ui's
+                 built-in popup dies silently inside a modal.) -->
+            <div
+              v-if="suggest && suggestions.length"
+              class="absolute z-[100] max-h-56 w-72 overflow-y-auto rounded-md border bg-white py-1 shadow-lg"
+              :style="{ left: `${suggest.x}px`, top: `${suggest.y}px` }"
+            >
+              <button
+                v-for="field in suggestions"
+                :key="field"
+                class="block w-full truncate px-3 py-1.5 text-left font-mono text-xs text-gray-800 hover:bg-blue-50"
+                @mousedown.prevent="pickSuggestion(field)"
+              >
+                {{ field }}
+              </button>
+            </div>
+          </div>
           <p class="mb-1 mt-2 text-xs font-medium text-gray-600">
             Type <code>@</code> to insert a field, or click one:
           </p>
@@ -442,6 +465,65 @@ function insertPlaceholder(field) {
   } else {
     editor.value.template_source += `<p>${braced(field)}</p>`
   }
+}
+
+// -- @-suggestions, filtered as the founder types (A5 round 6) --
+
+const suggest = ref(null)
+
+function onEditorTransaction(tiptap) {
+  if (!tiptap?.state) return
+  const { from, empty } = tiptap.state.selection
+  if (!empty) {
+    suggest.value = null
+    return
+  }
+  const textBefore = tiptap.state.doc.textBetween(
+    Math.max(0, from - 60),
+    from,
+    "\n",
+    "\0"
+  )
+  const match = textBefore.match(/@([\w.]*)$/)
+  if (!match) {
+    suggest.value = null
+    return
+  }
+  const coords = tiptap.view.coordsAtPos(from)
+  // Anchor to the editor's own box: the dialog is transformed, so
+  // viewport coordinates would land the dropdown somewhere else.
+  const box = tiptap.view.dom.closest(".relative")?.getBoundingClientRect()
+  suggest.value = {
+    query: match[1],
+    from: from - match[0].length,
+    to: from,
+    x: coords.left - (box?.left || 0),
+    y: coords.bottom - (box?.top || 0) + 6,
+  }
+}
+
+const suggestions = computed(() => {
+  if (!suggest.value) return []
+  const needle = suggest.value.query.toLowerCase()
+  return (library.data?.placeholders || [])
+    .filter((field) => field.toLowerCase().includes(needle))
+    .slice(0, 8)
+})
+
+function pickSuggestion(field) {
+  const tiptap = editorRef.value?.editor
+  const range = suggest.value
+  suggest.value = null
+  if (!tiptap || !range) return
+  tiptap
+    .chain()
+    .focus()
+    .deleteRange({ from: range.from, to: range.to })
+    .insertContent([
+      { type: "mention", attrs: { id: field, label: field } },
+      { type: "text", text: " " },
+    ])
+    .run()
 }
 
 // -- the shared reading window (A5 round 5) --

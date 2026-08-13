@@ -165,13 +165,8 @@ def preview(template_name, job_name, vendor=None, freelancer=None):
         }
 
     docx = paperwork.fill_docx(content(template), values)
-    paragraphs = paperwork.docx_paragraph_texts(docx.document)
-    html = "".join(
-        f"<p>{_mark_gaps(frappe.utils.escape_html(text))}</p>"
-        for text in paragraphs
-    )
     return {
-        "html": html,
+        "html": paperwork.highlight_gaps(paperwork.docx_to_html(docx.document)),
         "missing": list(docx.missing),
         "unknown": list(docx.unknown),
     }
@@ -185,16 +180,13 @@ def _mark_gaps(text):
 
 
 def paper_html(content: bytes):
-    """A stored .docx as screen paragraphs, or None for a file that
-    isn't one (a receipt photo hangs off jobs too)."""
+    """A stored .docx as screen HTML — emphasis and alignment kept —
+    or None for a file that isn't one (a receipt photo hangs off jobs
+    too)."""
     try:
-        paragraphs = paperwork.docx_paragraph_texts(content)
+        return paperwork.highlight_gaps(paperwork.docx_to_html(content))
     except ValueError:
         return None
-    return "".join(
-        f"<p>{_mark_gaps(frappe.utils.escape_html(text))}</p>"
-        for text in paragraphs
-    )
 
 
 def template_html(template):

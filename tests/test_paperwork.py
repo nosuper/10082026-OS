@@ -519,3 +519,34 @@ def test_looks_like_html_separates_the_two_source_kinds():
     assert looks_like_html("<p>hi</p>")
     assert looks_like_html("  \n<h1>hi</h1>")
     assert not looks_like_html("DÒNG MỘT\nDÒNG HAI")
+
+
+# -- A5 round 6: the symmetric reader — a docx back as styled HTML --
+
+
+from auraos.lib.paperwork import docx_to_html, highlight_gaps  # noqa: E402
+
+
+def test_docx_reads_back_with_its_emphasis_and_alignment():
+    docx = html_to_docx(
+        '<h2 style="text-align: center"><strong>HỢP ĐỒNG</strong></h2>'
+        "<p>Bên B: <strong>Ngô Quay Phim</strong> — <em>freelancer</em></p>"
+        "<p><u>Điều 1</u></p>"
+    )
+    html = docx_to_html(docx)
+    assert 'style="text-align: center"' in html
+    assert "<strong>HỢP ĐỒNG</strong>" in html
+    assert "<strong>Ngô Quay Phim</strong>" in html
+    assert "<em>freelancer</em>" in html
+    assert "<u>Điều 1</u>" in html
+
+
+def test_docx_line_breaks_survive_the_round_trip():
+    docx = html_to_docx("<p>dòng một<br>dòng hai</p>")
+    assert "dòng một<br>dòng hai" in docx_to_html(docx)
+
+
+def test_highlight_gaps_wraps_only_the_markers():
+    html = highlight_gaps("<p>Tên: «thiếu: freelancer.full_name» xong</p>")
+    assert '<mark data-gap="1">«thiếu: freelancer.full_name»</mark>' in html
+    assert html.count("<mark") == 1
