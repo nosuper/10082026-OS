@@ -661,25 +661,58 @@ def _run_to_html(run_xml: str) -> str:
     return breaks + html
 
 
+_TABLE = re.compile(r"<w:tbl(?:\s[^>]*)?>.*?</w:tbl>", re.DOTALL)
+_TABLE_ROW = re.compile(r"<w:tr(?:\s[^>]*)?>.*?</w:tr>", re.DOTALL)
+_TABLE_CELL = re.compile(r"<w:tc(?:\s[^>]*)?>.*?</w:tc>", re.DOTALL)
+
+
+def _paragraph_to_html(para: str) -> str:
+    props_match = _PARA_PROPS.search(para)
+    jc = _JC.search(props_match.group(0)) if props_match else None
+    align = _JC_TO_CSS.get(jc.group(1)) if jc else None
+    style = f' style="text-align: {align}"' if align else ""
+    runs = "".join(_run_to_html(run) for run in _RUN.findall(para))
+    return f"<p{style}>{runs}</p>"
+
+
+def _table_to_html(tbl: str) -> str:
+    rows = []
+    for row in _TABLE_ROW.findall(tbl):
+        cells = []
+        for cell in _TABLE_CELL.findall(row):
+            inner = "".join(
+                _paragraph_to_html(para) for para in _PARAGRAPH.findall(cell)
+            )
+            cells.append(f"<td>{inner}</td>")
+        rows.append(f"<tr>{''.join(cells)}</tr>")
+    return f"<table><tbody>{''.join(rows)}</tbody></table>"
+
+
 def docx_to_html(data: bytes) -> str:
     """A .docx as screen HTML, keeping what the screen can keep.
 
-    Word-only refinements (exact fonts, tables, images) stay in the
-    file; the words, their emphasis and their alignment come through —
-    a preview that drops bold from a contract heading reads as a
-    different document (A5 round 6).
+    Words, emphasis, alignment — and tables, in document order (a
+    contract's fee schedule is a table; dropping it reads as a
+    different document, A5 round 7). Word-only refinements (exact
+    fonts, images) stay in the file.
     """
     archive = _archive(data)
     xml = archive.read("word/document.xml").decode("utf-8")
-    paragraphs = []
-    for para in _PARAGRAPH.findall(xml):
-        props_match = _PARA_PROPS.search(para)
-        jc = _JC.search(props_match.group(0)) if props_match else None
-        align = _JC_TO_CSS.get(jc.group(1)) if jc else None
-        style = f' style="text-align: {align}"' if align else ""
-        runs = "".join(_run_to_html(run) for run in _RUN.findall(para))
-        paragraphs.append(f"<p{style}>{runs}</p>")
-    return "".join(paragraphs)
+
+    # Tables and paragraphs interleave in the body; render each in its
+    # place, and never render a table's own paragraphs twice.
+    table_spans = [(m.start(), m.end()) for m in _TABLE.finditer(xml)]
+
+    def inside_table(position: int) -> bool:
+        return any(start <= position < end for start, end in table_spans)
+
+    pieces = []
+    for match in _TABLE.finditer(xml):
+        pieces.append((match.start(), _table_to_html(match.group(0))))
+    for match in _PARAGRAPH.finditer(xml):
+        if not inside_table(match.start()):
+            pieces.append((match.start(), _paragraph_to_html(match.group(0))))
+    return "".join(html for _, html in sorted(pieces, key=lambda item: item[0]))
 
 
 def highlight_gaps(html: str) -> str:

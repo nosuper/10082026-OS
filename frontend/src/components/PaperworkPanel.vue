@@ -103,12 +103,14 @@
         class="mt-3 rounded-md border p-2 text-sm"
         :class="gaps.length ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'"
       >
-        <a
-          :href="generated.file_url"
-          class="font-medium text-blue-700 hover:underline"
+        <!-- Opens the reading window like every other paper — no
+             surprise downloads (founder, A5 round 7). -->
+        <button
+          class="text-left font-medium text-blue-700 hover:underline"
+          @click="openDocument(generated)"
         >
           {{ generated.file_name }}
-        </a>
+        </button>
         <p v-if="!gaps.length" class="mt-1 text-xs text-green-800">
           Every placeholder filled — ready to print.
         </p>

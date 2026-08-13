@@ -110,6 +110,10 @@ function print() {
       h1, h2, h3 { line-height: 1.3; }
       span.mention { font-family: ui-monospace, monospace; background: #f3f4f6;
              padding: 0 2px; border-radius: 2px; }
+      table { border-collapse: collapse; width: 100%; margin: 0.4cm 0; }
+      td, th { border: 1px solid #6b7280; padding: 0.15cm 0.25cm;
+             vertical-align: top; }
+      td p { margin: 0; }
     </style></head><body>${html.value}</body></html>`)
   printWindow.document.close()
   printWindow.focus()
@@ -133,5 +137,23 @@ defineExpose({ currentHtml: () => html.value, edited: () => mode.value === "edit
   color: #1d4ed8;
   padding: 0 3px;
   border-radius: 3px;
+}
+</style>
+
+<style>
+/* Tables read back from Word keep their grid on screen. */
+.aura-paper table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+.aura-paper td,
+.aura-paper th {
+  border: 1px solid #d1d5db;
+  padding: 0.35rem 0.6rem;
+  vertical-align: top;
+}
+.aura-paper td p {
+  margin: 0;
 }
 </style>

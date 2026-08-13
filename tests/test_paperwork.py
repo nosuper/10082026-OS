@@ -550,3 +550,27 @@ def test_highlight_gaps_wraps_only_the_markers():
     html = highlight_gaps("<p>Tên: «thiếu: freelancer.full_name» xong</p>")
     assert '<mark data-gap="1">«thiếu: freelancer.full_name»</mark>' in html
     assert html.count("<mark") == 1
+
+
+def test_docx_tables_come_back_as_tables_in_order():
+    # A fee schedule between two paragraphs must stay between them.
+    body = (
+        "<w:p><w:r><w:t>Trước bảng</w:t></w:r></w:p>"
+        "<w:tbl><w:tr>"
+        "<w:tc><w:p><w:r><w:t>Hạng mục</w:t></w:r></w:p></w:tc>"
+        "<w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>20.000.000</w:t></w:r></w:p></w:tc>"
+        "</w:tr></w:tbl>"
+        "<w:p><w:r><w:t>Sau bảng</w:t></w:r></w:p>"
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        f'wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    )
+    docx = docx_with({"word/document.xml": document})
+    html = docx_to_html(docx)
+    assert html.index("Trước bảng") < html.index("<table>") < html.index("Sau bảng")
+    assert "<td><p>Hạng mục</p></td>" in html
+    assert "<strong>20.000.000</strong>" in html
+    # The table's own paragraphs are not repeated outside it.
+    assert html.count("Hạng mục") == 1
