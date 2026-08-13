@@ -67,58 +67,27 @@
           </select>
         </label>
 
-        <Button :loading="previewer.loading" @click="openPreview">
-          Preview & edit
-        </Button>
-        <Button variant="solid" :loading="generator.loading" @click="generate">
-          Generate
+        <!-- One door: every paper is read before it exists — Generate
+             lives inside the window (founder, A5 round 5). -->
+        <Button
+          variant="solid"
+          :loading="previewer.loading"
+          @click="openPreview"
+        >
+          Preview
         </Button>
       </div>
 
-      <!-- The draft window (A5 round 4, PandaDoc-shaped): the filled
-           paper opens as a full document editor — fix a name, tweak a
-           clause — then print it, or keep the edited draft as the
-           job's .docx. -->
-      <Dialog
+      <PaperWindow
+        ref="draftWindow"
         :modelValue="!!preview"
-        :options="{ title: draftTitle, size: '4xl' }"
+        :title="draftTitle"
+        :content="preview?.html || ''"
+        save-label="Generate .docx"
+        :saving="draftSaver.loading || generator.loading"
         @update:modelValue="(open) => !open && (preview = null)"
-      >
-        <template #body-content>
-          <div v-if="preview">
-            <p
-              v-if="draftGapCount"
-              class="mb-2 flex items-center gap-1.5 text-xs text-amber-700"
-            >
-              <FeatherIcon name="alert-triangle" class="h-3.5 w-3.5" />
-              {{ draftGapCount }} gap{{ draftGapCount > 1 ? "s" : "" }}
-              highlighted — fill the record (or type over them here).
-            </p>
-            <p v-else class="mb-2 text-xs text-green-700">
-              Every field filled.
-            </p>
-            <TextEditor
-              :content="preview.html"
-              :fixed-menu="true"
-              editor-class="aura-paper prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded border border-gray-200 px-6 py-4 focus:outline-none"
-              @change="(html) => (draftHtml = html)"
-            />
-          </div>
-        </template>
-        <template #actions>
-          <div class="flex flex-wrap justify-end gap-2">
-            <Button @click="printPreview">Print</Button>
-            <Button
-              variant="solid"
-              :loading="draftSaver.loading"
-              @click="saveDraft"
-            >
-              Save .docx to job
-            </Button>
-            <Button @click="preview = null">Close</Button>
-          </div>
-        </template>
-      </Dialog>
+        @save="generateFromWindow"
+      />
 
       <p v-if="template?.unknown_placeholders?.length" class="mt-2 text-xs text-amber-700">
         ⚠ This template asks for
@@ -172,9 +141,12 @@
       <tbody>
         <tr v-for="row in documents.data" :key="row.name" class="border-t">
           <td class="py-1 pr-2">
-            <a :href="row.file_url" class="text-blue-700 hover:underline">
+            <button
+              class="text-left text-blue-700 hover:underline"
+              @click="openDocument(row)"
+            >
               {{ row.file_name }}
-            </a>
+            </button>
           </td>
           <td class="py-1 pr-2 whitespace-nowrap tabular-nums text-gray-600">
             {{ row.creation?.slice(0, 16) }}
@@ -184,20 +156,23 @@
       </tbody>
     </table>
 
+    <!-- Reading window for papers already on the job. -->
+    <PaperWindow
+      :modelValue="!!docWindow"
+      :title="docWindow?.title"
+      :content="docWindow?.content || ''"
+      :download-url="docWindow?.downloadUrl || ''"
+      @update:modelValue="(open) => !open && (docWindow = null)"
+    />
+
     <ErrorMessage class="mt-2" :message="error" />
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from "vue"
-import {
-  Button,
-  Dialog,
-  ErrorMessage,
-  FeatherIcon,
-  TextEditor,
-  createResource,
-} from "frappe-ui"
+import { Button, ErrorMessage, createResource } from "frappe-ui"
+import PaperWindow from "./PaperWindow.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 const props = defineProps({
@@ -304,17 +279,16 @@ const generator = createResource({
   },
 })
 
-// -- the draft window: preview, edit, print, keep (A5 rounds 3–4) --
+// -- the draft window: read, edit, print, generate (A5 rounds 3–5) --
 
 const preview = ref(null)
-const draftHtml = ref("")
+const draftWindow = ref(null)
 
 const previewer = createResource({
   url: "auraos.api.preview_job_paperwork",
   onSuccess(result) {
     error.value = ""
     preview.value = result
-    draftHtml.value = result.html
   },
   onError(err) {
     preview.value = null
@@ -324,12 +298,6 @@ const previewer = createResource({
 
 const draftTitle = computed(
   () => `Draft — ${template.value?.template_name || "paper"}`
-)
-
-// Live off the edited draft, not the original fill: typing over a
-// marker resolves it.
-const draftGapCount = computed(
-  () => (draftHtml.value.match(/data-gap/g) || []).length
 )
 
 function openPreview() {
@@ -353,31 +321,46 @@ const draftSaver = createResource({
   onError: onFail,
 })
 
-function saveDraft() {
-  draftSaver.submit({
-    job: props.job,
-    template: chosen.value,
-    html: draftHtml.value || preview.value?.html || "",
-    vendor: vendor.value || null,
-    freelancer: freelancer.value || null,
-  })
+// Generate lives inside the window. An untouched draft generates from
+// the original file — an uploaded Word template keeps its exact
+// formatting that way; an edited draft is what the founder approved,
+// so the edit wins and builds through the HTML→Word translator.
+function generateFromWindow(html) {
+  if (draftWindow.value?.edited()) {
+    draftSaver.submit({
+      job: props.job,
+      template: chosen.value,
+      html,
+      vendor: vendor.value || null,
+      freelancer: freelancer.value || null,
+    })
+  } else {
+    preview.value = null
+    generate()
+  }
 }
 
-function printPreview() {
-  const body = draftHtml.value || preview.value?.html || ""
-  const printWindow = window.open("", "_blank")
-  if (!printWindow) return
-  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8">
-    <title>Print</title>
-    <style>
-      body { font-family: "Times New Roman", serif; font-size: 13pt;
-             line-height: 1.6; max-width: 17cm; margin: 1cm auto; }
-      mark[data-gap] { background: #fde68a; }
-      h1, h2, h3 { line-height: 1.3; }
-    </style></head><body>${body}</body></html>`)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
+// -- reading papers already on the job --
+
+const docWindow = ref(null)
+let pendingDoc = null
+
+const docPreviewer = createResource({
+  url: "auraos.api.preview_paper",
+  onSuccess(data) {
+    error.value = ""
+    docWindow.value = {
+      title: pendingDoc?.file_name || "Paper",
+      content: data.html || "<p>(File này không phải văn bản .docx)</p>",
+      downloadUrl: pendingDoc?.file_url || "",
+    }
+  },
+  onError: onFail,
+})
+
+function openDocument(row) {
+  pendingDoc = row
+  docPreviewer.submit({ file_url: row.file_url })
 }
 
 function generate() {

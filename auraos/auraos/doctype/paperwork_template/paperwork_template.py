@@ -184,6 +184,33 @@ def _mark_gaps(text):
     return re.sub(r"(«[^»]*»)", r'<mark data-gap="1">\1</mark>', text)
 
 
+def paper_html(content: bytes):
+    """A stored .docx as screen paragraphs, or None for a file that
+    isn't one (a receipt photo hangs off jobs too)."""
+    try:
+        paragraphs = paperwork.docx_paragraph_texts(content)
+    except ValueError:
+        return None
+    return "".join(
+        f"<p>{_mark_gaps(frappe.utils.escape_html(text))}</p>"
+        for text in paragraphs
+    )
+
+
+def template_html(template):
+    """A template as the screen shows it, unfilled — its own HTML for a
+    web-authored one, its text paragraphs for an uploaded Word file."""
+    source = template.get("template_source") or ""
+    if source.strip():
+        if paperwork.looks_like_html(source):
+            return source
+        return "".join(
+            f"<p>{frappe.utils.escape_html(line)}</p>"
+            for line in source.splitlines()
+        )
+    return paper_html(content(template))
+
+
 def attach_draft(template_name, job_name, html):
     """An on-screen draft, kept as a .docx on the job (A5 round 4).
 

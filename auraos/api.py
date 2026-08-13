@@ -1094,6 +1094,37 @@ def save_job_paperwork_draft(job, template, html, vendor=None, freelancer=None):
 
 
 @frappe.whitelist()
+def preview_template(template):
+    """A template read before anything else (A5 round 5): its own HTML
+    for a web one, its text for an uploaded Word file — placeholders
+    visible as written."""
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    doc = frappe.get_doc("Paperwork Template", template)
+    return {
+        "html": paperwork_template.template_html(doc),
+        "web": bool((doc.get("template_source") or "").strip()),
+        "file_url": doc.template_file,
+    }
+
+
+@frappe.whitelist()
+def preview_paper(file_url):
+    """A paper already on a job, read on screen before any download
+    (A5 round 5). Only files hanging off a job the session may read."""
+    row = frappe.db.get_value(
+        "File",
+        {"file_url": file_url},
+        ["name", "attached_to_doctype", "attached_to_name"],
+        as_dict=True,
+    )
+    if not row or row.attached_to_doctype != "Job" or not row.attached_to_name:
+        frappe.throw(_("No such paper"), frappe.DoesNotExistError)
+    _check_job_permission(row.attached_to_name, "read")
+    content = frappe.get_doc("File", row.name).get_content()
+    return {"html": paperwork_template.paper_html(content)}
+
+
+@frappe.whitelist()
 def preview_job_paperwork(job, template, vendor=None, freelancer=None):
     """The paper on screen before anything is generated (A5 round 3).
 

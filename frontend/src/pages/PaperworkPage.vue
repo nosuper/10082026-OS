@@ -78,15 +78,18 @@
             placeholder="Template name — e.g. Hợp đồng cộng tác viên"
             class="mb-2 w-full rounded border-gray-200 px-2 py-1.5 text-sm sm:w-96"
           />
+          <!-- Placeholders appear as @chips; typing @ suggests them
+               (founder, A5 round 5). Stored back as {{…}} on save. -->
           <TextEditor
             ref="editorRef"
             :content="editor.template_source"
             :fixed-menu="true"
-            editor-class="prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b border border-t-0 border-gray-200 px-6 py-4 focus:outline-none"
+            :mentions="mentionItems"
+            editor-class="aura-paper prose prose-sm min-h-[24rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b border border-t-0 border-gray-200 px-6 py-4 focus:outline-none"
             @change="(html) => (editor.template_source = html)"
           />
           <p class="mb-1 mt-2 text-xs font-medium text-gray-600">
-            Click to insert at the cursor:
+            Type <code>@</code> to insert a field, or click one:
           </p>
           <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
             <button
@@ -123,27 +126,18 @@
       :class="row.disabled ? 'opacity-60' : ''"
     >
       <div class="flex flex-wrap items-center gap-2">
-        <!-- A web template's name opens its editor — clicking a name
-             that downloads a file was round 3's first complaint. -->
+        <!-- Every title opens a reading window first; edit, print and
+             download live inside it (founder, A5 round 5). -->
         <button
-          v-if="row.template_source && library.data?.can_manage"
           class="font-medium text-blue-700 hover:underline"
-          @click="openEditor(row)"
+          @click="openTemplateWindow(row)"
         >
           {{ row.template_name }}
         </button>
         <a
-          v-else
-          :href="row.template_file"
-          class="font-medium text-blue-700 hover:underline"
-        >
-          {{ row.template_name }}
-        </a>
-        <a
-          v-if="row.template_source"
           :href="row.template_file"
           class="text-gray-400 hover:text-gray-700"
-          title="Download the built .docx"
+          title="Download the .docx"
         >
           <FeatherIcon name="download" class="h-3.5 w-3.5" />
         </a>
@@ -243,12 +237,12 @@
           <tbody>
             <tr v-for="row in filteredPapers" :key="row.name" class="border-t">
               <td class="py-1.5 pr-3">
-                <a
-                  :href="row.file_url"
-                  class="font-medium text-blue-700 hover:underline"
+                <button
+                  class="text-left font-medium text-blue-700 hover:underline"
+                  @click="openPaperWindow(row)"
                 >
                   {{ row.template_name || row.file_name }}
-                </a>
+                </button>
               </td>
               <td class="py-1.5 pr-3 text-gray-700">
                 {{ row.freelancer_label || row.vendor_label || "Client" }}
@@ -289,6 +283,19 @@
       </p>
     </details>
 
+    <!-- The shared reading window: a template or a generated paper,
+         read first, acted on inside. -->
+    <PaperWindow
+      :modelValue="!!paperWindow"
+      :title="paperWindow?.title"
+      :content="paperWindow?.content || ''"
+      :download-url="paperWindow?.downloadUrl || ''"
+      :editable="paperWindow?.editable ?? true"
+      :edit-inline="paperWindow?.editInline ?? true"
+      @update:modelValue="(open) => !open && (paperWindow = null)"
+      @edit="onWindowEdit"
+    />
+
     <ErrorMessage class="mt-3" :message="error" />
   </div>
 </template>
@@ -304,7 +311,9 @@ import {
   TextEditor,
   createResource,
 } from "frappe-ui"
+import PaperWindow from "../components/PaperWindow.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
+import { editorToSource, sourceToEditor } from "../utils/placeholders"
 
 const DOCX =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -397,30 +406,105 @@ function remove(row) {
 const editor = ref(null)
 const editorRef = ref(null)
 
+// Typing @ in the editor suggests every fillable field.
+const mentionItems = computed(() =>
+  (library.data?.placeholders || []).map((field) => ({
+    id: field,
+    label: field,
+  }))
+)
+
 function openEditor(row = null) {
   const source = row?.template_source || ""
+  // Legacy plain paragraph lines upgrade to HTML; placeholders become
+  // @chips for the editor and go back to {{…}} on save.
+  const html = source.trimStart().startsWith("<")
+    ? source
+    : source
+        .split("\n")
+        .map((line) => `<p>${line}</p>`)
+        .join("")
   editor.value = {
     name: row?.name || null,
     template_name: row?.template_name || "",
-    // The first seeds wrote plain paragraph lines; the rich editor
-    // speaks HTML. Upgrade on open — saving keeps the HTML form.
-    template_source: source.trimStart().startsWith("<")
-      ? source
-      : source
-          .split("\n")
-          .map((line) => `<p>${line}</p>`)
-          .join(""),
+    template_source: sourceToEditor(html),
   }
 }
 
 function insertPlaceholder(field) {
-  const token = braced(field)
   const tiptap = editorRef.value?.editor
   if (tiptap) {
-    tiptap.chain().focus().insertContent(token).run()
+    tiptap
+      .chain()
+      .focus()
+      .insertContent({ type: "mention", attrs: { id: field, label: field } })
+      .run()
   } else {
-    editor.value.template_source += `<p>${token}</p>`
+    editor.value.template_source += `<p>${braced(field)}</p>`
   }
+}
+
+// -- the shared reading window (A5 round 5) --
+
+const paperWindow = ref(null)
+let pendingTemplate = null
+let pendingPaper = null
+
+const templatePreviewer = createResource({
+  url: "auraos.api.preview_template",
+  onSuccess(data) {
+    error.value = ""
+    paperWindow.value = {
+      title: pendingTemplate?.template_name || "Template",
+      content: data.html || "<p>(Không đọc được nội dung file)</p>",
+      downloadUrl: data.file_url || "",
+      // Editing an uploaded template converts it to a web one (its
+      // text and placeholders carry over; Word-only styling doesn't).
+      editable: !!library.data?.can_manage,
+      editInline: false,
+      row: pendingTemplate,
+    }
+  },
+  onError: onFail,
+})
+
+function openTemplateWindow(row) {
+  pendingTemplate = row
+  templatePreviewer.submit({ template: row.name })
+}
+
+function onWindowEdit() {
+  const win = paperWindow.value
+  paperWindow.value = null
+  const row = win?.row
+  if (!row) return
+  if (row.template_source) {
+    openEditor(row)
+  } else {
+    // An uploaded template edited here becomes a web template: the
+    // window's extracted text (placeholders included) is the source.
+    openEditor({ ...row, template_source: win.content })
+  }
+}
+
+const paperPreviewer = createResource({
+  url: "auraos.api.preview_paper",
+  onSuccess(data) {
+    error.value = ""
+    paperWindow.value = {
+      title: pendingPaper?.template_name || pendingPaper?.file_name || "Paper",
+      content: data.html || "<p>(File này không phải văn bản .docx)</p>",
+      downloadUrl: pendingPaper?.file_url || "",
+      editable: true,
+      editInline: true,
+    }
+  },
+  onError: onFail,
+})
+
+function openPaperWindow(row) {
+  pendingPaper = row
+  paperPreviewer.submit({ file_url: row.file_url })
 }
 
 // set_value, not client.save: a partial doc through client.save would
@@ -447,13 +531,15 @@ const editorCreator = createResource({
 
 function saveEditor() {
   const draft = editor.value
+  // Chips out, {{…}} in — the stored source is the fill pipeline's.
+  const source = editorToSource(draft.template_source)
   if (draft.name) {
     editorSaver.submit({
       doctype: "Paperwork Template",
       name: draft.name,
       fieldname: {
         template_name: draft.template_name.trim(),
-        template_source: draft.template_source,
+        template_source: source,
       },
     })
   } else {
@@ -461,7 +547,7 @@ function saveEditor() {
       doc: {
         doctype: "Paperwork Template",
         template_name: draft.template_name.trim(),
-        template_source: draft.template_source,
+        template_source: source,
       },
     })
   }
