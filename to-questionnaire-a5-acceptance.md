@@ -234,8 +234,10 @@ khung, bảng hạng mục có kẻ khung, cả trên màn hình lẫn khi Print
 
 ## Verdict
 
-- [ ] **GO** — merge it; Phase B/C starts
+- [x] **GO** — merge it; Phase B/C starts
 - [ ] **GO with notes**
 - [ ] **NO-GO** — fix the failed steps first
 
 >
+
+> GO given in-session 2026-08-13 ("go") after round 8. Phase A (A1–A5) closes.
