@@ -480,7 +480,7 @@ class _HtmlPaper(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.paragraphs: list[dict] = []
+        self.elements: list[dict] = []
         self._runs: list[dict] = []
         self._bold = 0
         self._italic = 0
@@ -489,6 +489,10 @@ class _HtmlPaper(HTMLParser):
         self._align: str | None = None
         self._lists: list[dict] = []
         self._in_block = False
+        # Table state (A5 round 7): a signature block is a table too.
+        self._table: dict | None = None
+        self._row: list | None = None
+        self._cell: list | None = None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -502,6 +506,16 @@ class _HtmlPaper(HTMLParser):
             self._runs.append({"break": True})
         elif tag in ("ul", "ol"):
             self._lists.append({"ordered": tag == "ol", "count": 0})
+        elif tag == "table":
+            self._close_block()
+            self._table = {
+                "bordered": "borderless" not in (attrs.get("class") or ""),
+                "rows": [],
+            }
+        elif tag == "tr" and self._table is not None:
+            self._row = []
+        elif tag in ("td", "th") and self._row is not None:
+            self._cell = []
         elif tag in ("p", "h1", "h2", "h3", "li"):
             self._open_block(tag, attrs)
 
@@ -515,6 +529,19 @@ class _HtmlPaper(HTMLParser):
         elif tag in ("ul", "ol"):
             if self._lists:
                 self._lists.pop()
+        elif tag in ("td", "th"):
+            self._close_block()
+            if self._row is not None and self._cell is not None:
+                self._row.append(self._cell)
+            self._cell = None
+        elif tag == "tr":
+            if self._table is not None and self._row is not None:
+                self._table["rows"].append(self._row)
+            self._row = None
+        elif tag == "table":
+            if self._table is not None:
+                self.elements.append({"kind": "table", **self._table})
+            self._table = None
         elif tag in ("p", "h1", "h2", "h3", "li"):
             self._close_block()
 
@@ -560,7 +587,11 @@ class _HtmlPaper(HTMLParser):
     def _close_block(self):
         if not self._in_block:
             return
-        self.paragraphs.append({"align": self._align, "runs": self._runs})
+        paragraph = {"kind": "p", "align": self._align, "runs": self._runs}
+        # A block inside an open cell belongs to the cell.
+        (self._cell if self._cell is not None else self.elements).append(
+            paragraph
+        )
         self._runs = []
         self._in_block = False
         self._size = None
@@ -597,18 +628,52 @@ def _paragraph_xml(paragraph: dict) -> str:
     return f"<w:p>{ppr}{runs}</w:p>"
 
 
+_TABLE_BORDERS_XML = "<w:tblBorders>" + "".join(
+    f'<w:{side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV")
+) + "</w:tblBorders>"
+
+
+def _table_xml(table: dict) -> str:
+    properties = (
+        "<w:tblPr>"
+        + (_TABLE_BORDERS_XML if table.get("bordered") else "")
+        + '<w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+    )
+    rows = []
+    for row in table["rows"]:
+        cells = []
+        for cell in row:
+            # Word refuses a cell without a paragraph.
+            body = "".join(_paragraph_xml(p) for p in cell) or "<w:p/>"
+            cells.append(f"<w:tc>{body}</w:tc>")
+        rows.append(f"<w:tr>{''.join(cells)}</w:tr>")
+    return f"<w:tbl>{properties}{''.join(rows)}</w:tbl>"
+
+
+def _element_xml(element: dict) -> str:
+    if element.get("kind") == "table":
+        return _table_xml(element)
+    return _paragraph_xml(element)
+
+
 def html_to_docx(source: str) -> bytes:
     """A .docx built from the web editor's HTML (A5 round 3).
 
     Word's own vocabulary for what the editor offers: bold, italic,
     underline, three heading sizes, alignment, bullet and numbered
-    lists (as visible prefixes). Placeholders pass through as text and
-    are filled exactly like an uploaded template's.
+    lists (as visible prefixes) — and tables, bordered unless the
+    table carries class="borderless" (round 7: a signature block is a
+    borderless table). Placeholders pass through as text and are
+    filled exactly like an uploaded template's.
     """
     parser = _HtmlPaper()
     parser.feed(source)
     parser.close()
-    body = "".join(_paragraph_xml(p) for p in parser.paragraphs) or "<w:p/>"
+    body = "".join(_element_xml(e) for e in parser.elements) or "<w:p/>"
+    if parser.elements and parser.elements[-1].get("kind") == "table":
+        # Word wants the body to end on a paragraph.
+        body += "<w:p/>"
     document = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<w:document xmlns:w="http://schemas.openxmlformats.org/'
@@ -664,6 +729,30 @@ def _run_to_html(run_xml: str) -> str:
 _TABLE = re.compile(r"<w:tbl(?:\s[^>]*)?>.*?</w:tbl>", re.DOTALL)
 _TABLE_ROW = re.compile(r"<w:tr(?:\s[^>]*)?>.*?</w:tr>", re.DOTALL)
 _TABLE_CELL = re.compile(r"<w:tc(?:\s[^>]*)?>.*?</w:tc>", re.DOTALL)
+_TABLE_PR = re.compile(r"<w:tblPr>.*?</w:tblPr>", re.DOTALL)
+_TABLE_BORDERS = re.compile(r"<w:tblBorders>.*?</w:tblBorders>", re.DOTALL)
+_BORDER_DRAWN = re.compile(
+    r'<w:(?:top|bottom|left|right|insideH|insideV)\s[^>]*w:val="(?!none|nil)'
+)
+_TABLE_STYLE = re.compile(r"<w:tblStyle\s")
+
+
+def _table_bordered(tbl: str) -> bool:
+    """Whether Word would draw this table's grid.
+
+    Checked against the founder's real contracts (A5 round 7): a fee
+    schedule carries <w:tblBorders> with w:val="single"; a signature
+    block has no tblBorders and no table style at all — Word draws
+    nothing, and neither must the preview.
+    """
+    pr_match = _TABLE_PR.search(tbl)
+    pr = pr_match.group(0) if pr_match else ""
+    borders = _TABLE_BORDERS.search(pr)
+    if borders:
+        return bool(_BORDER_DRAWN.search(borders.group(0)))
+    # No explicit borders: a referenced table style (Word's TableGrid
+    # etc.) usually draws them; a bare table draws none.
+    return bool(_TABLE_STYLE.search(pr))
 
 
 def _paragraph_to_html(para: str) -> str:
@@ -685,7 +774,8 @@ def _table_to_html(tbl: str) -> str:
             )
             cells.append(f"<td>{inner}</td>")
         rows.append(f"<tr>{''.join(cells)}</tr>")
-    return f"<table><tbody>{''.join(rows)}</tbody></table>"
+    kind = "" if _table_bordered(tbl) else ' class="borderless"'
+    return f"<table{kind}><tbody>{''.join(rows)}</tbody></table>"
 
 
 def docx_to_html(data: bytes) -> str:

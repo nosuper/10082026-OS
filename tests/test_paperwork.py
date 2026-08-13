@@ -569,8 +569,61 @@ def test_docx_tables_come_back_as_tables_in_order():
     )
     docx = docx_with({"word/document.xml": document})
     html = docx_to_html(docx)
-    assert html.index("Trước bảng") < html.index("<table>") < html.index("Sau bảng")
+    assert html.index("Trước bảng") < html.index("<table") < html.index("Sau bảng")
     assert "<td><p>Hạng mục</p></td>" in html
     assert "<strong>20.000.000</strong>" in html
     # The table's own paragraphs are not repeated outside it.
     assert html.count("Hạng mục") == 1
+
+
+def test_a_signature_block_table_stays_borderless_on_screen():
+    # Word draws nothing for a table with no borders and no style —
+    # the founder's real signature blocks (A5 round 7).
+    body = (
+        "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>"
+        "<w:tr><w:tc><w:p><w:r><w:t>ĐẠI DIỆN BÊN A</w:t></w:r></w:p></w:tc>"
+        "<w:tc><w:p><w:r><w:t>ĐẠI DIỆN BÊN B</w:t></w:r></w:p></w:tc>"
+        "</w:tr></w:tbl>"
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        f'wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    )
+    html = docx_to_html(docx_with({"word/document.xml": document}))
+    assert '<table class="borderless">' in html
+
+
+def test_a_fee_schedule_with_single_borders_keeps_its_grid():
+    body = (
+        "<w:tbl><w:tblPr><w:tblBorders>"
+        '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
+        "</w:tblBorders></w:tblPr>"
+        "<w:tr><w:tc><w:p><w:r><w:t>STT</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        f'wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    )
+    html = docx_to_html(docx_with({"word/document.xml": document}))
+    assert "<table><tbody>" in html
+
+
+def test_editor_tables_survive_into_the_docx_and_back():
+    docx = html_to_docx(
+        "<p>Trên bảng</p>"
+        '<table class="borderless"><tbody><tr>'
+        "<td><p><strong>BÊN A</strong></p></td><td><p>BÊN B</p></td>"
+        "</tr></tbody></table>"
+    )
+    xml = zipfile.ZipFile(BytesIO(docx)).read("word/document.xml").decode()
+    assert "<w:tbl>" in xml
+    assert "<w:tblBorders>" not in xml  # borderless in, borderless out
+    html = docx_to_html(docx)
+    assert '<table class="borderless">' in html
+    assert "<strong>BÊN A</strong>" in html
+
+    bordered = html_to_docx("<table><tbody><tr><td><p>x</p></td></tr></tbody></table>")
+    bordered_xml = zipfile.ZipFile(BytesIO(bordered)).read("word/document.xml").decode()
+    assert "<w:tblBorders>" in bordered_xml

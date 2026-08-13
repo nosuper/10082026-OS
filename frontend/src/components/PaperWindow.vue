@@ -113,6 +113,7 @@ function print() {
       table { border-collapse: collapse; width: 100%; margin: 0.4cm 0; }
       td, th { border: 1px solid #6b7280; padding: 0.15cm 0.25cm;
              vertical-align: top; }
+      table.borderless td, table.borderless th { border: none; }
       td p { margin: 0; }
     </style></head><body>${html.value}</body></html>`)
   printWindow.document.close()
@@ -155,5 +156,11 @@ defineExpose({ currentHtml: () => html.value, edited: () => mode.value === "edit
 }
 .aura-paper td p {
   margin: 0;
+}
+/* A signature block is a borderless table — Word draws nothing, and
+   neither do we (checked against the founder's own contracts). */
+.aura-paper table.borderless td,
+.aura-paper table.borderless th {
+  border: none;
 }
 </style>
