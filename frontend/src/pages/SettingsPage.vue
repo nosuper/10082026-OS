@@ -125,6 +125,74 @@
         </Button>
         <span v-if="tiersSaved" class="self-end text-xs text-green-700">Saved.</span>
       </div>
+      <hr class="my-5" />
+
+      <label class="block text-sm font-medium text-gray-800">
+        Positioning mix targets (%)
+      </label>
+      <p class="mt-1 text-xs text-gray-500">
+        The cash / bridge / brand allocation lens (playbook §6.1) - tune
+        it as the company moves phases. The deal form and the
+        <a href="/aura/sop/deals" target="_blank" rel="noopener noreferrer" class="underline">SOP page</a>
+        read these live.
+      </p>
+      <div class="mt-3 flex flex-wrap items-end gap-2">
+        <label
+          v-for="key in ['cash', 'bridge', 'brand']"
+          :key="key"
+          class="text-xs capitalize text-gray-500"
+        >
+          {{ key }}
+          <input
+            v-model.number="mixTargets[key]"
+            type="number"
+            min="0"
+            max="100"
+            step="5"
+            class="mt-0.5 block w-20 rounded border-gray-200 px-2 py-1 text-right text-sm"
+          />
+        </label>
+        <span
+          class="pb-1.5 text-xs"
+          :class="mixSum === 100 ? 'text-gray-400' : 'text-amber-700'"
+        >
+          sums to {{ mixSum }}%
+        </span>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-800">
+          Positioning-segment job types
+        </label>
+        <p class="mt-1 text-xs text-gray-500">
+          Deals of these types derive Tier 3 whatever they pay - even
+          when their positioning is left empty.
+        </p>
+        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+          <label
+            v-for="row in typeRows"
+            :key="row.name"
+            class="flex items-center gap-1.5 text-sm text-gray-700"
+          >
+            <input
+              type="checkbox"
+              class="rounded border-gray-300"
+              :checked="!!row.is_positioning"
+              @change="row.is_positioning = $event.target.checked ? 1 : 0"
+            />
+            {{ row.name }}
+          </label>
+          <span v-if="!typeRows.length" class="text-xs text-gray-400">
+            No project types yet.
+          </span>
+        </div>
+      </div>
+      <div class="mt-3 flex items-center gap-2">
+        <Button variant="solid" :loading="positioningSaver.loading" @click="savePositioning">
+          Save
+        </Button>
+        <span v-if="positioningSaved" class="text-xs text-green-700">Saved.</span>
+      </div>
 
       <ErrorMessage class="mt-2" :message="error" />
     </div>
@@ -198,7 +266,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from "vue"
+import { computed, reactive, ref } from "vue"
 import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
 import VndInput from "../components/VndInput.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
@@ -327,6 +395,56 @@ const tierSaver = createResource({
 function saveTiers() {
   tiersSaved.value = false
   tierSaver.submit({ tier2: tier2.value || 0, tier3: tier3.value || 0 })
+}
+
+// -- positioning rules (Phase B round 3) --
+
+const mixTargets = reactive({ cash: 70, bridge: 20, brand: 10 })
+const typeRows = ref([])
+const positioningSaved = ref(false)
+
+const mixSum = computed(
+  () =>
+    (mixTargets.cash || 0) + (mixTargets.bridge || 0) + (mixTargets.brand || 0)
+)
+
+function applyPositioningRules(value) {
+  Object.assign(mixTargets, value.mix)
+  typeRows.value = value.project_types
+}
+
+createResource({
+  url: "auraos.api.get_positioning_rules",
+  auto: true,
+  onSuccess: applyPositioningRules,
+  onError() {
+    denied.value = true
+  },
+})
+
+const positioningSaver = createResource({
+  url: "auraos.api.set_positioning_rules",
+  onSuccess(value) {
+    applyPositioningRules(value)
+    positioningSaved.value = true
+    error.value = ""
+  },
+  onError(err) {
+    positioningSaved.value = false
+    error.value = frappeErrorMessage(err)
+  },
+})
+
+function savePositioning() {
+  positioningSaved.value = false
+  positioningSaver.submit({
+    cash: mixTargets.cash || 0,
+    bridge: mixTargets.bridge || 0,
+    brand: mixTargets.brand || 0,
+    positioning_types: typeRows.value
+      .filter((row) => row.is_positioning)
+      .map((row) => row.name),
+  })
 }
 
 const paymentTermsDays = ref(7)

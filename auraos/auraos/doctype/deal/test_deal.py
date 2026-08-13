@@ -558,6 +558,7 @@ class TestTierSuggestion(FrappeTestCase):
     def setUpClass(cls):
         super().setUpClass()
         make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
 
     def setUp(self):
         frappe.set_user("Administrator")
@@ -639,3 +640,43 @@ class TestTierSuggestion(FrappeTestCase):
     def test_positioning_field_is_stored_as_given(self):
         deal = make_deal(title="Định vị", positioning="Bridge")
         self.assertEqual(deal.positioning, "Bridge")
+
+    def test_founder_edits_positioning_rules_and_they_bite(self):
+        from auraos import api
+
+        frappe.set_user(FOUNDER)
+        try:
+            stored = api.set_positioning_rules(
+                cash=60, bridge=25, brand=15, positioning_types=["TVC"]
+            )
+            self.assertEqual(
+                stored["mix"], {"cash": 60, "bridge": 25, "brand": 15}
+            )
+            flagged = {
+                row["name"]
+                for row in stored["project_types"]
+                if row["is_positioning"]
+            }
+            self.assertEqual(flagged, {"TVC"})
+            # The flag bites: a cheap TVC deal derives Tier 3.
+            deal = make_deal(
+                title="TVC rẻ", estimated_budget=10_000_000, project_type="TVC"
+            )
+            self.assertEqual(deal.tier, "Tier 3")
+        finally:
+            frappe.set_user(FOUNDER)
+            api.set_positioning_rules(positioning_types=[])
+
+    def test_producer_cannot_edit_positioning_rules(self):
+        from auraos import api
+
+        frappe.set_user(PRODUCER)
+        with self.assertRaises(frappe.PermissionError):
+            api.set_positioning_rules(cash=50)
+
+    def test_classification_hints_are_readable_by_a_producer(self):
+        from auraos import api
+
+        frappe.set_user(PRODUCER)
+        hints = api.classification_hints()
+        self.assertEqual(set(hints), {"cash", "bridge", "brand"})

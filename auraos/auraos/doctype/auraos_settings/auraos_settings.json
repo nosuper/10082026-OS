@@ -9,6 +9,9 @@
   "payment_terms_days",
   "tier2_threshold",
   "tier3_threshold",
+  "positioning_cash_pct",
+  "positioning_bridge_pct",
+  "positioning_brand_pct",
   "company_section",
   "logo",
   "company_name",
@@ -152,6 +155,27 @@
    "fieldname": "tier3_threshold",
    "fieldtype": "Currency",
    "label": "Tier 3 Threshold (VND)"
+  },
+  {
+   "description": "Target share of cash work (playbook §6.1). Unset falls back to 70.",
+   "fieldname": "positioning_cash_pct",
+   "fieldtype": "Int",
+   "label": "Cash Work Target %",
+   "non_negative": 1
+  },
+  {
+   "description": "Target share of bridge work. Unset falls back to 20.",
+   "fieldname": "positioning_bridge_pct",
+   "fieldtype": "Int",
+   "label": "Bridge Work Target %",
+   "non_negative": 1
+  },
+  {
+   "description": "Target share of brand work. Unset falls back to 10.",
+   "fieldname": "positioning_brand_pct",
+   "fieldtype": "Int",
+   "label": "Brand Work Target %",
+   "non_negative": 1
   }
  ],
  "index_web_pages_for_search": 0,
