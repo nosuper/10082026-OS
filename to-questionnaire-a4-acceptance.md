@@ -123,6 +123,34 @@ big-thumb by itself now?
 
 >
 
+## Round 4 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+R3.1 "no" diagnosed: the mechanics worked, but on the MV job every
+milestone is already Paid — nothing is allowed to move, and the
+silence read as failure. Now Requested rows may rebalance too (only
+Invoiced/Paid stay locked) and an amber line explains exactly which
+share is frozen when the plan can't reach 100 by itself. R3.2 "too
+much on the page": the advance/expense forms collapse behind
+"+ Record advance" / "+ Log expense". R3.3: the app now opens on a
+**Home dashboard** — pipeline / in-production / overdue / silent-quote
+cards, a Quick expense card, and a Needs-attention list.
+
+### Round-4 checks
+
+**R4.1** Add two unpaid milestones, change one's % — does the other
+follow now, and does the amber note explain the frozen share?
+
+>
+
+**R4.2** Money tab: calmer with the forms behind buttons?
+
+>
+
+**R4.3** Open http://192.168.1.94:8000/aura — is Home the right first
+screen, and does Quick expense log correctly?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; A5 (paperwork, contacts, settings) starts
