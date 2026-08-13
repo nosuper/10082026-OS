@@ -6,21 +6,16 @@ from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
     OPERATING_ROLES,
-    client_prices,
-    deal_chain,
-    floor_breached,
     margin_floor_pct,
-    rate,
-    to_engine_lines,
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import paperwork, pricing, settlement
+from auraos.lib import breakdown, paperwork, settlement
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
-from auraos.lib.quote import COMPANY_FIELDS, quote_chain
+from auraos.lib.quote import COMPANY_FIELDS
 
 # The company's standing commission practice (spec #2, story 14); the
 # Deal field carries the same default.
@@ -259,24 +254,29 @@ def _is_founder():
     return "Founder" in frappe.get_roles()
 
 
-def _founder_block(chain, result, commission_pct):
-    """The profit chain, assembled only for Founder sessions.
-
-    The same numbers are persisted on the deal as permlevel-1 fields
-    (Deal.store_founder_chain) for dashboards; this block exists for
-    live editing, where nothing is saved yet.
-    """
+def _founder_view(view, commission_pct):
+    """The founder block as the SPA reads it: the lib's pure numbers
+    plus the two dials only an adapter can know."""
     return {
         "commission_pct": float(commission_pct),
-        "total_commission": round_vnd(chain.total_commission),
-        "cm": round_vnd(chain.cm),
-        "profit_before_tax": round_vnd(chain.profit_before_tax),
-        "tndn": round_vnd(chain.tndn),
-        "net_profit": round_vnd(chain.net_profit),
-        "total_input_vat": round_vnd(result.total_input_vat),
-        "vat_payable": round_vnd(chain.vat_payable),
+        **view["founder"],
         "margin_floor_pct": float(margin_floor_pct()),
     }
+
+
+def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct):
+    """lib/breakdown with this module's error channel and stored floor."""
+    try:
+        return breakdown.breakdown_view(
+            line_rows,
+            package_rows,
+            quote_mf_pct=quote_mf_pct,
+            vat_pct=vat_pct,
+            commission_pct=commission_pct,
+            margin_floor_pct=margin_floor_pct(),
+        )
+    except ValueError as err:
+        frappe.throw(_(str(err)), frappe.ValidationError)
 
 
 @frappe.whitelist()
@@ -285,7 +285,9 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
 
     Producer sessions get costs, quote prices, margin and the floor
     warning; the commission/profit block is appended only for Founder
-    sessions, and a producer-supplied commission_pct is ignored.
+    sessions, and a producer-supplied commission_pct is ignored. One
+    assembly - lib/breakdown - shared with the persisted Deal fields,
+    so the live editor and a saved deal cannot drift apart.
     """
     frappe.has_permission("Deal", "read", throw=True)
     line_rows = frappe.parse_json(lines) or []
@@ -294,81 +296,25 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     if not _is_founder() or commission_pct is None:
         commission_pct = DEFAULT_COMMISSION_PCT
 
-    params = pricing.DealParams(
-        quote_mf_rate=rate(quote_mf_pct),
-        vat_rate=rate(vat_pct),
-        commission_rate=rate(commission_pct),
+    view = _breakdown_view(
+        line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct
     )
-    result = pricing.compute_quote(to_engine_lines(line_rows), params)
-
-    budgets = {}
-    for row, line in zip(line_rows, result.lines):
-        if row.get("package"):
-            budgets.setdefault(row["package"], []).append(line.budget)
-
-    packages = [
-        {
-            "title": row.get("title"),
-            **_package_dict(
-                budgets.get(row.get("title"), []),
-                # has_price_override carries "is this set"; 0 with the
-                # flag on is a real free-of-charge override.
-                row.get("price_override")
-                if row.get("has_price_override")
-                else None,
-            ),
-        }
-        for row in package_rows
-    ]
-    # The client's price, live: package prices as shown, plus any line
-    # standing on its own - the same rule the published quote uses.
-    priced_lines = [
-        {**row, "quote_price": round_vnd(line.budget)}
-        for row, line in zip(line_rows, result.lines)
-    ]
-    chain = quote_chain(
-        client_prices(packages, priced_lines),
-        cost_basis=result.total_profit_cost_basis,
-        input_vat=result.total_input_vat,
-        mf_rate=rate(quote_mf_pct),
-        vat_rate=rate(vat_pct),
-        commission_rate=rate(commission_pct),
-    )
-    pct = chain.margin_fraction
     out = {
+        **view,
+        # Pricing ignores line metadata; return it alongside the
+        # computed values so editing never drops it.
         "lines": [
             {
                 **{field: row.get(field) for field in LINE_METADATA_FIELDS},
-                "subtotal": round_vnd(line.subtotal_int_net),
-                "cost_basis": round_vnd(line.profit_cost_basis),
-                "input_vat": round_vnd(line.input_vat),
-                "quote_price": round_vnd(line.budget),
-                "margin": round_vnd(line.margin),
+                **line_view,
             }
-            for row, line in zip(line_rows, result.lines)
+            for row, line_view in zip(line_rows, view["lines"])
         ],
-        "packages": packages,
-        "subtotal": round_vnd(chain.subtotal),
-        "management_fee": round_vnd(chain.mf_amount),
-        "vat": round_vnd(chain.vat_amount),
-        "total": round_vnd(chain.total),
-        "margin": round_vnd(chain.margin),
-        "margin_pct": float(pct * 100) if pct is not None else None,
-        "floor_breached": bool(result.lines) and floor_breached(pct),
     }
+    del out["founder"]
     if _is_founder():
-        out["founder"] = _founder_block(chain, result, commission_pct)
+        out["founder"] = _founder_view(view, commission_pct)
     return out
-
-
-def _package_dict(member_budgets, override):
-    priced = pricing.package_price(member_budgets, override)
-    return {
-        "default_price": round_vnd(priced.default),
-        "price": round_vnd(priced.price),
-        "variance": round_vnd(priced.variance),
-        "overridden": priced.overridden,
-    }
 
 
 @frappe.whitelist()
@@ -383,14 +329,7 @@ def deal_profit(deal):
         frappe.throw(_("Only the Founder may see the profit chain"), frappe.PermissionError)
     doc = frappe.get_doc("Deal", deal)
     doc.check_permission("read")
-
-    params = pricing.DealParams(
-        quote_mf_rate=rate(doc.quote_mf_pct),
-        vat_rate=rate(doc.vat_pct),
-        commission_rate=rate(doc.commission_pct),
-    )
-    result = pricing.compute_quote(to_engine_lines(doc.cost_lines), params)
-    return _founder_block(deal_chain(doc, result), result, doc.commission_pct or 0)
+    return _founder_view(doc.breakdown_view(), doc.commission_pct or 0)
 
 
 # -- quote delivery (T6, issue #8) --

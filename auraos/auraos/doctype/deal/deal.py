@@ -2,73 +2,17 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from auraos.lib import pricing, quote
-from auraos.lib.money import round_vnd, to_decimal
+from auraos.lib import breakdown, pricing
+from auraos.lib.breakdown import rate
+from auraos.lib.money import round_vnd
 
 # Only the two operating roles may own a deal; ownership is the
 # explicit handover instrument between the founder and the producer.
 OPERATING_ROLES = {"Founder", "Producer"}
 
 
-def rate(pct):
-    """A Percent field value (10 = 10%) as the engine's fractional rate."""
-    return to_decimal(pct or 0) / 100
-
-
-def to_engine_lines(rows):
-    """Cost-line rows (child docs or plain dicts) as engine CostLines."""
-    lines = []
-    for row in rows:
-        try:
-            tax_type = pricing.TaxType.parse(row.get("tax_type") or "")
-        except ValueError:
-            frappe.throw(
-                _("Unknown tax type: {0}").format(row.get("tax_type")),
-                frappe.ValidationError,
-            )
-        lines.append(
-            pricing.CostLine(
-                qty1=row.get("qty1") or 0,
-                qty2=row.get("qty2") or 0,
-                unit_price=row.get("unit_price") or 0,
-                tax_type=tax_type,
-                vendor_mf_rate=rate(row.get("vendor_mf_pct")),
-                markup_rate=rate(row.get("markup_pct")),
-            )
-        )
-    return lines
-
-
-def client_prices(packages, lines):
-    """The prices the client is shown, as plain numbers.
-
-    Revenue is measured against these - not the engine's line total -
-    because a rounded-up package is what the client actually pays
-    (issue #32). Rows may be child docs or plain dicts.
-    """
-    return [
-        entry["price"]
-        for entry in quote.client_entries(
-            [as_dict(package) for package in packages],
-            [as_dict(line) for line in lines],
-        )
-    ]
-
-
 def as_dict(row):
     return row if isinstance(row, dict) else row.as_dict()
-
-
-def deal_chain(doc, result):
-    """The client-facing chain for a deal, given its engine result."""
-    return quote.quote_chain(
-        client_prices(doc.packages, doc.cost_lines),
-        cost_basis=result.total_profit_cost_basis,
-        input_vat=result.total_input_vat,
-        mf_rate=rate(doc.quote_mf_pct),
-        vat_rate=rate(doc.vat_pct),
-        commission_rate=rate(doc.commission_pct),
-    )
 
 
 def margin_floor_pct():
@@ -235,6 +179,27 @@ class Deal(Document):
                     frappe.ValidationError,
                 )
 
+    def breakdown_view(self):
+        """The one money view of this deal's breakdown (lib/breakdown).
+
+        Adapter duties only: child rows become plain mappings, the
+        stored floor joins the params, and the lib's ValueError comes
+        back out as a validation error.
+        """
+        try:
+            return breakdown.breakdown_view(
+                [as_dict(row) for row in self.cost_lines],
+                [as_dict(package) for package in self.packages],
+                quote_mf_pct=self.quote_mf_pct,
+                vat_pct=self.vat_pct,
+                # Commission only feeds the founder block; whether that
+                # block is exposed is each caller's business.
+                commission_pct=self.commission_pct,
+                margin_floor_pct=margin_floor_pct(),
+            )
+        except ValueError as err:
+            frappe.throw(_(str(err)), frappe.ValidationError)
+
     def compute_breakdown(self):
         """Store the engine's producer-visible outputs (the T5 seam).
 
@@ -258,52 +223,24 @@ class Deal(Document):
                 package.variance = package.price
             return
 
-        params = pricing.DealParams(
-            quote_mf_rate=rate(self.quote_mf_pct),
-            vat_rate=rate(self.vat_pct),
-            # Commission only feeds founder-only numbers, none of which
-            # are stored here; pass it anyway for completeness.
-            commission_rate=rate(self.commission_pct),
-        )
-        result = pricing.compute_quote(to_engine_lines(self.cost_lines), params)
-
-        for row, line in zip(self.cost_lines, result.lines):
-            row.subtotal = round_vnd(line.subtotal_int_net)
-            row.cost_basis = round_vnd(line.profit_cost_basis)
-            row.input_vat = round_vnd(line.input_vat)
-            row.quote_price = round_vnd(line.budget)
-            row.margin = round_vnd(line.margin)
-
-        # Packages first: the quote totals are measured against their
-        # prices, so they have to exist before the totals are computed.
-        budgets = {}
-        for row, line in zip(self.cost_lines, result.lines):
-            if row.package:
-                budgets.setdefault(row.package, []).append(line.budget)
-        for package in self.packages:
-            priced = pricing.package_price(
-                budgets.get(package.title, []),
-                # The Check carries "is this set" - a Currency column
-                # cannot, and an override of literally 0 đồng (free of
-                # charge) is a real quote the founder sends.
-                package.price_override if package.has_price_override else None,
-            )
-            package.default_price = round_vnd(priced.default)
-            package.price = round_vnd(priced.price)
-            package.variance = round_vnd(priced.variance)
-
-        chain = deal_chain(self, result)
-        self.quote_subtotal = round_vnd(chain.subtotal)
-        self.quote_mf_amount = round_vnd(chain.mf_amount)
-        self.quote_vat_amount = round_vnd(chain.vat_amount)
-        self.quote_total = round_vnd(chain.total)
-        self.quote_margin = round_vnd(chain.margin)
-        self.quote_margin_pct = (
-            float(chain.margin_fraction * 100)
-            if chain.margin_fraction is not None
-            else 0
-        )
-        self.floor_breached = 1 if floor_breached(chain.margin_fraction) else 0
+        view = self.breakdown_view()
+        for row, line in zip(self.cost_lines, view["lines"]):
+            row.subtotal = line["subtotal"]
+            row.cost_basis = line["cost_basis"]
+            row.input_vat = line["input_vat"]
+            row.quote_price = line["quote_price"]
+            row.margin = line["margin"]
+        for package, priced in zip(self.packages, view["packages"]):
+            package.default_price = priced["default_price"]
+            package.price = priced["price"]
+            package.variance = priced["variance"]
+        self.quote_subtotal = view["subtotal"]
+        self.quote_mf_amount = view["management_fee"]
+        self.quote_vat_amount = view["vat"]
+        self.quote_total = view["total"]
+        self.quote_margin = view["margin"]
+        self.quote_margin_pct = view["margin_pct"] or 0
+        self.floor_breached = 1 if view["floor_breached"] else 0
 
     def on_update(self):
         self.store_founder_chain()
@@ -330,22 +267,19 @@ class Deal(Document):
                 "vat_payable": 0,
             }
         else:
-            params = pricing.DealParams(
-                quote_mf_rate=rate(self.quote_mf_pct),
-                vat_rate=rate(self.vat_pct),
-                commission_rate=rate(self.commission_pct),
-            )
-            result = pricing.compute_quote(to_engine_lines(self.cost_lines), params)
             # Same client-facing revenue the producer sees on the quote,
             # so commission and tax are taken on what we actually charge.
-            chain = deal_chain(self, result)
+            founder = self.breakdown_view()["founder"]
             values = {
-                "total_commission": round_vnd(chain.total_commission),
-                "cm": round_vnd(chain.cm),
-                "profit_before_tax": round_vnd(chain.profit_before_tax),
-                "tndn": round_vnd(chain.tndn),
-                "net_profit": round_vnd(chain.net_profit),
-                "vat_payable": round_vnd(chain.vat_payable),
+                field: founder[field]
+                for field in (
+                    "total_commission",
+                    "cm",
+                    "profit_before_tax",
+                    "tndn",
+                    "net_profit",
+                    "vat_payable",
+                )
             }
         self.db_set(values, update_modified=False)
 
