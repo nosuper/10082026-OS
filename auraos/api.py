@@ -1071,6 +1071,21 @@ def job_paperwork(job):
 
 
 @frappe.whitelist()
+def preview_job_paperwork(job, template, vendor=None, freelancer=None):
+    """The paper on screen before anything is generated (A5 round 3).
+
+    Read on the job is enough — nothing is attached; the screen shows
+    what generate would print, gap markers highlighted, and offers the
+    browser's own print dialog.
+    """
+    _check_job_permission(job, "read")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+    return paperwork_template.preview(
+        template, job, vendor=vendor, freelancer=freelancer
+    )
+
+
+@frappe.whitelist()
 def generated_papers():
     """Every paper ever generated, newest first — the registry screen.
 

@@ -458,3 +458,64 @@ def test_every_value_the_vocabulary_offers_is_a_string_or_none():
     )
 
     assert all(v is None or isinstance(v, str) for v in values.values())
+
+
+# -- A5 round 3: HTML-authored templates, previews, printable fills --
+
+
+from auraos.lib.paperwork import (  # noqa: E402
+    docx_paragraph_texts,
+    fill_html,
+    html_to_docx,
+    looks_like_html,
+)
+
+
+def test_html_builds_a_docx_with_its_formatting():
+    docx = html_to_docx(
+        '<h2 style="text-align: center">HỢP ĐỒNG</h2>'
+        "<p>Bên B: <strong>{{freelancer.full_name}}</strong></p>"
+        "<ul><li>CCCD: 123</li><li>MST: 456</li></ul>"
+    )
+    xml = zipfile.ZipFile(BytesIO(docx)).read("word/document.xml").decode()
+    assert "HỢP ĐỒNG" in xml
+    assert '<w:jc w:val="center"/>' in xml
+    assert "<w:b/>" in xml
+    # Prefix and text are separate runs; read the paragraph as a reader would.
+    assert "• CCCD: 123" in docx_paragraph_texts(docx)
+    # The placeholder survives as text, ready for fill_docx.
+    assert "{{freelancer.full_name}}" in xml
+
+
+def test_html_docx_paragraphs_read_back_in_order():
+    docx = html_to_docx("<p>một</p><p>hai</p><ol><li>ba</li><li>bốn</li></ol>")
+    assert docx_paragraph_texts(docx) == ["một", "hai", "1. ba", "2. bốn"]
+
+
+def test_fill_html_drops_values_in_and_marks_the_gaps():
+    filled = fill_html(
+        "<p>Tên: {{freelancer.full_name}} — CCCD: {{freelancer.id_number}}"
+        " — {{no.such_field}}</p>",
+        {"freelancer.full_name": "Ngô Quay Phim", "freelancer.id_number": None},
+    )
+    assert "Ngô Quay Phim" in filled.html
+    assert "«thiếu: freelancer.id_number»" in filled.html
+    assert "«không có trường: no.such_field»" in filled.html
+    assert '<mark data-gap="1">' in filled.html
+    assert filled.missing == ("freelancer.id_number",)
+    assert filled.unknown == ("no.such_field",)
+
+
+def test_fill_html_escapes_record_values():
+    filled = fill_html(
+        "<p>{{client.company_name}}</p>",
+        {"client.company_name": 'Công ty <script>alert("x")</script>'},
+    )
+    assert "<script>" not in filled.html
+    assert "&lt;script&gt;" in filled.html
+
+
+def test_looks_like_html_separates_the_two_source_kinds():
+    assert looks_like_html("<p>hi</p>")
+    assert looks_like_html("  \n<h1>hi</h1>")
+    assert not looks_like_html("DÒNG MỘT\nDÒNG HAI")

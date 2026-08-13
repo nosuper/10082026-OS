@@ -67,9 +67,32 @@
           </select>
         </label>
 
+        <Button :loading="previewer.loading" @click="openPreview">
+          Preview
+        </Button>
         <Button variant="solid" :loading="generator.loading" @click="generate">
           Generate
         </Button>
+      </div>
+
+      <!-- The paper before it exists (A5 round 3): read every value on
+           screen, print straight from the browser — the .docx is only
+           for the records once it's right. -->
+      <div v-if="preview" class="mt-3 rounded-md border">
+        <div class="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-3 py-1.5">
+          <span class="text-xs font-semibold text-gray-700">Preview</span>
+          <span v-if="previewGaps.length" class="text-xs text-amber-700">
+            {{ previewGaps.length }} gap{{ previewGaps.length > 1 ? "s" : "" }} highlighted
+          </span>
+          <span v-else class="text-xs text-green-700">Every field filled</span>
+          <Button class="ml-auto" @click="printPreview">Print</Button>
+          <Button @click="preview = null">Close</Button>
+        </div>
+        <div
+          ref="previewBody"
+          class="aura-paper prose prose-sm max-w-none px-6 py-5"
+          v-html="preview.html"
+        ></div>
       </div>
 
       <p v-if="template?.unknown_placeholders?.length" class="mt-2 text-xs text-amber-700">
@@ -249,6 +272,55 @@ const generator = createResource({
   },
 })
 
+// -- preview & print (A5 round 3) --
+
+const preview = ref(null)
+const previewBody = ref(null)
+
+const previewer = createResource({
+  url: "auraos.api.preview_job_paperwork",
+  onSuccess(result) {
+    error.value = ""
+    preview.value = result
+  },
+  onError(err) {
+    preview.value = null
+    onFail(err)
+  },
+})
+
+const previewGaps = computed(() => [
+  ...(preview.value?.missing || []),
+  ...(preview.value?.unknown || []),
+])
+
+function openPreview() {
+  preview.value = null
+  previewer.submit({
+    job: props.job,
+    template: chosen.value,
+    vendor: vendor.value || null,
+    freelancer: freelancer.value || null,
+  })
+}
+
+function printPreview() {
+  const body = previewBody.value?.innerHTML || preview.value?.html || ""
+  const printWindow = window.open("", "_blank")
+  if (!printWindow) return
+  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8">
+    <title>Print</title>
+    <style>
+      body { font-family: "Times New Roman", serif; font-size: 13pt;
+             line-height: 1.6; max-width: 17cm; margin: 1cm auto; }
+      mark[data-gap] { background: #fde68a; }
+      h1, h2, h3 { line-height: 1.3; }
+    </style></head><body>${body}</body></html>`)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
+}
+
 function generate() {
   generated.value = null
   generator.submit({
@@ -259,3 +331,14 @@ function generate() {
   })
 }
 </script>
+
+<style>
+/* The preview's gap markers — v-html content is out of Tailwind's
+   reach, so the highlight is plain CSS. */
+.aura-paper mark[data-gap] {
+  background-color: #fde68a;
+  color: #92400e;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+</style>

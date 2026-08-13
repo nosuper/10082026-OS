@@ -45,12 +45,18 @@ class PaperworkTemplate(Document):
         )
         if unchanged:
             return
+        # The web editor writes HTML; the first seeds wrote plain
+        # paragraph lines. Both stay buildable.
+        if paperwork.looks_like_html(self.template_source):
+            content = paperwork.html_to_docx(self.template_source)
+        else:
+            content = paperwork.build_docx(self.template_source.splitlines())
         built = frappe.get_doc(
             {
                 "doctype": "File",
                 "file_name": f"{self.template_name}.docx",
                 "is_private": 1,
-                "content": paperwork.build_docx(self.template_source.splitlines()),
+                "content": content,
             }
         ).insert()
         self.template_file = built.file_url
@@ -108,6 +114,76 @@ def party(doctype, name):
     return frappe.db.get_value(doctype, name, "*", as_dict=True)
 
 
+def values_for(job, vendor=None, freelancer=None):
+    """Everything a paper about this job may say — one builder, shared
+    by the generated .docx and the on-screen preview so the two can
+    never disagree about a value."""
+    return paperwork.document_values(
+        job=job.as_dict(),
+        client=party("Party Company", job.company),
+        contact=party("Party Contact", job.contact),
+        vendor=party("Party Company", vendor),
+        freelancer=party("Party Contact", freelancer),
+        today=frappe.utils.getdate(),
+    )
+
+
+def loaded_template(template_name):
+    template = frappe.get_doc("Paperwork Template", template_name)
+    if template.disabled:
+        frappe.throw(
+            _("{0} is disabled and cannot be used.").format(template.template_name),
+            frappe.ValidationError,
+        )
+    return template
+
+
+def preview(template_name, job_name, vendor=None, freelancer=None):
+    """The paper as it would print, as HTML for the screen (A5 round 3).
+
+    A web-authored template previews from its own HTML source. An
+    uploaded Word template previews as its filled text, paragraph by
+    paragraph — formatting stays in the .docx, but every word and every
+    gap marker is on screen before anything is generated.
+    """
+    template = loaded_template(template_name)
+    job = frappe.get_doc("Job", job_name)
+    values = values_for(job, vendor=vendor, freelancer=freelancer)
+
+    source = template.get("template_source") or ""
+    if source.strip():
+        if not paperwork.looks_like_html(source):
+            source = "".join(
+                f"<p>{frappe.utils.escape_html(line)}</p>"
+                for line in source.splitlines()
+            )
+        filled = paperwork.fill_html(source, values)
+        return {
+            "html": filled.html,
+            "missing": list(filled.missing),
+            "unknown": list(filled.unknown),
+        }
+
+    docx = paperwork.fill_docx(content(template), values)
+    paragraphs = paperwork.docx_paragraph_texts(docx.document)
+    html = "".join(
+        f"<p>{_mark_gaps(frappe.utils.escape_html(text))}</p>"
+        for text in paragraphs
+    )
+    return {
+        "html": html,
+        "missing": list(docx.missing),
+        "unknown": list(docx.unknown),
+    }
+
+
+def _mark_gaps(text):
+    """Wrap the «…» markers so the preview can highlight them."""
+    import re
+
+    return re.sub(r"(«[^»]*»)", r'<mark data-gap="1">\1</mark>', text)
+
+
 def generate(template_name, job_name, vendor=None, freelancer=None):
     """Fill a template for a job and attach the result to that job.
 
@@ -115,24 +191,12 @@ def generate(template_name, job_name, vendor=None, freelancer=None):
     filled. Both matter: the caller shows the document *and* what is
     wrong with it, because the founder is about to print it.
     """
-    template = frappe.get_doc("Paperwork Template", template_name)
-    if template.disabled:
-        frappe.throw(
-            _("{0} is disabled and cannot be used.").format(template.template_name),
-            frappe.ValidationError,
-        )
+    template = loaded_template(template_name)
     job = frappe.get_doc("Job", job_name)
 
     filled = paperwork.fill_docx(
         content(template),
-        paperwork.document_values(
-            job=job.as_dict(),
-            client=party("Party Company", job.company),
-            contact=party("Party Contact", job.contact),
-            vendor=party("Party Company", vendor),
-            freelancer=party("Party Contact", freelancer),
-            today=frappe.utils.getdate(),
-        ),
+        values_for(job, vendor=vendor, freelancer=freelancer),
     )
 
     document = frappe.get_doc(

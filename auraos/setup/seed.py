@@ -529,29 +529,28 @@ def seed_a1_stale_deal(deal_name):
 # sees both the editor's product and the freelancer picker on a job.
 FREELANCER_CONTRACT = "Hợp đồng cộng tác viên (mẫu)"
 
-FREELANCER_CONTRACT_SOURCE = "\n".join(
+# HTML, as the rich editor writes it — headings, bold labels, alignment
+# all survive into the built .docx via html_to_docx.
+FREELANCER_CONTRACT_SOURCE = "".join(
     [
-        "HỢP ĐỒNG CỘNG TÁC VIÊN",
-        "",
-        "Hôm nay, ngày {{today.day}} tháng {{today.month}} năm {{today.year}},",
-        "chúng tôi gồm:",
-        "",
-        "BÊN A (Bên thuê): công ty — theo giấy phép kinh doanh.",
-        "",
-        "BÊN B (Cộng tác viên): {{freelancer.full_name}}",
-        "CCCD: {{freelancer.id_number}}",
-        "Mã số thuế cá nhân: {{freelancer.tax_code}}",
-        "Địa chỉ: {{freelancer.permanent_address}}",
-        "Điện thoại: {{freelancer.phone}}",
-        "",
-        "Điều 1. Công việc",
-        "Bên B tham gia sản xuất: {{job.title}} (mã {{job.code}}).",
-        "",
-        "Điều 2. Thanh toán",
-        "Thù lao theo thỏa thuận, khấu trừ 10% thuế TNCN theo quy định.",
-        "Chuyển khoản: {{freelancer.bank_name}} — {{freelancer.bank_account_number}}.",
-        "",
-        "ĐẠI DIỆN BÊN A                    BÊN B",
+        '<h2 style="text-align: center">HỢP ĐỒNG CỘNG TÁC VIÊN</h2>',
+        "<p>Hôm nay, ngày {{today.day}} tháng {{today.month}} năm "
+        "{{today.year}}, chúng tôi gồm:</p>",
+        "<p><strong>BÊN A (Bên thuê):</strong> công ty — theo giấy phép kinh doanh.</p>",
+        "<p><strong>BÊN B (Cộng tác viên):</strong> {{freelancer.full_name}}</p>",
+        "<ul>",
+        "<li>CCCD: {{freelancer.id_number}}</li>",
+        "<li>Mã số thuế cá nhân: {{freelancer.tax_code}}</li>",
+        "<li>Địa chỉ: {{freelancer.permanent_address}}</li>",
+        "<li>Điện thoại: {{freelancer.phone}}</li>",
+        "</ul>",
+        "<h3>Điều 1. Công việc</h3>",
+        "<p>Bên B tham gia sản xuất: {{job.title}} (mã {{job.code}}).</p>",
+        "<h3>Điều 2. Thanh toán</h3>",
+        "<p>Thù lao theo thỏa thuận, khấu trừ 10% thuế TNCN theo quy định.</p>",
+        "<p>Chuyển khoản: {{freelancer.bank_name}} — "
+        "{{freelancer.bank_account_number}}.</p>",
+        "<p><strong>ĐẠI DIỆN BÊN A</strong>          <strong>BÊN B</strong></p>",
     ]
 )
 

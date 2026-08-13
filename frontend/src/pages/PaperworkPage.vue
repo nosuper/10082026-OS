@@ -82,14 +82,16 @@
         placeholder="Template name — e.g. Hợp đồng cộng tác viên"
         class="mb-2 w-full rounded border-gray-200 px-2 py-1.5 text-sm sm:w-96"
       />
-      <textarea
-        ref="editorArea"
-        v-model="editor.template_source"
-        rows="14"
-        spellcheck="false"
-        class="w-full rounded border-gray-200 px-3 py-2 font-mono text-sm leading-relaxed"
-        placeholder="HỢP ĐỒNG CỘNG TÁC VIÊN&#10;&#10;Hôm nay, ngày {{ '{{today.day}}' }}…"
-      ></textarea>
+      <!-- Rich, like a document, not a code box (founder, A5 round 3):
+           headings, bold, lists and alignment survive into the built
+           .docx via html_to_docx. -->
+      <TextEditor
+        ref="editorRef"
+        :content="editor.template_source"
+        :fixed-menu="true"
+        editor-class="prose prose-sm min-h-[18rem] max-w-none rounded-b border border-t-0 border-gray-200 px-4 py-3 focus:outline-none"
+        @change="(html) => (editor.template_source = html)"
+      />
       <p class="mb-1 mt-2 text-xs font-medium text-gray-600">
         Click to insert at the cursor:
       </p>
@@ -113,8 +115,29 @@
       :class="row.disabled ? 'opacity-60' : ''"
     >
       <div class="flex flex-wrap items-center gap-2">
-        <a :href="row.template_file" class="font-medium text-blue-700 hover:underline">
+        <!-- A web template's name opens its editor — clicking a name
+             that downloads a file was round 3's first complaint. -->
+        <button
+          v-if="row.template_source && library.data?.can_manage"
+          class="font-medium text-blue-700 hover:underline"
+          @click="openEditor(row)"
+        >
           {{ row.template_name }}
+        </button>
+        <a
+          v-else
+          :href="row.template_file"
+          class="font-medium text-blue-700 hover:underline"
+        >
+          {{ row.template_name }}
+        </a>
+        <a
+          v-if="row.template_source"
+          :href="row.template_file"
+          class="text-gray-400 hover:text-gray-700"
+          title="Download the built .docx"
+        >
+          <FeatherIcon name="download" class="h-3.5 w-3.5" />
         </a>
         <span v-if="row.disabled" class="text-xs text-gray-500">retired</span>
         <span
@@ -263,8 +286,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from "vue"
-import { Button, ErrorMessage, FeatherIcon, FileUploader, createResource } from "frappe-ui"
+import { computed, ref } from "vue"
+import {
+  Button,
+  ErrorMessage,
+  FeatherIcon,
+  FileUploader,
+  TextEditor,
+  createResource,
+} from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 const DOCX =
@@ -356,31 +386,32 @@ function remove(row) {
 // -- the web editor (A5 round 2) --
 
 const editor = ref(null)
-const editorArea = ref(null)
+const editorRef = ref(null)
 
 function openEditor(row = null) {
+  const source = row?.template_source || ""
   editor.value = {
     name: row?.name || null,
     template_name: row?.template_name || "",
-    template_source: row?.template_source || "",
+    // The first seeds wrote plain paragraph lines; the rich editor
+    // speaks HTML. Upgrade on open — saving keeps the HTML form.
+    template_source: source.trimStart().startsWith("<")
+      ? source
+      : source
+          .split("\n")
+          .map((line) => `<p>${line}</p>`)
+          .join(""),
   }
 }
 
 function insertPlaceholder(field) {
-  const area = editorArea.value
   const token = braced(field)
-  if (!area) {
-    editor.value.template_source += token
-    return
+  const tiptap = editorRef.value?.editor
+  if (tiptap) {
+    tiptap.chain().focus().insertContent(token).run()
+  } else {
+    editor.value.template_source += `<p>${token}</p>`
   }
-  const start = area.selectionStart ?? editor.value.template_source.length
-  const end = area.selectionEnd ?? start
-  const text = editor.value.template_source
-  editor.value.template_source = text.slice(0, start) + token + text.slice(end)
-  nextTick(() => {
-    area.focus()
-    area.selectionStart = area.selectionEnd = start + token.length
-  })
 }
 
 // set_value, not client.save: a partial doc through client.save would

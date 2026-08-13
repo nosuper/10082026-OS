@@ -35,6 +35,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any, Iterable, Mapping, Sequence
 from xml.sax.saxutils import escape, unescape
@@ -426,6 +427,221 @@ _ROOT_RELS = (
     'Target="word/document.xml"/>'
     "</Relationships>"
 )
+
+
+@dataclass(frozen=True)
+class FilledHtml:
+    """A web preview of a paper and everything it could not fill."""
+
+    html: str
+    missing: tuple[str, ...] = ()
+    unknown: tuple[str, ...] = ()
+
+
+def fill_html(source: str, values: Mapping[str, Any]) -> FilledHtml:
+    """The template's own HTML with values dropped in — the on-screen
+    preview and print view (A5 round 3).
+
+    Values are escaped on the way in: they come from records, and a
+    company name must never execute as markup. An unfillable name keeps
+    the exact «…» marker the printed docx would carry, wrapped in
+    ``<mark data-gap>`` so the screen can highlight it.
+    """
+    report = _Report()
+
+    def replace(match: re.Match) -> str:
+        name = match.group(1)
+        known = name in values
+        value = values.get(name)
+        if value is None or value == "":
+            report.note(name, known)
+            marker = (MISSING_MARKER if known else UNKNOWN_MARKER).format(name=name)
+            return f'<mark data-gap="1">{escape(marker)}</mark>'
+        return escape(str(value))
+
+    return FilledHtml(
+        html=PLACEHOLDER.sub(replace, source),
+        missing=tuple(report.missing),
+        unknown=tuple(report.unknown),
+    )
+
+
+# -- building a .docx from HTML written in the app's editor --
+
+# The subset the web editor produces that survives into the paper.
+# Anything else degrades to its text — a paper is clauses and headings,
+# not a layout engine.
+_HEADING_SIZES = {"h1": 32, "h2": 28, "h3": 26}  # half-points
+_ALIGNMENTS = {"center": "center", "right": "right", "justify": "both"}
+
+
+class _HtmlPaper(HTMLParser):
+    """Parses the editor's HTML into paragraphs of formatted runs."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.paragraphs: list[dict] = []
+        self._runs: list[dict] = []
+        self._bold = 0
+        self._italic = 0
+        self._underline = 0
+        self._size: int | None = None
+        self._align: str | None = None
+        self._lists: list[dict] = []
+        self._in_block = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("strong", "b"):
+            self._bold += 1
+        elif tag in ("em", "i"):
+            self._italic += 1
+        elif tag == "u":
+            self._underline += 1
+        elif tag == "br":
+            self._runs.append({"break": True})
+        elif tag in ("ul", "ol"):
+            self._lists.append({"ordered": tag == "ol", "count": 0})
+        elif tag in ("p", "h1", "h2", "h3", "li"):
+            self._open_block(tag, attrs)
+
+    def handle_endtag(self, tag):
+        if tag in ("strong", "b"):
+            self._bold = max(0, self._bold - 1)
+        elif tag in ("em", "i"):
+            self._italic = max(0, self._italic - 1)
+        elif tag == "u":
+            self._underline = max(0, self._underline - 1)
+        elif tag in ("ul", "ol"):
+            if self._lists:
+                self._lists.pop()
+        elif tag in ("p", "h1", "h2", "h3", "li"):
+            self._close_block()
+
+    def handle_data(self, data):
+        if not data:
+            return
+        # Text outside any block (legacy plain fragments) still prints.
+        if not self._in_block and data.strip():
+            self._open_block("p", {})
+        if self._in_block:
+            self._runs.append(
+                {
+                    "text": data,
+                    "bold": self._bold > 0 or self._size is not None,
+                    "italic": self._italic > 0,
+                    "underline": self._underline > 0,
+                    "size": self._size,
+                }
+            )
+
+    def _open_block(self, tag, attrs):
+        self._close_block()
+        self._in_block = True
+        self._size = _HEADING_SIZES.get(tag)
+        style = attrs.get("style") or ""
+        self._align = next(
+            (
+                word_value
+                for css_value, word_value in _ALIGNMENTS.items()
+                if f"text-align: {css_value}" in style
+                or f"text-align:{css_value}" in style
+            ),
+            None,
+        )
+        if tag == "li" and self._lists:
+            entry = self._lists[-1]
+            entry["count"] += 1
+            prefix = f"{entry['count']}. " if entry["ordered"] else "• "
+            indent = "    " * (len(self._lists) - 1)
+            self._runs.append({"text": indent + prefix, "bold": False,
+                               "italic": False, "underline": False, "size": None})
+
+    def _close_block(self):
+        if not self._in_block:
+            return
+        self.paragraphs.append({"align": self._align, "runs": self._runs})
+        self._runs = []
+        self._in_block = False
+        self._size = None
+        self._align = None
+
+    def close(self):
+        super().close()
+        self._close_block()
+
+
+def _run_xml(run: dict) -> str:
+    if run.get("break"):
+        return "<w:r><w:br/></w:r>"
+    props = ""
+    if run.get("bold"):
+        props += "<w:b/>"
+    if run.get("italic"):
+        props += "<w:i/>"
+    if run.get("underline"):
+        props += '<w:u w:val="single"/>'
+    if run.get("size"):
+        props += f'<w:sz w:val="{run["size"]}"/><w:szCs w:val="{run["size"]}"/>'
+    rpr = f"<w:rPr>{props}</w:rPr>" if props else ""
+    return f'<w:r>{rpr}<w:t xml:space="preserve">{escape(run["text"])}</w:t></w:r>'
+
+
+def _paragraph_xml(paragraph: dict) -> str:
+    ppr = (
+        f'<w:pPr><w:jc w:val="{paragraph["align"]}"/></w:pPr>'
+        if paragraph.get("align")
+        else ""
+    )
+    runs = "".join(_run_xml(run) for run in paragraph["runs"])
+    return f"<w:p>{ppr}{runs}</w:p>"
+
+
+def html_to_docx(source: str) -> bytes:
+    """A .docx built from the web editor's HTML (A5 round 3).
+
+    Word's own vocabulary for what the editor offers: bold, italic,
+    underline, three heading sizes, alignment, bullet and numbered
+    lists (as visible prefixes). Placeholders pass through as text and
+    are filled exactly like an uploaded template's.
+    """
+    parser = _HtmlPaper()
+    parser.feed(source)
+    parser.close()
+    body = "".join(_paragraph_xml(p) for p in parser.paragraphs) or "<w:p/>"
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+        'wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _CONTENT_TYPES)
+        archive.writestr("_rels/.rels", _ROOT_RELS)
+        archive.writestr("word/document.xml", document)
+    return out.getvalue()
+
+
+def docx_paragraph_texts(data: bytes) -> list[str]:
+    """Every paragraph's visible text, in order.
+
+    The preview of an uploaded template: its formatting stays in the
+    .docx, but every word — and every gap marker — belongs on screen
+    before anything is generated (A5 round 3).
+    """
+    archive = _archive(data)
+    xml = archive.read("word/document.xml").decode("utf-8")
+    return [
+        unescape("".join(_TEXT.findall(paragraph)))
+        for paragraph in _PARAGRAPH.findall(xml)
+    ]
+
+
+def looks_like_html(source: str) -> bool:
+    """Which builder a template_source belongs to: the web editor's
+    HTML, or the legacy plain paragraphs the first seeds used."""
+    return (source or "").lstrip().startswith("<")
 
 
 def build_docx(paragraphs: Sequence[str]) -> bytes:
