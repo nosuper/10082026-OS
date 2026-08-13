@@ -548,3 +548,135 @@ class TestDealTableEditing(FrappeTestCase):
             create_deal_table_row(
                 {"title": "Forbidden", "company": company.name}
             )
+
+
+class TestTierSuggestion(FrappeTestCase):
+    """Phase B (playbook §2.2): positioning is the input, tier is the
+    output — derived by the rules unless someone pins it by hand."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        make_test_user(FOUNDER, "Founder")
+        make_test_user(PRODUCER, "Producer")
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+
+    def tearDown(self):
+        frappe.set_user("Administrator")
+        super().tearDown()
+
+    def test_budget_bands_suggest_the_tier(self):
+        self.assertEqual(
+            make_deal(title="B nhỏ", estimated_budget=30_000_000).tier, "Tier 1"
+        )
+        # Boundaries are inclusive: "từ 50 triệu" means 50 triệu counts.
+        self.assertEqual(
+            make_deal(title="B vừa", estimated_budget=50_000_000).tier, "Tier 2"
+        )
+        self.assertEqual(
+            make_deal(title="B lớn", estimated_budget=200_000_000).tier, "Tier 3"
+        )
+
+    def test_the_founders_explicit_tier_survives(self):
+        deal = make_deal(
+            title="Chốt tay", estimated_budget=300_000_000, tier="Tier 1"
+        )
+        self.assertEqual(deal.tier, "Tier 1")
+        deal.estimated_budget = 400_000_000
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 1")
+
+    def test_an_auto_tier_follows_the_budget_as_it_changes(self):
+        deal = make_deal(title="Budget đổi", estimated_budget=30_000_000)
+        self.assertEqual(deal.tier, "Tier 1")
+        deal.estimated_budget = 250_000_000
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 3")
+
+    def test_brand_positioning_is_tier_3_whatever_it_pays(self):
+        deal = make_deal(
+            title="Passion nhỏ", estimated_budget=10_000_000, positioning="Brand"
+        )
+        self.assertEqual(deal.tier, "Tier 3")
+
+    def test_clearing_a_pinned_tier_hands_it_back_to_the_rules(self):
+        deal = make_deal(
+            title="Bỏ pin", estimated_budget=300_000_000, tier="Tier 1"
+        )
+        deal.tier = ""
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 3")
+        # ...and it keeps tracking afterwards.
+        deal.estimated_budget = 60_000_000
+        deal.save()
+        self.assertEqual(deal.tier, "Tier 2")
+
+    def test_a_positioning_job_type_is_tier_3_whatever_it_pays(self):
+        frappe.db.set_value("Project Type", "TVC", "is_positioning", 1)
+        try:
+            deal = make_deal(
+                title="TVC bé", estimated_budget=10_000_000, project_type="TVC"
+            )
+            self.assertEqual(deal.tier, "Tier 3")
+        finally:
+            frappe.db.set_value("Project Type", "TVC", "is_positioning", 0)
+
+    def test_custom_thresholds_from_settings_are_honored(self):
+        frappe.db.set_single_value("AuraOS Settings", "tier2_threshold", 100_000_000)
+        try:
+            frappe.get_cached_doc("AuraOS Settings")  # refresh cache
+            frappe.clear_document_cache("AuraOS Settings", "AuraOS Settings")
+            deal = make_deal(title="Ngưỡng riêng", estimated_budget=90_000_000)
+            self.assertEqual(deal.tier, "Tier 1")
+        finally:
+            frappe.db.set_single_value("AuraOS Settings", "tier2_threshold", 0)
+            frappe.clear_document_cache("AuraOS Settings", "AuraOS Settings")
+
+    def test_no_budget_and_no_type_suggests_nothing(self):
+        self.assertFalse(make_deal(title="Trống trơn").tier)
+
+    def test_positioning_field_is_stored_as_given(self):
+        deal = make_deal(title="Định vị", positioning="Bridge")
+        self.assertEqual(deal.positioning, "Bridge")
+
+    def test_founder_edits_positioning_rules_and_they_bite(self):
+        from auraos import api
+
+        frappe.set_user(FOUNDER)
+        try:
+            stored = api.set_positioning_rules(
+                cash=60, bridge=25, brand=15, positioning_types=["TVC"]
+            )
+            self.assertEqual(
+                stored["mix"], {"cash": 60, "bridge": 25, "brand": 15}
+            )
+            flagged = {
+                row["name"]
+                for row in stored["project_types"]
+                if row["is_positioning"]
+            }
+            self.assertEqual(flagged, {"TVC"})
+            # The flag bites: a cheap TVC deal derives Tier 3.
+            deal = make_deal(
+                title="TVC rẻ", estimated_budget=10_000_000, project_type="TVC"
+            )
+            self.assertEqual(deal.tier, "Tier 3")
+        finally:
+            frappe.set_user(FOUNDER)
+            api.set_positioning_rules(positioning_types=[])
+
+    def test_producer_cannot_edit_positioning_rules(self):
+        from auraos import api
+
+        frappe.set_user(PRODUCER)
+        with self.assertRaises(frappe.PermissionError):
+            api.set_positioning_rules(cash=50)
+
+    def test_classification_hints_are_readable_by_a_producer(self):
+        from auraos import api
+
+        frappe.set_user(PRODUCER)
+        hints = api.classification_hints()
+        self.assertEqual(set(hints), {"cash", "bridge", "brand"})

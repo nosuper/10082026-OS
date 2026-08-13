@@ -1249,6 +1249,103 @@ def set_margin_floor(pct):
 
 
 @frappe.whitelist()
+def get_tier_thresholds():
+    """The two tier boundaries, defaults applied (playbook §2.2)."""
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    from auraos.auraos.doctype.deal.deal import tier2_threshold, tier3_threshold
+
+    return {"tier2": float(tier2_threshold()), "tier3": float(tier3_threshold())}
+
+
+@frappe.whitelist()
+def set_tier_thresholds(tier2=None, tier3=None):
+    """Store the founder's own tier boundaries; 0 falls back to the
+    playbook defaults."""
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.tier2_threshold = float(tier2 or 0)
+    settings.tier3_threshold = float(tier3 or 0)
+    settings.save()
+    return get_tier_thresholds()
+
+
+# Playbook §6.1's opening allocation, until the founder stores their
+# own numbers. Read via auraos.settings.setting so an unset field falls
+# back here instead of reading as a deliberate 0% target.
+DEFAULT_POSITIONING_MIX = {"cash": 70, "bridge": 20, "brand": 10}
+
+
+def positioning_mix():
+    from auraos.settings import setting
+
+    return {
+        key: int(setting(f"positioning_{key}_pct", None) or default)
+        for key, default in DEFAULT_POSITIONING_MIX.items()
+    }
+
+
+@frappe.whitelist()
+def get_positioning_rules():
+    """The founder's classification dials: mix targets + which job
+    types count as the positioning segment (auto Tier 3)."""
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return {
+        "mix": positioning_mix(),
+        "project_types": frappe.get_all(
+            "Project Type",
+            fields=["name", "is_positioning"],
+            order_by="name",
+        ),
+    }
+
+
+@frappe.whitelist()
+def set_positioning_rules(cash=None, bridge=None, brand=None, positioning_types=None):
+    """Store the mix targets and flag the positioning-segment job
+    types; 0/unset targets fall back to the playbook's 70/20/10."""
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.positioning_cash_pct = int(cash or 0)
+    settings.positioning_bridge_pct = int(bridge or 0)
+    settings.positioning_brand_pct = int(brand or 0)
+    settings.save()
+    flagged = set(frappe.parse_json(positioning_types or "[]"))
+    for row in frappe.get_all("Project Type", fields=["name", "is_positioning"]):
+        should = 1 if row.name in flagged else 0
+        if row.is_positioning != should:
+            frappe.db.set_value("Project Type", row.name, "is_positioning", should)
+    return get_positioning_rules()
+
+
+@frappe.whitelist()
+def classification_hints():
+    """The mix targets alone — for the deal form's positioning labels
+    and the SOP page. Readable by anyone who can read deals; the
+    founder-only dials stay behind get_positioning_rules."""
+    frappe.has_permission("Deal", "read", throw=True)
+    return positioning_mix()
+
+
+@frappe.whitelist()
+def preview_tier(estimated_budget=0, project_type=None, positioning=None):
+    """The tier the rules would assign — the deal form's live chip.
+
+    Computed here, not in the browser, so a producer session (which has
+    no read permission on Settings) sees the outcome without ever
+    learning the thresholds themselves.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    from auraos.auraos.doctype.deal.deal import derive_tier
+
+    return (
+        derive_tier(
+            float(estimated_budget or 0), project_type or None, positioning or None
+        )
+        or ""
+    )
+
+
+@frappe.whitelist()
 def get_quote_silence_days():
     frappe.has_permission("AuraOS Settings", "read", throw=True)
     return deal_quote.silence_days()

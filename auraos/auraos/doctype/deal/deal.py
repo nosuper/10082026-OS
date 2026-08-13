@@ -75,6 +75,50 @@ def margin_floor_pct():
     return frappe.db.get_single_value("AuraOS Settings", "margin_floor_pct") or 0
 
 
+# The playbook's opening suggestion (§2.2), until the founder stores
+# their own numbers in Settings. Read through auraos.settings.setting so
+# an unset field falls back here rather than reading as a 0 threshold
+# that would make every deal Tier 3.
+DEFAULT_TIER2_THRESHOLD = 50_000_000
+DEFAULT_TIER3_THRESHOLD = 200_000_000
+
+
+def tier2_threshold():
+    from auraos.settings import setting
+
+    return setting("tier2_threshold", None) or DEFAULT_TIER2_THRESHOLD
+
+
+def tier3_threshold():
+    from auraos.settings import setting
+
+    return setting("tier3_threshold", None) or DEFAULT_TIER3_THRESHOLD
+
+
+def derive_tier(estimated_budget=0, project_type=None, positioning=None):
+    """The tier the playbook's rules (§2.2) assign to a deal.
+
+    Positioning is the input, tier is the output: Brand work — or a job
+    type flagged as the positioning segment — is Tier 3 whatever it
+    pays; everything else follows the two budget thresholds. No budget
+    and no positioning signal means no tier yet.
+    """
+    if positioning == "Brand":
+        return "Tier 3"
+    if project_type and frappe.db.get_value(
+        "Project Type", project_type, "is_positioning"
+    ):
+        return "Tier 3"
+    budget = estimated_budget or 0
+    if not budget:
+        return None
+    if budget >= tier3_threshold():
+        return "Tier 3"
+    if budget >= tier2_threshold():
+        return "Tier 2"
+    return "Tier 1"
+
+
 def floor_breached(margin_fraction):
     """Whether the quote's margin falls below the global floor.
 
@@ -132,7 +176,26 @@ class Deal(Document):
         self.validate_owner()
         self.validate_lost_reason()
         self.validate_packages()
+        self.apply_tier()
         self.compute_breakdown()
+
+    def apply_tier(self):
+        """Keep the tier derived unless someone pinned it by hand.
+
+        One strategic question — positioning — plus the budget decides
+        the tier (derive_tier), so it tracks the deal as those change.
+        Writing the tier directly pins it (tier_is_manual) and the rules
+        leave it alone; clearing it hands it back to the rules.
+        """
+        previous = self.get_doc_before_save()
+        stored_tier = previous.tier if previous else None
+        if (self.tier or None) != (stored_tier or None):
+            self.tier_is_manual = 1 if self.tier else 0
+        if self.tier_is_manual:
+            return
+        self.tier = derive_tier(
+            self.estimated_budget, self.project_type, self.positioning
+        )
 
     def validate_owner(self):
         if self.deal_owner and not holds_operating_role(self.deal_owner):

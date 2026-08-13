@@ -70,6 +70,41 @@
             v-model="form.project_type"
           />
           <div>
+            <FormControl
+              type="select"
+              label="Positioning"
+              :options="POSITIONING_OPTIONS"
+              v-model="form.positioning"
+            />
+            <!-- New tab on purpose: the half-filled form stays behind. -->
+            <a
+              href="/aura/sop/deals"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-1 inline-block text-xs text-blue-600 underline"
+            >
+              SOP: cách đánh giá &amp; phân loại deal
+            </a>
+          </div>
+          <div>
+            <div class="mb-1.5 text-xs text-gray-600">Tier (auto)</div>
+            <div class="flex flex-wrap items-center gap-2 py-1.5">
+              <span
+                v-if="displayTier"
+                class="rounded-full px-2 py-0.5 text-xs"
+                :class="tierChipClass"
+              >
+                {{ displayTier }} - {{ TIER_HINTS[displayTier] }}
+              </span>
+              <span v-else class="text-xs text-gray-400">
+                follows positioning &amp; budget
+              </span>
+              <span v-if="form.tier_is_manual" class="text-xs text-amber-700">
+                pinned by hand - clear Tier in the table to go back to auto
+              </span>
+            </div>
+          </div>
+          <div>
             <div class="mb-1.5 text-xs text-gray-600">Tags</div>
             <div class="flex flex-wrap items-center gap-1.5">
               <span
@@ -276,7 +311,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue"
+import { ref, reactive, computed, watch } from "vue"
 import { useRouter } from "vue-router"
 import {
   Dialog,
@@ -316,6 +351,75 @@ const saveError = ref("")
 // name/modified/stage_history survive the round trip.
 let serverDoc = null
 const stageHistory = ref([])
+
+// Tier is derived, not chosen (playbook §2.2): positioning + budget
+// in, tier out. The form only asks the one question a human can
+// answer; the chip previews what the rules will store. Previewed
+// server-side so a producer session never learns the thresholds.
+const TIER_HINTS = {
+  "Tier 1": "cơm áo",
+  "Tier 2": "trung bình",
+  "Tier 3": "đúng định vị",
+}
+
+// Live mix targets, not a hard-coded 70/20/10: the founder tunes them
+// in Settings per business phase.
+const mix = reactive({ cash: 70, bridge: 20, brand: 10 })
+createResource({
+  url: "auraos.api.classification_hints",
+  auto: true,
+  onSuccess(value) {
+    Object.assign(mix, value)
+  },
+})
+
+const previewedTier = ref("")
+const tierPreview = createResource({
+  url: "auraos.api.preview_tier",
+  onSuccess(value) {
+    previewedTier.value = value
+  },
+})
+
+let previewTimer = null
+watch(
+  () => [
+    form.value.estimated_budget,
+    form.value.project_type,
+    form.value.positioning,
+  ],
+  ([budget, type, positioning]) => {
+    if (form.value.tier_is_manual) return
+    clearTimeout(previewTimer)
+    // Debounced: the budget field fires per keystroke.
+    previewTimer = setTimeout(() => {
+      tierPreview.submit({
+        estimated_budget: budget || 0,
+        project_type: type || "",
+        positioning: positioning || "",
+      })
+    }, 250)
+  },
+  { immediate: true }
+)
+
+const displayTier = computed(() =>
+  form.value.tier_is_manual ? form.value.tier : previewedTier.value
+)
+
+// Same palette as the board chips (DealsPage.tierClass).
+const tierChipClass = computed(() => {
+  if (displayTier.value === "Tier 3") return "bg-violet-50 font-medium text-violet-700"
+  if (displayTier.value === "Tier 2") return "bg-blue-50 text-blue-700"
+  return "bg-gray-100 text-gray-600"
+})
+
+const POSITIONING_OPTIONS = computed(() => [
+  { label: "", value: "" },
+  { label: `Cash - nuôi bộ máy (~${mix.cash}%)`, value: "Cash" },
+  { label: `Bridge - gần định vị (~${mix.bridge}%)`, value: "Bridge" },
+  { label: `Brand - đúng định vị (~${mix.brand}%)`, value: "Brand" },
+])
 
 const ownerOptions = computed(() => [
   { label: "", value: "" },

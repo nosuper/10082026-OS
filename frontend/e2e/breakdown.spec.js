@@ -47,7 +47,14 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
   await expect(page.getByText("Unsaved changes", { exact: false })).toBeVisible()
 
   await page.keyboard.press("Control+s")
-  await expect(page.getByText("Unsaved changes", { exact: false })).toHaveCount(0)
+  // "Saving…" replaces the dirty note the instant the request STARTS,
+  // so the dirty note vanishing proves nothing. Only "All changes
+  // saved" means the save landed - reloading any earlier kills the
+  // in-flight request and reads back the seeded price (CI flake,
+  // 2026-08-13).
+  await expect(
+    page.getByText("All changes saved", { exact: true })
+  ).toBeVisible()
 
   await page.reload()
   await expect(
@@ -57,10 +64,11 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
   // Put the seeded figure back — and let AUTOSAVE do it: no Ctrl+S,
   // the page saves itself a moment after the last edit.
   await directorRow(page).locator('input[inputmode="numeric"]').fill("4000000")
-  await expect(page.getByText("Unsaved changes", { exact: false })).toHaveCount(
-    0,
-    { timeout: 15_000 }
-  )
+  // Same race as Ctrl+S above: wait for the save to land, not merely
+  // for the dirty note to give way to "Saving…".
+  await expect(
+    page.getByText("All changes saved", { exact: true })
+  ).toBeVisible({ timeout: 15_000 })
   await page.reload()
   await expect(
     directorRow(page).locator('input[inputmode="numeric"]')

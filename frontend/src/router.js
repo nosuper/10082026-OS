@@ -50,6 +50,13 @@ const routes = [
     name: "Settings",
     component: () => import("./pages/SettingsPage.vue"),
   },
+  {
+    // The deal-classification SOP, linked from the deal form so the
+    // rule book is one click from where the call is made.
+    path: "/sop/deals",
+    name: "SopDeals",
+    component: () => import("./pages/SopDealsPage.vue"),
+  },
 ]
 
 // Frappe serves the SPA at /aura (website_route_rules in hooks.py).

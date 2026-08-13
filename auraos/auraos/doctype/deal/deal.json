@@ -20,6 +20,9 @@
   "source",
   "column_break_details",
   "project_type",
+  "tier",
+  "tier_is_manual",
+  "positioning",
   "deal_tags",
   "links_section",
   "deal_links",
@@ -156,6 +159,30 @@
    "options": "Project Type"
   },
   {
+   "description": "Derived, not chosen (playbook \u00a72.2): Brand positioning or a positioning-segment job type \u2192 Tier 3 whatever it pays, otherwise the budget thresholds in Settings. Setting it by hand pins it; clearing it hands it back to the rules.",
+   "fieldname": "tier",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Tier",
+   "options": "\nTier 1\nTier 2\nTier 3"
+  },
+  {
+   "default": "0",
+   "description": "Set when someone writes the tier by hand; a pinned tier is never re-derived",
+   "fieldname": "tier_is_manual",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Tier Set By Hand"
+  },
+  {
+   "description": "The 70/20/10 lens (playbook \u00a76.1): cash feeds the machine, bridge leans toward the positioning, brand IS the positioning",
+   "fieldname": "positioning",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Positioning",
+   "options": "\nCash\nBridge\nBrand"
+  },
+  {
    "fieldname": "deal_tags",
    "fieldtype": "Table MultiSelect",
    "label": "Tags",
@@ -220,7 +247,7 @@
   },
   {
    "default": "Package totals",
-   "description": "How much of the build the client's quote shows (playbook §3.3): package totals, every line with quantities (AICP-style), or one lump sum",
+   "description": "How much of the build the client's quote shows (playbook \u00a73.3): package totals, every line with quantities (AICP-style), or one lump sum",
    "fieldname": "quote_detail_level",
    "fieldtype": "Select",
    "label": "Quote Detail Level",
@@ -335,7 +362,7 @@
   {
    "fieldname": "profit_before_tax",
    "fieldtype": "Currency",
-   "label": "Lợi Nhuận Trước Thuế",
+   "label": "L\u1ee3i Nhu\u1eadn Tr\u01b0\u1edbc Thu\u1ebf",
    "permlevel": 1,
    "read_only": 1
   },
@@ -361,7 +388,7 @@
   {
    "fieldname": "vat_payable",
    "fieldtype": "Currency",
-   "label": "VAT Phải Nộp",
+   "label": "VAT Ph\u1ea3i N\u1ed9p",
    "permlevel": 1,
    "read_only": 1
   },
