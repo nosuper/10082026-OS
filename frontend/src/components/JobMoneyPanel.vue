@@ -9,6 +9,13 @@
           {{ vnd(money.data?.quoted_total || 0) }} quoted ·
           {{ vnd(money.data?.advanced_total || 0) }} advanced
         </span>
+        <Button
+          v-if="money.data?.may_advance && !showAdvanceForm"
+          class="ml-auto"
+          @click="showAdvanceForm = true"
+        >
+          + Record advance
+        </Button>
       </div>
 
       <!-- Every advance on its own line — a history, not a per-person
@@ -102,9 +109,11 @@
       </div>
       <p v-if="settled" class="mt-1 text-xs text-blue-700">{{ settled }}</p>
 
-      <!-- Recording an advance is the founder's move -->
+      <!-- Recording an advance is the founder's move; the form stays
+           out of sight until asked for (founder, A4 round 4: too much
+           on this page). -->
       <div
-        v-if="money.data?.may_advance"
+        v-if="money.data?.may_advance && showAdvanceForm"
         class="mt-3 grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center"
       >
         <span class="text-xs font-medium text-gray-700">Advance</span>
@@ -141,7 +150,19 @@
 
     <!-- The ledger, plus the full-control entry form -->
     <div class="rounded-lg border bg-white p-3">
-      <h2 class="mb-2 text-sm font-semibold text-gray-800">Expenses</h2>
+      <div class="mb-2 flex flex-wrap items-baseline gap-2">
+        <h2 class="text-sm font-semibold text-gray-800">Expenses</h2>
+        <span v-if="expenses.length" class="text-xs text-gray-500">
+          {{ expenses.length }} · {{ vnd(money.data?.spent_total || 0) }}
+        </span>
+        <Button
+          v-if="!showExpenseForm"
+          class="ml-auto"
+          @click="showExpenseForm = true"
+        >
+          + Log expense
+        </Button>
+      </div>
 
       <div class="overflow-x-auto">
       <table v-if="expenses.length" class="w-full min-w-[32rem] text-sm">
@@ -194,8 +215,10 @@
 
       <!-- One form, two shapes: the inline desktop row becomes the
            big-thumb phone layout below `sm` on its own — no separate
-           "log on phone" page to know about (founder, A4 round 3). -->
+           "log on phone" page to know about (founder, A4 round 3).
+           Hidden until asked for (round 4). -->
       <div
+        v-if="showExpenseForm"
         class="mt-3 grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center"
       >
         <VndInput
@@ -306,6 +329,11 @@ const props = defineProps({ name: { type: String, required: true } })
 
 // The job page's stat strip mirrors these numbers; it listens for this.
 const emit = defineEmits(["changed"])
+
+// Entry forms stay collapsed until asked for — the page reads first,
+// writes second (founder, A4 round 4).
+const showAdvanceForm = ref(false)
+const showExpenseForm = ref(false)
 
 const error = ref("")
 const settled = ref("")

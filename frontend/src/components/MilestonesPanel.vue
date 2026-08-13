@@ -124,6 +124,13 @@
     <p v-if="!rows.length" class="py-2 text-sm text-gray-400">
       No payment milestones — this job has nothing chasing the client.
     </p>
+    <p
+      v-if="plannedPct !== 100 && lockedPct"
+      class="mt-1 text-xs text-amber-700"
+    >
+      {{ lockedPct }}% of the plan is already invoiced or paid and cannot
+      rebalance itself — adjust the open rows to bring the total to 100%.
+    </p>
 
     <div class="mt-3 flex flex-wrap items-center gap-2">
       <Button @click="addRow">Add milestone</Button>
@@ -232,6 +239,15 @@ const overdueCount = computed(
   () => rows.value.filter((row) => row.overdue).length
 )
 
+// Why a plan may refuse to rebalance itself: the share already sitting
+// with invoiced/paid milestones. Without this line the auto-balance
+// just looks broken on a fully collected job (founder, A4 round 4).
+const lockedPct = computed(() =>
+  rows.value
+    .filter((row) => LOCKED_STATUSES.includes(row.status))
+    .reduce((sum, row) => sum + (Number(row.pct) || 0), 0)
+)
+
 const dirty = computed(() => {
   const plan = (row) => [row.name || "", row.title || "", Number(row.pct) || 0, row.trigger_stage || ""]
   const mine = rows.value.map(plan)
@@ -249,15 +265,20 @@ function addRow() {
   })
 }
 
+// Statuses whose money is already committed on paper: an invoiced or
+// paid milestone's share is history and never rebalances itself.
+const LOCKED_STATUSES = ["Invoiced", "Paid"]
+
+function isLocked(row) {
+  return LOCKED_STATUSES.includes(row.status)
+}
+
 // Editing one milestone's share rebalances the others so the plan
-// lands back on 100% by itself (founder, A4 round 3). Only rows the
-// collection hasn't touched may move — a Requested/Invoiced/Paid
-// milestone's share is already out with the client.
+// lands back on 100% by itself (founder, A4 round 3). Invoiced/Paid
+// rows never move — changing their % would rewrite an invoice the
+// client already holds.
 function rebalance(edited) {
-  const movable = rows.value.filter(
-    (row) =>
-      row !== edited && (row.status || "Not requested") === "Not requested"
-  )
+  const movable = rows.value.filter((row) => row !== edited && !isLocked(row))
   if (!movable.length) return
   const fixed = rows.value
     .filter((row) => row !== edited && !movable.includes(row))
