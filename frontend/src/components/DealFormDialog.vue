@@ -2,7 +2,7 @@
   <Dialog
     :modelValue="modelValue"
     @update:modelValue="$emit('update:modelValue', $event)"
-    :options="{ title: name ? 'Edit Deal' : 'New Deal', size: 'xl' }"
+    :options="{ title: name ? `Edit Deal · ${name}` : 'New Deal', size: 'xl' }"
   >
     <template #body-content>
       <div v-if="loading" class="py-8 text-center text-sm text-gray-500">
