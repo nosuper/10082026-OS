@@ -53,6 +53,37 @@ This closes Phase A (A1–A5). Before I move to Phase B (tier + positioning fiel
 
 >
 
+## Round 2 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+Paperwork grew three ways on your note: (1) **templates are written and
+edited on the website** — "Write one here" opens an editor with every
+placeholder as a click-to-insert chip; the .docx is rebuilt server-side
+on save; web templates wear a "web" chip and an Edit button (uploaded
+Word ones still work, edited in Word); (2) **Generated papers** — every
+paper ever generated is registered in one searchable list with who it
+was for; (3) generating for **vendor / freelancer** was already wired
+(the pickers appear when a template names them) — what was missing was
+a template that used it, so the seed ships "Hợp đồng cộng tác viên
+(mẫu)", and the freelancer picker now puts the job's own crew first.
+
+### Round-2 checks
+
+**R2.1** Paperwork → Edit "Hợp đồng cộng tác viên (mẫu)": change a
+line, click a placeholder chip to insert it, save. Does the Fills list
+follow?
+
+>
+
+**R2.2** Open the MV job → Paperwork tab → pick the freelancer contract.
+Does a Freelancer picker appear, generate a filled contract, and does
+the paper show up under Paperwork → Generated papers?
+
+>
+
+**R2.3** Anything still missing from paperwork before your team uses it?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
