@@ -59,7 +59,7 @@ compose() {
 }
 
 # Stacks nobody has touched in PRUNE_DAYS are gone when the next one
-# boots — an abandoned branch cannot hold a slot forever.
+# boots - an abandoned branch cannot hold a slot forever.
 prune_stale() {
     local now cutoff ticket
     now="$(date +%s)"
@@ -109,11 +109,11 @@ up() {
         # A full clone, not a git worktree: `bench get-app` inside the
         # container runs `git clone /workspace/repo`, and a linked
         # worktree's .git is a *file* pointing at the parent repo's
-        # object store — which isn't mounted in there, so the clone
+        # object store - which isn't mounted in there, so the clone
         # fails. A standalone clone carries its own objects.
         local url; url="$(git -C "$REPO" remote get-url origin)"
         git clone --quiet --branch "$branch" "$url" "$wt" \
-            || die "no branch $branch on origin — push it first"
+            || die "no branch $branch on origin - push it first"
     fi
 
     echo "booting $ticket on :$(( 8000 + n )) (first boot takes a few minutes)"
@@ -152,7 +152,7 @@ seed() {
     if grep -q "seed complete" <<<"$out"; then
         echo "seeded"
     elif grep -qE "No module named .auraos.setup.seed|ModuleNotFoundError" <<<"$out"; then
-        echo "no seed on this branch — starting empty"
+        echo "no seed on this branch - starting empty"
     else
         # Never swallow a real failure into "no seed": an empty preview
         # you cannot explain is worse than a loud error.

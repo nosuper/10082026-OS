@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-// A2: the breakdown editor — money that reads as money, a table that
+// A2: the breakdown editor - money that reads as money, a table that
 // fits a laptop, and a save that never scrolls away.
 
 const dealTitle = "Playwright Existing Deal"
@@ -21,7 +21,7 @@ async function openBreakdown(page) {
 
 // Text-anchored, not role-anchored: Chromium's layout-table heuristics
 // can demote a one-row table to a layout table and strip columnheader
-// roles — exactly what the seeded single-line table hits on CI.
+// roles - exactly what the seeded single-line table hits on CI.
 function columnHeader(page, name) {
   return page.locator("thead").first().getByText(name, { exact: true })
 }
@@ -29,7 +29,7 @@ function columnHeader(page, name) {
 function directorRow(page) {
   // The seed guarantees exactly one cost line; the cost-lines table is
   // the first table on the page (packages sit below it). CSS, not
-  // getByRole("table") — same layout-table heuristic risk.
+  // getByRole("table") - same layout-table heuristic risk.
   return page.locator("table").first().locator("tbody tr").first()
 }
 
@@ -38,7 +38,7 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
   const row = directorRow(page)
   await expect(row.locator("input").first()).toHaveValue("Playwright director")
 
-  // The seeded price arrives already formatted — never raw digits.
+  // The seeded price arrives already formatted - never raw digits.
   const price = row.locator('input[inputmode="numeric"]')
   await expect(price).toHaveValue("4.000.000")
 
@@ -61,7 +61,7 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
     directorRow(page).locator('input[inputmode="numeric"]')
   ).toHaveValue("5.500.000")
 
-  // Put the seeded figure back — and let AUTOSAVE do it: no Ctrl+S,
+  // Put the seeded figure back - and let AUTOSAVE do it: no Ctrl+S,
   // the page saves itself a moment after the last edit.
   await directorRow(page).locator('input[inputmode="numeric"]').fill("4000000")
   // Same race as Ctrl+S above: wait for the save to land, not merely
@@ -78,7 +78,7 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
 test("detail columns are hidden by default and the choice sticks per user", async ({ page }) => {
   await openBreakdown(page)
 
-  // Metadata stays off screen until asked for — the table must fit a
+  // Metadata stays off screen until asked for - the table must fit a
   // laptop without sideways scrolling.
   await expect(columnHeader(page, "Item Category")).toHaveCount(0)
   await expect(columnHeader(page, "Unit Price")).toBeVisible()

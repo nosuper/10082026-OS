@@ -1,4 +1,4 @@
-"""Pure-python tests for auraos.lib.quote — no Frappe required.
+"""Pure-python tests for auraos.lib.quote - no Frappe required.
 
 Two rules live here because both are decisions, not plumbing (T6 / spec
 #2, stories 20–25):
@@ -38,7 +38,7 @@ def quote(**overrides):
         "version": 2,
         "token": "abc123",
         "status": "Sent",
-        "title": "Brand film — Q4 campaign",
+        "title": "Brand film - Q4 campaign",
         "client_name": "Acme JSC",
         "published_on": datetime(2026, 8, 1, 9, 0),
         "quote_mf_pct": 10,
@@ -48,7 +48,7 @@ def quote(**overrides):
         "vat_amount": 8_800_000,
         "total": 118_800_000,
         "notes": "Valid for 30 days.",
-        # Internals — none of these may cross the boundary.
+        # Internals - none of these may cross the boundary.
         "quote_margin": 40_000_000,
         "quote_margin_pct": 33.9,
         "commission_pct": 5,
@@ -87,7 +87,7 @@ def quote(**overrides):
 def test_client_view_keeps_only_whitelisted_quote_fields():
     view = client_view(quote())
     # `sections` is derived presentation, built only from whitelisted
-    # package and line fields — no new data crosses the boundary.
+    # package and line fields - no new data crosses the boundary.
     assert set(view) == set(CLIENT_QUOTE_FIELDS) | {"packages", "sections"}
 
 
@@ -157,7 +157,7 @@ def test_quote_totals_are_built_from_the_package_prices():
 
 def test_an_overridden_package_price_moves_the_quote_total():
     # The bug this pins: a producer rounds a package up, the client sees
-    # the rounded price — and the Total must be the number they get when
+    # the rounded price - and the Total must be the number they get when
     # they add the packages up themselves, or the page contradicts itself.
     plain = quote_totals([58_400_000, 40_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
     rounded = quote_totals([60_000_000, 40_000_000], mf_rate=D("0.1"), vat_rate=D("0.08"))
@@ -201,7 +201,7 @@ def test_client_entries_lists_packages_first():
 
 def test_a_line_in_no_package_becomes_its_own_entry():
     # The founder prices some items as standalone packages and quotes
-    # them straight — an unassigned line is an offer, not an error.
+    # them straight - an unassigned line is an offer, not an error.
     entries = client_entries(
         [package("Equipment", 40_000_000)],
         [
@@ -292,7 +292,7 @@ def test_the_only_version_speaks_for_the_deal():
 
 def test_republishing_does_not_unsend_the_version_the_client_holds():
     # The regression: a quote sent 10 days ago, then re-published with a
-    # tweak, must keep saying "Sent" — otherwise it drops out of the
+    # tweak, must keep saying "Sent" - otherwise it drops out of the
     # nudge and dies of silence, which is the whole point of T6.
     versions = [version(2, "Published"), version(1, "Sent")]
     assert delivery_state(versions)["version"] == 1
@@ -417,7 +417,7 @@ def test_sections_group_lines_under_their_package():
 
 
 def test_an_override_is_folded_back_into_the_lines():
-    # The founder's A3 verdict: no Adjustment row — an overridden
+    # The founder's A3 verdict: no Adjustment row - an overridden
     # package must read as if it was simply quoted that way. 45tr
     # offered over 20+28tr of lines → 18,75tr and 26,25tr.
     sections = line_sections(
@@ -465,13 +465,13 @@ def test_each_line_carries_its_marked_up_unit_rate():
 
 def test_lump_sum_collapses_the_offer_but_keeps_the_scope():
     entry = lump_sum_entry(
-        "Social series — 6 tập",
+        "Social series - 6 tập",
         [
             {"title": "Crew", "price": 48_000_000},
             {"title": "Equipment", "price": 31_350_000},
         ],
     )
-    assert entry["title"] == "Social series — 6 tập"
+    assert entry["title"] == "Social series - 6 tập"
     assert entry["description"] == "Crew, Equipment"
     assert entry["price"] == 79_350_000
 

@@ -1,4 +1,4 @@
-"""Pure-python tests for auraos.lib.settlement — no Frappe required.
+"""Pure-python tests for auraos.lib.settlement - no Frappe required.
 
 Two decisions live here (T8 / spec #2, stories 30–34), both worth
 pinning independently of the framework:
@@ -6,12 +6,12 @@ pinning independently of the framework:
 - **Whose money is it.** An advance puts company cash in someone's
   hands; an expense paid from that float hands it back as receipts.
   What is left over is what one of them owes the other, and the
-  direction has to be named — "2.500.000" alone never says who pays.
+  direction has to be named - "2.500.000" alone never says who pays.
   Money the company paid directly is job spend that settles nothing.
 - **Categories mirror the quote.** Actual-vs-quoted per package is
   supposed to fall out with no extra work (story 32), which only holds
   if the categories an expense may carry are exactly the entries the
-  client was quoted — packages, plus any line quoted on its own.
+  client was quoted - packages, plus any line quoted on its own.
 
 The Frappe-side tests (auraos/auraos/doctype/job/test_job_money.py)
 prove the doctypes and the API actually go through these functions.
@@ -90,7 +90,7 @@ def test_spending_the_float_exactly_settles_to_even():
 
 
 def test_overspending_the_float_turns_the_debt_around():
-    """Linh covered the difference herself — the company owes her."""
+    """Linh covered the difference herself - the company owes her."""
     (held,) = floats([advance(20_000_000)], [expense(23_000_000)])
 
     assert held.amount == D(-3_000_000)
@@ -176,8 +176,8 @@ PACKAGES = [
 
 # As the engine leaves them on a saved breakdown. Đạo diễn is a
 # freelancer (Cá nhân): the company hands over the 15.000.000 he quoted
-# and remits his PIT separately, so his cost basis — 16.666.667, net
-# ÷ 0.9 — is deliberately *not* what a shoot pays out.
+# and remits his PIT separately, so his cost basis - 16.666.667, net
+# ÷ 0.9 - is deliberately *not* what a shoot pays out.
 COST_LINES = [
     {"description": "Đạo diễn", "package": "Human resources",
      "subtotal": 15_000_000, "cost_basis": 16_666_667, "input_vat": 0},
@@ -210,8 +210,8 @@ def test_two_lines_quoted_alone_under_one_name_are_one_category():
 
 
 def test_quoted_cost_is_the_cash_the_package_was_expected_to_need():
-    """What somebody hands over — cost after the vendor management fee,
-    plus VAT on an invoice — not the price the client pays for it."""
+    """What somebody hands over - cost after the vendor management fee,
+    plus VAT on an invoice - not the price the client pays for it."""
     rows = {row.title: row for row in category_actuals(PACKAGES, COST_LINES, [])}
 
     assert rows["Human resources"].quoted == D(15_000_000)
@@ -221,7 +221,7 @@ def test_quoted_cost_is_the_cash_the_package_was_expected_to_need():
 
 def test_a_freelancers_pit_is_not_money_the_shoot_pays_out():
     """The company remits it later through its accountant, and nobody
-    logs it against the job — counting it would leave every crew-heavy
+    logs it against the job - counting it would leave every crew-heavy
     package reading under budget for good."""
     (row,) = category_actuals([], COST_LINES[:1], [])
 

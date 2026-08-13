@@ -6,7 +6,7 @@ quote-level total matches the spreadsheet's cached values to the đồng.
 The workbook is the normative definition of the math; this test is what
 makes that sentence enforceable.
 
-Requires openpyxl (test dependency only — the engine itself needs nothing).
+Requires openpyxl (test dependency only - the engine itself needs nothing).
 """
 
 from decimal import Decimal

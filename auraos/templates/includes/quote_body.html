@@ -12,7 +12,7 @@
   template. Frappe's PDF pipeline (frappe.utils.pdf) extracts the
   elements with id="header-html" and id="footer-html", renders them as
   wkhtmltopdf's running header and footer, and strips them from the
-  body — so the page never shows them. `visible-pdf` is the same
+  body - so the page never shows them. `visible-pdf` is the same
   mechanism in reverse: hidden on the page, unhidden in the PDF. That is
   how the signature block reaches the printout and not the browser.
 #}
@@ -49,7 +49,7 @@
     color: #4b5563; line-height: 1.6; }
   .aura-parties .aura-quote-meta strong { color: #111827; }
 
-  /* Line-by-line detail (A3): spreadsheet-style columns — quantities,
+  /* Line-by-line detail (A3): spreadsheet-style columns - quantities,
      the marked-up unit rate and the amount. Section rows carry the
      package and its price; member lines always add up to it (an
      override is folded back into the lines, never printed as its own
@@ -105,7 +105,7 @@
 
   /* Running header and footer. Frappe extracts these two elements for
      wkhtmltopdf and strips them from the body, but only on the PDF
-     path — on the web page they would simply render, so their contents
+     path - on the web page they would simply render, so their contents
      carry `visible-pdf` too. Frappe unhides that class inside the
      extracted element, so the PDF still shows them. */
   .aura-running { font-family: -apple-system, "Segoe UI", Roboto, Helvetica,
@@ -125,7 +125,7 @@
   <script>
     /*
       Page 1 already has the letterhead, so the slim continuation header
-      belongs on pages 2+ only — and wkhtmltopdf has no option for that.
+      belongs on pages 2+ only - and wkhtmltopdf has no option for that.
       What it does give the header document is its page number, as a
       query string; Frappe's own footer template reads the same one to
       print "Page X of Y".
@@ -134,7 +134,7 @@
       prepare_header_footer copies the body's <head> and <style> tags
       into the header document but never a body script, so a script left
       outside would only reach the PDF by accident of where html5lib
-      parked it — and would silently stop working the day this include
+      parked it - and would silently stop working the day this include
       gains any markup ahead of it.
     */
     window.addEventListener("load", function () {
@@ -311,7 +311,7 @@
   {% endif %}
 
   {#
-    Signed by hand, on paper, with a seal — so this is on the PDF and
+    Signed by hand, on paper, with a seal - so this is on the PDF and
     not on the page. The client's column stays blank: filling in their
     signatory's name for them is not ours to do.
   #}

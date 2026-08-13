@@ -1,11 +1,11 @@
-"""Pure-python tests for auraos.lib.milestones — no Frappe required.
+"""Pure-python tests for auraos.lib.milestones - no Frappe required.
 
 T10 / spec #2, stories 37–40. Four decisions live in the pure module
 because each is a rule rather than plumbing:
 
 - **What the client owes when**: a milestone's amount is a share of the
   job's quoted total, and the shares must add up to the total the client
-  was quoted — no đồng invented or lost to rounding.
+  was quoted - no đồng invented or lost to rounding.
 - **The collection flow**: chưa yêu cầu → đã yêu cầu KT → đã xuất HĐ →
   đã thanh toán, and what moving along (or back along) it stamps.
 - **When a milestone is overdue**: the nudge condition.
@@ -128,7 +128,7 @@ def test_a_step_records_when_the_milestone_was_marked_at_it():
 
 def test_a_step_that_was_skipped_is_never_stamped():
     """A client who pays before the accountant issues anything leaves no
-    invoice — and "đã xuất HĐ" on a payment that was never invoiced is a
+    invoice - and "đã xuất HĐ" on a payment that was never invoiced is a
     fiction, in exactly the record T9 has to read to find uncovered
     spend."""
     stamps = stamps_for(PAID, current={}, now=NOW)
@@ -260,7 +260,7 @@ def test_zero_payment_terms_turns_the_nudge_off():
 
 
 def test_lateness_is_counted_from_the_end_of_the_terms():
-    """What the founder chases on is "8 days late", not "15 days old" —
+    """What the founder chases on is "8 days late", not "15 days old" -
     the terms are days they were never owed anything for."""
     assert days_overdue(due_on=NOW - timedelta(days=15), now=NOW, terms_days=7) == 8
 
@@ -288,7 +288,7 @@ def test_the_overdue_flag_and_the_day_count_never_disagree():
 
 
 def test_an_unrequested_milestone_past_its_terms_is_overdue_too():
-    """Nobody has even asked the accountant — that is the worst case, not
+    """Nobody has even asked the accountant - that is the worst case, not
     an exempt one."""
     due = NOW - timedelta(days=30)
     assert is_overdue(status=NOT_REQUESTED, due_on=due, now=NOW, terms_days=7)
@@ -321,7 +321,7 @@ MILESTONE = {"title": "Đặt cọc", "pct": 50, "amount": 64_152_000}
 
 def test_the_invoice_request_carries_the_client_tax_info_and_the_amount():
     text = invoice_request_text(
-        client=CLIENT, milestone=MILESTONE, job_title="MV — Hà Anh Tuấn", vat_pct=8
+        client=CLIENT, milestone=MILESTONE, job_title="MV - Hà Anh Tuấn", vat_pct=8
     )
     assert text == (
         "Nhờ chị xuất hoá đơn giúp em:\n"
@@ -330,7 +330,7 @@ def test_the_invoice_request_carries_the_client_tax_info_and_the_amount():
         "Mã số thuế: 0312345678\n"
         "Địa chỉ: 12 Nguyễn Huệ, Quận 1, TP.HCM\n"
         "\n"
-        "Nội dung: MV — Hà Anh Tuấn — Đặt cọc (50%)\n"
+        "Nội dung: MV - Hà Anh Tuấn - Đặt cọc (50%)\n"
         "Số tiền: 64.152.000 ₫ (đã gồm VAT 8%)\n"
         "Chưa VAT: 59.400.000 ₫\n"
         "VAT 8%: 4.752.000 ₫\n"
