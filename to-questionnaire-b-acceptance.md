@@ -64,7 +64,7 @@ While you are in Settings: set the mix targets and tick the real positioning-seg
 
 ## Verdict
 
-- [ ] **GO** - merge it; Phase C (hardening gate) starts
+- [x] **GO** - merge it; Phase C (hardening gate) starts (founder, from chat 2026-08-13: "B is okay to go for now")
 - [ ] **GO with notes**
 - [ ] **NO-GO** - fix the failed steps first
 
