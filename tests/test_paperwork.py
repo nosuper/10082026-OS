@@ -60,7 +60,7 @@ def document_xml(paragraphs):
 
 
 def docx_with(parts):
-    """A zip holding exactly `parts` — enough to exercise the filler."""
+    """A zip holding exactly `parts` - enough to exercise the filler."""
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, content in parts.items():
@@ -75,7 +75,7 @@ def split_runs_docx(paragraphs):
 
 
 def text_of(data, part="word/document.xml"):
-    """Every <w:t> in a part, joined — what a reader would see."""
+    """Every <w:t> in a part, joined - what a reader would see."""
     import re
 
     xml = zipfile.ZipFile(BytesIO(data)).read(part).decode()
@@ -110,7 +110,7 @@ def test_fills_a_placeholder_word_split_across_runs():
 
 
 def test_fills_a_placeholder_split_at_its_braces():
-    """The other half of the same problem — the braces themselves split."""
+    """The other half of the same problem - the braces themselves split."""
     data = split_runs_docx([["{", "{client.tax_code}", "}"]])
 
     filled = fill_docx(data, {"client.tax_code": "0312345678"})
@@ -142,7 +142,7 @@ def test_text_around_a_split_placeholder_keeps_its_own_runs():
     assert xml.count("<w:r>") == 3
     assert xml.count("<w:b/>") == 3
     # Still three runs, each holding its own words. (Their <w:t> gains
-    # xml:space="preserve" — "Điều 1. " ends in a space Word would
+    # xml:space="preserve" - "Điều 1. " ends in a space Word would
     # otherwise drop, so the attribute is a fix, not a side effect.)
     assert '<w:t xml:space="preserve">Điều 1. </w:t>' in xml
     assert text_of(filled.document) == "Điều 1. Giá trị hợp đồng: 250.000.000"
@@ -164,7 +164,7 @@ def test_a_placeholder_never_reaches_across_paragraphs():
 
 
 def test_a_value_carrying_xml_characters_is_escaped():
-    """Company names contain & — a filler that forgets breaks the file."""
+    """Company names contain & - a filler that forgets breaks the file."""
     data = split_runs_docx([["{{client.company_name}}"]])
 
     filled = fill_docx(data, {"client.company_name": "Ogilvy & Mather <VN>"})
@@ -217,7 +217,7 @@ def test_headers_and_footers_are_filled_too():
 
 
 def test_every_other_part_of_the_file_survives_byte_for_byte():
-    """A template is a designed document — logo, styles, fonts and all."""
+    """A template is a designed document - logo, styles, fonts and all."""
     logo = b"\x89PNG\r\n\x1a\nnot-really-a-png"
     data = docx_with(
         {
@@ -243,7 +243,7 @@ def test_every_other_part_of_the_file_survives_byte_for_byte():
 
 
 def test_a_paragraph_without_placeholders_is_left_exactly_as_it_was():
-    """No placeholder, no rewrite — the diff is the words that changed."""
+    """No placeholder, no rewrite - the diff is the words that changed."""
     untouched = paragraph_xml(["Điều 2. Thời hạn thực hiện"])
     data = split_runs_docx(
         [["Điều 2. Thời hạn thực hiện"], ["Mã: {{job.code}}"]]
@@ -445,7 +445,7 @@ def test_money_reads_as_vietnamese_writes_it():
     )
 
     assert values["quote.total"] == "250.000.000"
-    # Zero is a number, not an absence — it must not read as missing.
+    # Zero is a number, not an absence - it must not read as missing.
     assert values["quote.subtotal"] == "0"
 
 
@@ -494,8 +494,8 @@ def test_html_docx_paragraphs_read_back_in_order():
 
 def test_fill_html_drops_values_in_and_marks_the_gaps():
     filled = fill_html(
-        "<p>Tên: {{freelancer.full_name}} — CCCD: {{freelancer.id_number}}"
-        " — {{no.such_field}}</p>",
+        "<p>Tên: {{freelancer.full_name}} - CCCD: {{freelancer.id_number}}"
+        " - {{no.such_field}}</p>",
         {"freelancer.full_name": "Ngô Quay Phim", "freelancer.id_number": None},
     )
     assert "Ngô Quay Phim" in filled.html
@@ -521,7 +521,7 @@ def test_looks_like_html_separates_the_two_source_kinds():
     assert not looks_like_html("DÒNG MỘT\nDÒNG HAI")
 
 
-# -- A5 round 6: the symmetric reader — a docx back as styled HTML --
+# -- A5 round 6: the symmetric reader - a docx back as styled HTML --
 
 
 from auraos.lib.paperwork import docx_to_html, highlight_gaps  # noqa: E402
@@ -530,7 +530,7 @@ from auraos.lib.paperwork import docx_to_html, highlight_gaps  # noqa: E402
 def test_docx_reads_back_with_its_emphasis_and_alignment():
     docx = html_to_docx(
         '<h2 style="text-align: center"><strong>HỢP ĐỒNG</strong></h2>'
-        "<p>Bên B: <strong>Ngô Quay Phim</strong> — <em>freelancer</em></p>"
+        "<p>Bên B: <strong>Ngô Quay Phim</strong> - <em>freelancer</em></p>"
         "<p><u>Điều 1</u></p>"
     )
     html = docx_to_html(docx)
@@ -577,7 +577,7 @@ def test_docx_tables_come_back_as_tables_in_order():
 
 
 def test_a_signature_block_table_stays_borderless_on_screen():
-    # Word draws nothing for a table with no borders and no style —
+    # Word draws nothing for a table with no borders and no style -
     # the founder's real signature blocks (A5 round 7).
     body = (
         "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>"

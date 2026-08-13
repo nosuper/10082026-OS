@@ -2,12 +2,12 @@
 
 Three seams:
 
-1. **Conversion completeness** — a job created from a won deal carries
+1. **Conversion completeness** - a job created from a won deal carries
    the breakdown, packages, client and links with nothing re-entered,
    and refuses to run twice or on a deal that was never won.
-2. **Stage flow** — the fixed production stages, movable by both
+2. **Stage flow** - the fixed production stages, movable by both
    operating roles, with every move logged.
-3. **Revision counter** — rounds accumulate on the job and round 3+ is
+3. **Revision counter** - rounds accumulate on the job and round 3+ is
    flagged as a chargeable change order.
 
 Plus the standing permission boundary: the commission carried onto the
@@ -30,7 +30,7 @@ from auraos.auraos.doctype.deal.test_deal import (
 from auraos.auraos.doctype.deal.test_deal_breakdown import make_breakdown_deal
 from auraos.auraos.doctype.job.job import (
     INCLUDED_REVISION_ROUNDS,
-    LAST_REOPENABLE_STAGE,
+    LAST_REDOABLE_STAGE,
     REDO_STAGE,
     STAGES,
 )
@@ -187,13 +187,13 @@ class TestJobConversion(FrappeTestCase):
         job = frappe.get_doc("Job", create_job_from_deal(won_deal().name)["name"])
         job.stage = "Production"
         job.files_location = "//nas/jobs/" + job.name
-        job.title = "MV — bản dựng"
+        job.title = "MV - bản dựng"
         job.append("job_links", {"label": "Rushes", "url": "https://example.com/x"})
         job.save()
 
         reloaded = frappe.get_doc("Job", job.name)
         self.assertEqual(reloaded.stage, "Production")
-        self.assertEqual(reloaded.title, "MV — bản dựng")
+        self.assertEqual(reloaded.title, "MV - bản dựng")
         self.assertEqual(len(reloaded.job_links), 2)
 
     # -- files location (story 29) --
@@ -244,7 +244,7 @@ class TestJobConversion(FrappeTestCase):
         )
         from frappe.utils import global_search
 
-        # Register hook-declared doctypes in Global Search Settings —
+        # Register hook-declared doctypes in Global Search Settings -
         # normally done by migrate, which CI's fresh site never runs.
         update_global_search_doctypes()
 
@@ -418,16 +418,16 @@ class TestJobRevisions(FrappeTestCase):
             log_job_revision(self.job.name, "sneaky")
 
     def test_logging_a_revision_sends_the_job_back_to_the_redo_stage(self):
-        """The round-trip: a revision request reopens the work by itself.
+        """The round-trip: a revision request sends the work back by itself.
 
         From the T6 walkthrough (issue #9): "need a redo / automatically
-        change stage if need revision after feedback" — nobody should
+        change stage if need revision after feedback" - nobody should
         have to drag the card back before starting the fix.
         """
         result = log_job_revision(self.job.name, "Khách muốn đổi nhạc")
 
         self.assertEqual(result["stage"], REDO_STAGE)
-        self.assertTrue(result["reopened"])
+        self.assertTrue(result["redo"])
         self.assertEqual(
             frappe.get_doc("Job", self.job.name).stage, REDO_STAGE
         )
@@ -442,21 +442,21 @@ class TestJobRevisions(FrappeTestCase):
         )
         self.assertTrue(history[-1].changed_by and history[-1].changed_on)
 
-    def test_a_revision_during_delivery_reopens_the_work_too(self):
+    def test_a_revision_during_delivery_redoes_the_work_too(self):
         job = frappe.get_doc("Job", self.job.name)
-        job.stage = LAST_REOPENABLE_STAGE
+        job.stage = LAST_REDOABLE_STAGE
         job.save()
 
         result = log_job_revision(self.job.name, "Sửa lúc giao")
         self.assertEqual(result["stage"], REDO_STAGE)
 
-    def test_a_revision_after_sign_off_counts_but_does_not_reopen(self):
+    def test_a_revision_after_sign_off_counts_but_does_not_redo(self):
         """Past sign-off the work is accepted and being invoiced.
 
         Dragging a finished job back onto the board would be a surprise;
         the round is still counted and still flagged chargeable.
         """
-        for stage in STAGES[STAGES.index(LAST_REOPENABLE_STAGE) + 1:]:
+        for stage in STAGES[STAGES.index(LAST_REDOABLE_STAGE) + 1:]:
             job = frappe.get_doc("Job", self.job.name)
             job.stage = stage
             job.save()
@@ -467,12 +467,12 @@ class TestJobRevisions(FrappeTestCase):
                 stage,
                 f"a revision logged at {stage} should leave the job there",
             )
-            self.assertFalse(result["reopened"])
+            self.assertFalse(result["redo"])
 
         self.assertTrue(result["change_order_due"])
 
     def test_a_revision_before_post_leaves_the_stage_alone(self):
-        """Nothing to redo yet — the job is already where the work is."""
+        """Nothing to redo yet - the job is already where the work is."""
         for stage in STAGES[: STAGES.index(REDO_STAGE) + 1]:
             job = frappe.get_doc("Job", self.job.name)
             job.stage = stage
@@ -481,14 +481,14 @@ class TestJobRevisions(FrappeTestCase):
 
             result = log_job_revision(self.job.name, f"Đổi ý ở {stage}")
             self.assertEqual(result["stage"], stage)
-            self.assertFalse(result["reopened"])
+            self.assertFalse(result["redo"])
             self.assertEqual(
                 len(frappe.get_doc("Job", self.job.name).stage_history),
                 history_before,
                 f"a revision at {stage} should not log a stage move",
             )
 
-    def test_the_reopened_job_still_counts_the_round(self):
+    def test_the_redone_job_still_counts_the_round(self):
         for i in range(INCLUDED_REVISION_ROUNDS + 1):
             job = frappe.get_doc("Job", self.job.name)
             job.stage = "Client review"
@@ -505,7 +505,7 @@ class TestJobRevisions(FrappeTestCase):
         )
 
     def test_a_job_can_include_a_different_number_of_rounds(self):
-        """The number is per job — it's negotiated deal by deal
+        """The number is per job - it's negotiated deal by deal
         (walkthrough 3.4)."""
         job = frappe.get_doc("Job", self.job.name)
         job.included_revision_rounds = 1

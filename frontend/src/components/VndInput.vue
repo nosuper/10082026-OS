@@ -19,7 +19,7 @@ import { parseVnd, vnd } from "../utils/money"
 // A money field that always reads the way money is written: the user
 // types digits, the field itself shows 2.000.000, the model carries the
 // number. Raw digits sitting beside formatted displays confused the
-// founder on the A1 walkthrough — the fix is that the two never differ.
+// founder on the A1 walkthrough - the fix is that the two never differ.
 const props = defineProps({
   modelValue: { type: [Number, String], default: "" },
 })
@@ -40,7 +40,7 @@ const display = computed(() =>
 
 function onInput(event) {
   const digits = String(event.target.value).replace(/\D/g, "")
-  // A typed "0" stays 0 — a package overridden to 0 đồng (free of
+  // A typed "0" stays 0 - a package overridden to 0 đồng (free of
   // charge) is a real quote. Only a truly empty field means "no value".
   const value = digits === "" ? "" : parseVnd(digits)
   // Rewrite the field immediately so stray characters never linger; a

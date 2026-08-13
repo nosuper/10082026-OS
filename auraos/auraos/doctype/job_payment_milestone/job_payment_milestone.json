@@ -42,7 +42,7 @@
    "options": "Pre-production\nProduction\nPost-production\nClient review\nDelivery\nClient sign-off\nAwaiting payment\nComplete"
   },
   {
-   "description": "Derived from the quoted total on every save — never typed in",
+   "description": "Derived from the quoted total on every save - never typed in",
    "fieldname": "amount",
    "fieldtype": "Currency",
    "in_list_view": 1,

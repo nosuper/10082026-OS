@@ -2,8 +2,8 @@
 
 Core File permissions let any System User create a File and point it at
 any document, so every doctype in this app that accepts attachments
-needs a gate of its own. The gate is one rule — you may attach to what
-you may write — and it lives here rather than on any one doctype
+needs a gate of its own. The gate is one rule - you may attach to what
+you may write - and it lives here rather than on any one doctype
 because the second doctype to need it (Job, once T11 started attaching
 generated paperwork) proved it was never a Deal rule.
 """

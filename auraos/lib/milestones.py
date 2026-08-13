@@ -5,7 +5,7 @@ Money-in is four rules, none of which needs Frappe to be true:
 **Shares of the quoted total.** A milestone bills a percentage of what
 the client was quoted, never a number typed in. The shares are rounded
 cumulatively so that whatever we chase adds up to the total on the quote
-the client agreed to — the last milestone can't be a đồng off.
+the client agreed to - the last milestone can't be a đồng off.
 
 **The collection flow.** ``chưa yêu cầu → đã yêu cầu KT → đã xuất HĐ →
 đã thanh toán``, in English on the enum and Vietnamese wherever a human
@@ -139,7 +139,7 @@ def due_stamp(
     """When a milestone fell due, given where the job stands now.
 
     Stamped the first time the trigger stage is reached and left alone
-    afterwards — bouncing a job between stages must not restart the
+    afterwards - bouncing a job between stages must not restart the
     payment clock. A job dragged back *before* the trigger un-dues the
     milestone only while nobody has acted on it: once the accountant has
     been asked, the money is owed wherever the board happens to sit.
@@ -169,7 +169,7 @@ def is_overdue(
 
 
 def days_overdue(due_on: datetime | None, now: datetime, terms_days: int | None) -> int:
-    """How late the money is — days past the terms, not days since due.
+    """How late the money is - days past the terms, not days since due.
 
     "Eight days late" is what the founder chases on; "fifteen days old"
     counts a week they were never owed anything for.
@@ -189,7 +189,7 @@ def stamps_for(status: str, current: Mapping[str, Any], now: datetime) -> dict:
 
     Each stamp records when the milestone was actually marked at that
     step. The step it lands on is stamped now unless it already carries a
-    time; steps behind keep whatever they recorded, *including nothing* —
+    time; steps behind keep whatever they recorded, *including nothing* -
     a client who pays before the accountant issues anything skipped the
     invoice, and writing a "đã xuất HĐ" time onto a payment nobody
     invoiced is a fiction in the record T9 has to read to find uncovered
@@ -241,7 +241,7 @@ def invoice_request_text(
     """The message the founder pastes into Zalo for the accountant.
 
     Everything the accountant asks for on the phone otherwise: who the
-    invoice is for, their tax code, what it covers and how much — split
+    invoice is for, their tax code, what it covers and how much - split
     out of its VAT. A missing tax code is written out as missing rather
     than left blank, because a request without one comes straight back.
     """
@@ -258,7 +258,7 @@ def invoice_request_text(
         lines.append(f"Địa chỉ: {client['address']}")
     lines += [
         "",
-        f"Nội dung: {job_title} — {milestone.get('title')} "
+        f"Nội dung: {job_title} - {milestone.get('title')} "
         f"({format_pct(milestone.get('pct'))})",
     ]
     if split.vat:

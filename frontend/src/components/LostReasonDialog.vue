@@ -40,7 +40,7 @@
 import { ref, watch } from "vue"
 import { Dialog, Button, FormControl } from "frappe-ui"
 
-// Fixed vocabulary from the spec — mirrors the Deal.lost_reason Select.
+// Fixed vocabulary from the spec - mirrors the Deal.lost_reason Select.
 const LOST_REASONS = ["Price", "Timing", "Silence", "Competitor", "Scope"]
 
 const props = defineProps({

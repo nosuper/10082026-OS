@@ -59,7 +59,7 @@ const nav = computed(() => [
   ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
 ])
 
-// Log out via the API, then land on a login page that returns here —
+// Log out via the API, then land on a login page that returns here -
 // otherwise re-login strands the user in the Desk.
 const logout = createResource({
   url: "logout",
@@ -73,7 +73,7 @@ const logout = createResource({
 // The page itself is public; the data is not. Bounce guests to login.
 // Read Frappe's user_id cookie instead of calling the API: a failed
 // API call here (e.g. CSRF) would redirect logged-in users to /login,
-// which bounces straight back — an infinite reload loop.
+// which bounces straight back - an infinite reload loop.
 const userId = document.cookie
   .split("; ")
   .find((c) => c.startsWith("user_id="))

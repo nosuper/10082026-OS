@@ -185,7 +185,7 @@
           <ErrorMessage class="mt-1" :message="linkError" />
         </div>
 
-        <!-- Attachments (existing deals only — files attach to a saved doc) -->
+        <!-- Attachments (existing deals only - files attach to a saved doc) -->
         <div v-if="name" class="border-t pt-3">
           <div class="mb-2 flex items-center text-xs font-medium text-gray-700">
             Attachments
@@ -283,7 +283,7 @@
               <span>
                 {{ entry.from_stage ? `${entry.from_stage} → ` : "" }}
                 <span class="font-medium text-gray-800">{{ entry.to_stage }}</span>
-                <span class="text-gray-400"> — {{ entry.changed_by }}</span>
+                <span class="text-gray-400"> - {{ entry.changed_by }}</span>
               </span>
             </div>
           </div>
@@ -461,7 +461,7 @@ const contactOptions = computed(() => {
 })
 
 // Switching company invalidates a contact from the previous one.
-// Judge from the loaded contact record itself — while the list is
+// Judge from the loaded contact record itself - while the list is
 // still fetching we must not wipe a valid saved contact.
 watch(companySelection, (selected) => {
   const contact = (contacts.data || []).find(
@@ -560,7 +560,7 @@ function addLink() {
     return
   }
   // The row renders as a clickable <a> before the server's URL
-  // validation runs on save — keep javascript:/data: out of href.
+  // validation runs on save - keep javascript:/data: out of href.
   if (!/^https?:\/\//i.test(url)) {
     linkError.value = "URL must start with http:// or https://"
     return

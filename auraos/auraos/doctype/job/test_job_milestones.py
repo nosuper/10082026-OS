@@ -2,14 +2,14 @@
 
 Four seams, one per acceptance criterion:
 
-1. **Milestones per job** — name, share and trigger stage, created with
+1. **Milestones per job** - name, share and trigger stage, created with
    the job and editable afterwards.
-2. **Amount derivation** — every amount follows the job's quoted total,
+2. **Amount derivation** - every amount follows the job's quoted total,
    whatever anyone types, and the shares never bill more than the client
    agreed to.
-3. **The collection flow** — chưa yêu cầu → đã yêu cầu KT → đã xuất HĐ →
+3. **The collection flow** - chưa yêu cầu → đã yêu cầu KT → đã xuất HĐ →
    đã thanh toán, with its timestamps, walkable in both directions.
-4. **The nudge and the invoice request** — when money counts as overdue,
+4. **The nudge and the invoice request** - when money counts as overdue,
    and what the accountant is actually sent.
 
 The rules themselves are pinned framework-free in tests/test_milestones.py;
@@ -56,7 +56,7 @@ def make_job(**overrides):
 
 
 def fell_due(job_name, milestone, days_ago):
-    """Age a milestone's due date — the only way to reach the nudge
+    """Age a milestone's due date - the only way to reach the nudge
     window without waiting a week for the test to pass."""
     frappe.db.set_value(
         "Job Payment Milestone",
@@ -86,7 +86,7 @@ class MilestoneTestCase(FrappeTestCase):
 
 
 class TestMilestonePlan(MilestoneTestCase):
-    """Seam 1: milestones per job — name, %, trigger stage."""
+    """Seam 1: milestones per job - name, %, trigger stage."""
 
     def test_a_new_job_is_already_tracking_the_standard_split(self):
         """Money-in should not wait for someone to remember to set it up."""
@@ -98,6 +98,17 @@ class TestMilestonePlan(MilestoneTestCase):
                 for row in DEFAULT_MILESTONES
             ],
         )
+
+    def test_default_plan_collects_the_balance_before_sign_off(self):
+        """§4: the balance is due at the Delivery gate - money before
+        files, the leverage the playbook says never to give up."""
+        last = DEFAULT_MILESTONES[-1]
+        self.assertLessEqual(
+            STAGES.index(last["trigger_stage"]), STAGES.index("Delivery")
+        )
+        self.assertEqual(sum(row["pct"] for row in DEFAULT_MILESTONES), 100)
+        # The deposit says on its face that it does not come back.
+        self.assertIn("không hoàn lại", DEFAULT_MILESTONES[0]["title"])
 
     def test_the_split_is_editable_per_job(self):
         job = make_job()
@@ -263,7 +274,7 @@ class TestMilestoneAmounts(MilestoneTestCase):
         )
 
     def test_an_amount_typed_onto_a_milestone_is_overwritten(self):
-        """The derivation is the point — a hand-typed amount is a number
+        """The derivation is the point - a hand-typed amount is a number
         that silently disagrees with the quote the client signed."""
         job = make_job()
         job.payment_milestones[0].amount = 1
@@ -328,7 +339,7 @@ class TestCollectionFlow(MilestoneTestCase):
         self.assertFalse(row["paid_on"])
 
     def test_a_client_who_pays_before_any_invoice_leaves_no_invoice_date(self):
-        """Deposits get transferred and invoiced later — recording a
+        """Deposits get transferred and invoiced later - recording a
         "đã xuất HĐ" time nobody issued would put a fiction in the very
         record T9 reads to find uncovered spend."""
         row = set_milestone_status(self.job.name, self.milestone, "Paid")
@@ -384,15 +395,15 @@ class TestOverdueNudge(MilestoneTestCase):
         self.assertTrue(job_milestones(self.job.name)["milestones"][0]["due_on"])
 
     def test_a_milestone_whose_stage_is_still_ahead_has_not_fallen_due(self):
-        final = job_milestones(self.job.name)["milestones"][1]
-        self.assertEqual(final["trigger_stage"], "Client sign-off")
+        final = job_milestones(self.job.name)["milestones"][-1]
+        self.assertEqual(final["trigger_stage"], "Delivery")
         self.assertFalse(final["due_on"])
 
     def test_moving_the_job_on_makes_the_later_milestone_due(self):
         job = frappe.get_doc("Job", self.job.name)
-        job.stage = "Client sign-off"
+        job.stage = "Delivery"
         job.save()
-        self.assertTrue(job_milestones(self.job.name)["milestones"][1]["due_on"])
+        self.assertTrue(job_milestones(self.job.name)["milestones"][-1]["due_on"])
 
     def test_a_milestone_inside_the_payment_terms_does_not_nudge(self):
         self.assertEqual(self.nudges_for_this_job(), [])
@@ -416,7 +427,7 @@ class TestOverdueNudge(MilestoneTestCase):
         """The strip lives on the Jobs board until T12 gives it a
         founder-only home, so a Producer session reaches this endpoint
         every time Linh opens the board. Reading the terms goes through
-        AuraOS Settings, which Producer cannot read — so the nudge has to
+        AuraOS Settings, which Producer cannot read - so the nudge has to
         answer without that permission rather than break her board."""
         fell_due(self.job.name, self.deposit.name, days_ago=TERMS_DAYS + 3)
 
@@ -451,7 +462,7 @@ class TestOverdueNudge(MilestoneTestCase):
             set_payment_terms_days(1)
 
     def test_a_site_nobody_configured_still_chases_money(self):
-        """The nudge must not depend on someone visiting Settings first —
+        """The nudge must not depend on someone visiting Settings first -
         a Single's row is only written when its doc is saved, and an
         unset Int reads back as 0, which is the "never nudge" setting."""
         frappe.db.delete(
@@ -471,7 +482,7 @@ class TestOverdueNudge(MilestoneTestCase):
         job.save()
         self.assertFalse(job_milestones(self.job.name)["milestones"][1]["due_on"])
 
-    def test_money_already_asked_for_stays_due_when_the_job_reopens(self):
+    def test_money_already_asked_for_stays_due_when_the_job_redoes(self):
         job = frappe.get_doc("Job", self.job.name)
         job.stage = STAGES[-1]
         job.save()
@@ -512,7 +523,7 @@ class TestInvoiceRequest(MilestoneTestCase):
         self.assertIn("Chưa VAT:", text)
 
     def test_asking_for_the_text_does_not_move_the_milestone_along(self):
-        """Pasting into Zalo is a human act — marking it requested is a
+        """Pasting into Zalo is a human act - marking it requested is a
         separate decision the founder can undo."""
         milestone_invoice_request(self.job.name, self.deposit.name)
         self.assertEqual(

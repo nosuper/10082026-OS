@@ -3,7 +3,7 @@
 Two rules that are worth pinning independently of Frappe:
 
 **The guest boundary.** A published quote row carries the whole internal
-chain — margin, commission, the profit block. What a client may read is
+chain - margin, commission, the profit block. What a client may read is
 a whitelist, not a blocklist: `client_view` copies the named fields and
 nothing else, so a new column on Deal Quote is invisible to guests until
 someone deliberately adds it here.
@@ -76,7 +76,7 @@ CLIENT_LINE_FIELDS = (
 # typo away from a client's page.
 #
 # Unlike the quote, this is read live at render time and never frozen
-# into a version — docs/adr/0002-quote-branding-renders-live.md says why.
+# into a version - docs/adr/0002-quote-branding-renders-live.md says why.
 COMPANY_FIELDS = (
     "logo",
     "company_name",
@@ -96,7 +96,7 @@ COMPANY_FIELDS = (
 _BANK_FIELDS = ("bank_name", "bank_account_number", "bank_account_name")
 _CONTACT_FIELDS = ("address", "phone", "email", "website")
 # The letterhead's own half: who we are, as opposed to how to reach us
-# or where to pay. The signatory names are not here — they belong to the
+# or where to pay. The signatory names are not here - they belong to the
 # PDF's signature block, and a site that filled in only those has no
 # letterhead to print.
 _MASTHEAD_FIELDS = ("logo", "company_name", "tax_code")
@@ -109,7 +109,7 @@ def company_view(settings: Mapping[str, Any]) -> dict:
     template can address each key unconditionally and drop the lines
     that have nothing behind them. An empty string is an absence: a
     label with a blank beside it reads as a mistake on a printed
-    contract, and a heading over three empty lines reads worse — hence
+    contract, and a heading over three empty lines reads worse - hence
     `has_bank` and `has_contact`, which say whether a block has anything
     in it at all.
     """
@@ -135,7 +135,7 @@ def _filled(value):
 
 
 def quote_number(name: str | None, version: int | None) -> str | None:
-    """What the printed document calls itself — `DQ-0007-v2`.
+    """What the printed document calls itself - `DQ-0007-v2`.
 
     The record's identifier alone stops being an answer the moment a
     second version exists, and a page detached from its PDF has to be
@@ -165,7 +165,7 @@ def client_view(quote: Mapping[str, Any]) -> dict:
 
 
 def quantity_display(qty1, unit1, qty2, unit2) -> str:
-    """How a line's quantities read on a bid — "2 người × 3 ngày".
+    """How a line's quantities read on a bid - "2 người × 3 ngày".
 
     Each half prints only when it says something: a bare quantity of 1
     with no unit is packaging noise, not information. Both halves silent
@@ -217,7 +217,7 @@ def line_sections(packages, lines):
     """The line-by-line rendering: every offer entry with its member
     lines beneath it, in the same order `client_entries` prints.
 
-    A package priced away from its lines' sum (T5's override — a
+    A package priced away from its lines' sum (T5's override - a
     round-up or a free-of-charge) would hand the client a table that
     doesn't add up; the difference is printed as its own Adjustment
     line, so the section total is always the sum of what's above it.
@@ -240,7 +240,7 @@ def line_sections(packages, lines):
         raw_members = by_package.get(title, [])
         # A standalone line published as its own entry (client_entries)
         # arrives here twice: once as this package entry, once in the
-        # frozen lines. The entry *is* the line — consume it, or the
+        # frozen lines. The entry *is* the line - consume it, or the
         # page would print it again below.
         if not raw_members:
             for index, line in enumerate(standalone):
@@ -276,7 +276,7 @@ def _rescaled_lines(lines, price):
     """Line amounts that sum exactly to the price as offered.
 
     An overridden package must read as if it was simply quoted that way
-    — no Adjustment row (the founder's A3 verdict): the difference is
+    - no Adjustment row (the founder's A3 verdict): the difference is
     folded back into every line in proportion, whole đồng, remainder on
     the last line so the client's own arithmetic always closes. Lines
     that sum to zero cannot carry a proportion and are left alone.
@@ -300,7 +300,7 @@ def _rescaled_lines(lines, price):
 
 
 def lump_sum_entry(title, entries):
-    """The whole offer as one line — the playbook's lump-sum level for
+    """The whole offer as one line - the playbook's lump-sum level for
     small jobs and clients who don't read production budgets.
 
     The scope still reads: the single entry's description lists what
@@ -332,7 +332,7 @@ def quote_totals(package_prices, mf_rate, vat_rate) -> QuoteTotals:
 
     Deliberately *not* the engine's quote total. A producer who rounds a
     package price up (T5's override) changes what the client is offered,
-    so the subtotal has to be the sum of the package prices as printed —
+    so the subtotal has to be the sum of the package prices as printed -
     otherwise the page shows an offer that doesn't add up to its own
     Total. Management fee and VAT then apply exactly as the engine does:
     MF on the subtotal, VAT on both.
@@ -354,7 +354,7 @@ def client_entries(packages, lines):
     Packages first, then any cost line belonging to none: the founder
     prices some items as standalone packages and quotes them straight
     (T6 walkthrough), so an unassigned line is its own one-line entry at
-    its marked-up quote price — never money we silently absorb.
+    its marked-up quote price - never money we silently absorb.
     """
     entries = [
         {
@@ -408,7 +408,7 @@ def quote_chain(
     The engine (auraos.lib.pricing) owns the cost side and stays the
     xlsx's arithmetic; what it cannot know is that a producer rounded a
     package up. Revenue therefore comes from the packages as printed,
-    and margin, commission, tax and net profit all follow from it —
+    and margin, commission, tax and net profit all follow from it -
     otherwise rounding a package up would flatter the client's invoice
     without ever showing up in what the deal earns (issue #32).
     """

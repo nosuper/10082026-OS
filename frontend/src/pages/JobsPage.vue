@@ -18,7 +18,7 @@
         />
       </div>
       <span class="ml-auto text-sm text-gray-500">
-        Won deals in production — new jobs are created from the deal board.
+        Won deals in production - new jobs are created from the deal board.
       </span>
     </div>
 
@@ -117,7 +117,7 @@
               <span
                 v-if="job.change_order_due"
                 class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-                title="Revision rounds past the included ones — chargeable"
+                title="Revision rounds past the included ones - chargeable"
               >
                 <FeatherIcon name="alert-triangle" class="h-3 w-3" />
                 Change order · {{ job.revision_rounds }} rounds
@@ -144,7 +144,7 @@
     </div>
 
     <p v-if="!jobs.data?.length" class="py-8 text-center text-sm text-gray-400">
-      No jobs yet — mark a deal Won on the deal board to create one.
+      No jobs yet - mark a deal Won on the deal board to create one.
     </p>
 
     <ErrorMessage class="mt-2" :message="moveError" />
@@ -166,7 +166,7 @@ import { STAGES } from "../data/jobStages"
 import { jobStageDot } from "../utils/stages"
 import { overdueLabel } from "../data/milestones"
 
-// Overdue money, oldest debt first — the server decides what counts as
+// Overdue money, oldest debt first - the server decides what counts as
 // overdue, so the board and a future dashboard cannot disagree.
 const nudges = createResource({
   url: "auraos.api.overdue_milestones",
@@ -233,7 +233,7 @@ const jobsByStage = computed(() => {
   return map
 })
 
-// Money in production per column — quoted totals, the board's scale.
+// Money in production per column - quoted totals, the board's scale.
 const stageTotals = computed(() => {
   const totals = {}
   for (const job of filteredJobs.value) {
@@ -274,7 +274,7 @@ function onDrop(stage) {
   dragged.value = null
   dragOverStage.value = null
   if (!job || job.stage === stage) return
-  // Move the card before the server answers — a drop that waits out a
+  // Move the card before the server answers - a drop that waits out a
   // round-trip reads as lag (A1's verdict, applied here too).
   job.stage = stage
   setStage.submit({

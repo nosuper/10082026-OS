@@ -5,13 +5,13 @@ Framework-free by contract (T4 / spec #2): no Frappe imports; DocType
 controllers are thin adapters over this module. The normative definition
 of the math is the repo's cost-breakdown xlsx
 (docs/samples/cost-breakdown-template.xlsx); column letters in comments
-refer to it. All arithmetic is exact Decimal — rounding to whole đồng is
+refer to it. All arithmetic is exact Decimal - rounding to whole đồng is
 the caller's concern (auraos.lib.money.round_vnd).
 
 Per line:
     subtotal (J) = qty1 × qty2 × unit price
     cost after vendor MF (L) = J × (1 + vendor MF)
-    VAT/PIT (N), profit cost basis (O), input VAT (P) — by tax type
+    VAT/PIT (N), profit cost basis (O), input VAT (P) - by tax type
     internal gross (Q) = L + N
     markup unit price (U) = (unit price, grossed up for Cá nhân) × (1 + markup)
     line total / budget (V, X) = U × qty1 × qty2
@@ -98,8 +98,8 @@ class ComputedLine:
     subtotal_int_net: Decimal  # J
     cost_after_vendor_mf: Decimal  # L
     vat_pit: Decimal  # N
-    profit_cost_basis: Decimal  # O — chi phí tính lãi
-    input_vat: Decimal  # P — VAT đầu vào
+    profit_cost_basis: Decimal  # O - chi phí tính lãi
+    input_vat: Decimal  # P - VAT đầu vào
     internal_gross: Decimal  # Q
     markup_unit_price: Decimal  # U
     line_total: Decimal  # V
@@ -109,7 +109,7 @@ class ComputedLine:
     vat: Decimal  # AA
     subtotal_with_vat: Decimal  # AB
     margin: Decimal  # AC
-    margin_pct: Decimal | None  # AD — None when the line has no revenue
+    margin_pct: Decimal | None  # AD - None when the line has no revenue
     cmf: Decimal  # AE
     cm: Decimal  # AF
     cm_pct: Decimal | None  # AG
@@ -254,7 +254,7 @@ def package_price(
 def is_floor_breached(margin_pct: Amount | None, floor_pct: Amount) -> bool:
     """True when a quote's margin falls below the global floor.
 
-    A margin that cannot be computed (None — no revenue) always breaches:
+    A margin that cannot be computed (None - no revenue) always breaches:
     the warning must fail safe.
     """
     if margin_pct is None:

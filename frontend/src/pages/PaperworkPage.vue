@@ -2,8 +2,8 @@
   <div class="mx-auto max-w-3xl px-4 py-6">
     <h1 class="mb-1 text-lg font-semibold text-gray-900">Paperwork templates</h1>
     <p class="mb-4 text-sm text-gray-500">
-      Design each paper once in Word — letterhead, clauses, signature block
-      — and type <code>{{ EXAMPLE }}</code> where a value belongs.
+      Design each paper once in Word - letterhead, clauses, signature block
+      - and type <code>{{ EXAMPLE }}</code> where a value belongs.
       Generating fills those in and attaches the result to the job.
     </p>
 
@@ -54,12 +54,12 @@
         </Button>
       </div>
       <p class="mt-2 text-xs text-gray-500">
-        Only .docx — a .doc renamed, or a PDF, is refused when saved.
+        Only .docx - a .doc renamed, or a PDF, is refused when saved.
       </p>
     </div>
 
     <!-- The web editor (A5 round 2, a modal since round 4): a document
-         window like the tools the founder knows — type the paper, click
+         window like the tools the founder knows - type the paper, click
          a placeholder to drop it in at the cursor, save; the .docx is
          built server-side. Templates written here stay editable here;
          uploaded ones are edited in Word. -->
@@ -75,13 +75,13 @@
         <div v-if="editor">
           <input
             v-model="editor.template_name"
-            placeholder="Template name — e.g. Hợp đồng cộng tác viên"
+            placeholder="Template name - e.g. Hợp đồng cộng tác viên"
             class="mb-2 w-full rounded border-gray-200 px-2 py-1.5 text-sm sm:w-96"
           />
           <!-- Placeholders appear as @chips; typing @ suggests them
                (founder, A5 round 5). Stored back as {{…}} on save. -->
           <!-- relative: the dialog panel is transformed, which hijacks
-               position:fixed — the dropdown anchors to the editor box
+               position:fixed - the dropdown anchors to the editor box
                instead. -->
           <div class="relative">
             <TextEditor
@@ -168,7 +168,7 @@
         <span
           v-if="row.template_source"
           class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
-          title="Written in the app — editable right here"
+          title="Written in the app - editable right here"
         >
           web
         </span>
@@ -201,7 +201,7 @@
       >
         <FeatherIcon name="alert-triangle" class="mt-0.5 h-3 w-3 shrink-0" />
         <span>
-          Asks for {{ row.unknown_placeholders.join(", ") }} — no such
+          Asks for {{ row.unknown_placeholders.join(", ") }} - no such
           placeholder, so it prints as a gap marker. Fix the docx and upload
           it again.
         </span>
@@ -222,7 +222,7 @@
         </code>
       </div>
       <p v-else class="mt-1 text-xs text-gray-400">
-        No placeholders — this prints exactly as designed.
+        No placeholders - this prints exactly as designed.
       </p>
     </div>
 
@@ -234,7 +234,7 @@
     </p>
 
     <!-- The registry (A5 round 2): every paper ever generated, in one
-         place — the files themselves hang off their jobs. -->
+         place - the files themselves hang off their jobs. -->
     <div class="mt-6 rounded-lg border bg-white p-3">
       <div class="mb-2 flex flex-wrap items-baseline gap-2">
         <h2 class="text-sm font-semibold text-gray-800">Generated papers</h2>
@@ -286,7 +286,7 @@
         </table>
       </div>
       <p v-else class="py-2 text-sm text-gray-400">
-        Nothing generated yet — papers made on a job appear here.
+        Nothing generated yet - papers made on a job appear here.
       </p>
     </div>
 
@@ -301,7 +301,7 @@
         </code>
       </div>
       <p class="mt-2 text-xs text-gray-500">
-        Our own company name, tax code and address are not on this list —
+        Our own company name, tax code and address are not on this list -
         they are the same on every paper, so type them into the template.
       </p>
     </details>
@@ -341,7 +341,7 @@ import { editorToSource, sourceToEditor } from "../utils/placeholders"
 const DOCX =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-// Placeholder syntax has to be shown, not interpolated — a literal
+// Placeholder syntax has to be shown, not interpolated - a literal
 // "}}" in the template markup would close the interpolation early.
 function braced(field) {
   return `{{${field}}}`
@@ -419,7 +419,7 @@ const deleter = createResource({
 
 function remove(row) {
   // Papers already generated are attached to their jobs and survive
-  // this — deleting a template only stops new ones being made from it.
+  // this - deleting a template only stops new ones being made from it.
   if (!window.confirm(`Delete the template "${row.template_name}"?`)) return
   deleter.submit({ doctype: "Paperwork Template", name: row.name })
 }
@@ -613,7 +613,7 @@ const editorCreator = createResource({
 
 function saveEditor() {
   const draft = editor.value
-  // Chips out, {{…}} in — the stored source is the fill pipeline's.
+  // Chips out, {{…}} in - the stored source is the fill pipeline's.
   const source = editorToSource(draft.template_source)
   if (draft.name) {
     editorSaver.submit({

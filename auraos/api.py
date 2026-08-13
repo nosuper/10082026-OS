@@ -6,21 +6,16 @@ from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
     OPERATING_ROLES,
-    client_prices,
-    deal_chain,
-    floor_breached,
     margin_floor_pct,
-    rate,
-    to_engine_lines,
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import paperwork, pricing, settlement
+from auraos.lib import breakdown, paperwork, settlement
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
-from auraos.lib.quote import COMPANY_FIELDS, quote_chain
+from auraos.lib.quote import COMPANY_FIELDS
 
 # The company's standing commission practice (spec #2, story 14); the
 # Deal field carries the same default.
@@ -64,7 +59,7 @@ DEAL_TABLE_FIELDS = [
 
 @frappe.whitelist()
 def operating_users():
-    """Users who may own a deal — the founder ↔ producer handover list.
+    """Users who may own a deal - the founder ↔ producer handover list.
 
     The SPA's owner dropdown needs this because Producer sessions
     cannot list the User doctype directly.
@@ -155,7 +150,7 @@ def _check_deal_permission(deal, ptype):
 
 
 def _check_job_permission(job, ptype):
-    """Gate a job endpoint on the job itself — missing means missing.
+    """Gate a job endpoint on the job itself - missing means missing.
 
     Without the existence check a bad name reads as a permission
     failure, which tells the caller the wrong thing.
@@ -208,7 +203,7 @@ def deal_attachments(deal):
 
 @frappe.whitelist()
 def deal_tags_map():
-    """Tags per deal, for the table view — {deal_name: [tag, ...]}.
+    """Tags per deal, for the table view - {deal_name: [tag, ...]}.
 
     Child rows can't be fetched through the list API alongside their
     parents, so the table view asks for the whole (small) mapping.
@@ -231,7 +226,7 @@ def deal_tags_map():
 
 @frappe.whitelist()
 def deal_stage_entries():
-    """When each deal entered its current stage — {deal_name: datetime}.
+    """When each deal entered its current stage - {deal_name: datetime}.
 
     Serves the board's staleness badge: the founder's weekly ritual is
     "which deal has sat still in a stage for over a week?", and the
@@ -259,24 +254,29 @@ def _is_founder():
     return "Founder" in frappe.get_roles()
 
 
-def _founder_block(chain, result, commission_pct):
-    """The profit chain, assembled only for Founder sessions.
-
-    The same numbers are persisted on the deal as permlevel-1 fields
-    (Deal.store_founder_chain) for dashboards; this block exists for
-    live editing, where nothing is saved yet.
-    """
+def _founder_view(view, commission_pct):
+    """The founder block as the SPA reads it: the lib's pure numbers
+    plus the two dials only an adapter can know."""
     return {
         "commission_pct": float(commission_pct),
-        "total_commission": round_vnd(chain.total_commission),
-        "cm": round_vnd(chain.cm),
-        "profit_before_tax": round_vnd(chain.profit_before_tax),
-        "tndn": round_vnd(chain.tndn),
-        "net_profit": round_vnd(chain.net_profit),
-        "total_input_vat": round_vnd(result.total_input_vat),
-        "vat_payable": round_vnd(chain.vat_payable),
+        **view["founder"],
         "margin_floor_pct": float(margin_floor_pct()),
     }
+
+
+def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct):
+    """lib/breakdown with this module's error channel and stored floor."""
+    try:
+        return breakdown.breakdown_view(
+            line_rows,
+            package_rows,
+            quote_mf_pct=quote_mf_pct,
+            vat_pct=vat_pct,
+            commission_pct=commission_pct,
+            margin_floor_pct=margin_floor_pct(),
+        )
+    except ValueError as err:
+        frappe.throw(_(str(err)), frappe.ValidationError)
 
 
 @frappe.whitelist()
@@ -285,7 +285,9 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
 
     Producer sessions get costs, quote prices, margin and the floor
     warning; the commission/profit block is appended only for Founder
-    sessions, and a producer-supplied commission_pct is ignored.
+    sessions, and a producer-supplied commission_pct is ignored. One
+    assembly - lib/breakdown - shared with the persisted Deal fields,
+    so the live editor and a saved deal cannot drift apart.
     """
     frappe.has_permission("Deal", "read", throw=True)
     line_rows = frappe.parse_json(lines) or []
@@ -294,81 +296,25 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     if not _is_founder() or commission_pct is None:
         commission_pct = DEFAULT_COMMISSION_PCT
 
-    params = pricing.DealParams(
-        quote_mf_rate=rate(quote_mf_pct),
-        vat_rate=rate(vat_pct),
-        commission_rate=rate(commission_pct),
+    view = _breakdown_view(
+        line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct
     )
-    result = pricing.compute_quote(to_engine_lines(line_rows), params)
-
-    budgets = {}
-    for row, line in zip(line_rows, result.lines):
-        if row.get("package"):
-            budgets.setdefault(row["package"], []).append(line.budget)
-
-    packages = [
-        {
-            "title": row.get("title"),
-            **_package_dict(
-                budgets.get(row.get("title"), []),
-                # has_price_override carries "is this set"; 0 with the
-                # flag on is a real free-of-charge override.
-                row.get("price_override")
-                if row.get("has_price_override")
-                else None,
-            ),
-        }
-        for row in package_rows
-    ]
-    # The client's price, live: package prices as shown, plus any line
-    # standing on its own — the same rule the published quote uses.
-    priced_lines = [
-        {**row, "quote_price": round_vnd(line.budget)}
-        for row, line in zip(line_rows, result.lines)
-    ]
-    chain = quote_chain(
-        client_prices(packages, priced_lines),
-        cost_basis=result.total_profit_cost_basis,
-        input_vat=result.total_input_vat,
-        mf_rate=rate(quote_mf_pct),
-        vat_rate=rate(vat_pct),
-        commission_rate=rate(commission_pct),
-    )
-    pct = chain.margin_fraction
     out = {
+        **view,
+        # Pricing ignores line metadata; return it alongside the
+        # computed values so editing never drops it.
         "lines": [
             {
                 **{field: row.get(field) for field in LINE_METADATA_FIELDS},
-                "subtotal": round_vnd(line.subtotal_int_net),
-                "cost_basis": round_vnd(line.profit_cost_basis),
-                "input_vat": round_vnd(line.input_vat),
-                "quote_price": round_vnd(line.budget),
-                "margin": round_vnd(line.margin),
+                **line_view,
             }
-            for row, line in zip(line_rows, result.lines)
+            for row, line_view in zip(line_rows, view["lines"])
         ],
-        "packages": packages,
-        "subtotal": round_vnd(chain.subtotal),
-        "management_fee": round_vnd(chain.mf_amount),
-        "vat": round_vnd(chain.vat_amount),
-        "total": round_vnd(chain.total),
-        "margin": round_vnd(chain.margin),
-        "margin_pct": float(pct * 100) if pct is not None else None,
-        "floor_breached": bool(result.lines) and floor_breached(pct),
     }
+    del out["founder"]
     if _is_founder():
-        out["founder"] = _founder_block(chain, result, commission_pct)
+        out["founder"] = _founder_view(view, commission_pct)
     return out
-
-
-def _package_dict(member_budgets, override):
-    priced = pricing.package_price(member_budgets, override)
-    return {
-        "default_price": round_vnd(priced.default),
-        "price": round_vnd(priced.price),
-        "variance": round_vnd(priced.variance),
-        "overridden": priced.overridden,
-    }
 
 
 @frappe.whitelist()
@@ -376,21 +322,14 @@ def deal_profit(deal):
     """The founder-only profit chain for a saved deal, computed on demand.
 
     A producer can hold the Deal document in full and still see nothing
-    of commission, CM, or the profit block — the stored copies sit at
+    of commission, CM, or the profit block - the stored copies sit at
     permlevel 1 and this endpoint refuses non-founders outright.
     """
     if not _is_founder():
         frappe.throw(_("Only the Founder may see the profit chain"), frappe.PermissionError)
     doc = frappe.get_doc("Deal", deal)
     doc.check_permission("read")
-
-    params = pricing.DealParams(
-        quote_mf_rate=rate(doc.quote_mf_pct),
-        vat_rate=rate(doc.vat_pct),
-        commission_rate=rate(doc.commission_pct),
-    )
-    result = pricing.compute_quote(to_engine_lines(doc.cost_lines), params)
-    return _founder_block(deal_chain(doc, result), result, doc.commission_pct or 0)
+    return _founder_view(doc.breakdown_view(), doc.commission_pct or 0)
 
 
 # -- quote delivery (T6, issue #8) --
@@ -399,7 +338,7 @@ def deal_profit(deal):
 def _quote_dict(quote, tracking=None):
     """A quote version as the producer's screen needs it.
 
-    The client's view is a different, narrower projection — see
+    The client's view is a different, narrower projection - see
     auraos.lib.quote.client_view.
     """
     tracking = tracking or {}
@@ -459,7 +398,7 @@ def deal_quotes(deal):
 
 @frappe.whitelist()
 def deal_quote_links():
-    """Current quote link per deal, for the board — {deal: {...}}.
+    """Current quote link per deal, for the board - {deal: {...}}.
 
     The board asks for the whole (small) mapping in one call, the way it
     already does for tags: a card wants the link to hand out, and the
@@ -580,8 +519,8 @@ def jobs_by_deal():
 def log_job_revision(job, note):
     """Record a client revision round on a job.
 
-    The round number and the chargeable flag come back computed — the
-    job derives both from row order (Job.number_revisions) — as does
+    The round number and the chargeable flag come back computed - the
+    job derives both from row order (Job.number_revisions) - as does
     the stage, which the revision may have sent back to the edit.
     """
     _check_job_permission(job, "write")
@@ -597,7 +536,7 @@ def log_job_revision(job, note):
         "round": latest.round,
         "chargeable": bool(latest.chargeable),
         "stage": doc.stage,
-        "reopened": doc.stage != stage_before,
+        "redo": doc.stage != stage_before,
     }
 
 
@@ -617,7 +556,7 @@ SETTLEMENT_FIELDS = [
 def _money_rows(job):
     """The job's whole money-out ledger, in reading order.
 
-    Read with get_all, which skips row-level permissions — the caller's
+    Read with get_all, which skips row-level permissions - the caller's
     check on the Job itself is the entire authorization for these rows,
     exactly as it is for a deal's comments and files.
     """
@@ -658,8 +597,8 @@ def _float_dict(held):
 def job_money(job):
     """Every đồng out on a job: the ledger, the floats, actual-vs-quoted.
 
-    One call because the job's money screen is one question — "where has
-    the money gone, and who is holding what?" — and the three answers
+    One call because the job's money screen is one question - "where has
+    the money gone, and who is holding what?" - and the three answers
     are computed from the same rows.
     """
     _check_job_permission(job, "read")
@@ -689,7 +628,7 @@ def job_money(job):
         "spent_total": round_vnd(sums.spent),
         "quoted_total": round_vnd(sums.quoted),
         # What this session may do with money, asked of the permissions
-        # themselves rather than of the role — the screen hides what the
+        # themselves rather than of the role - the screen hides what the
         # server would refuse anyway.
         "may_advance": bool(frappe.has_permission("Job Advance", "create")),
         "may_settle": bool(frappe.has_permission("Job Settlement", "create")),
@@ -739,13 +678,13 @@ def log_job_expense(
     """Log one payment out, the way it happens on a shoot: fast.
 
     Everything but the amount has a default that is right often enough
-    not to be typed — today, whoever is logging it, out of their float.
+    not to be typed - today, whoever is logging it, out of their float.
     `paid_by` exists for the case that isn't: money Linh spent that the
     founder is entering from a Zalo message, which has to land on her
     float rather than his.
 
     Returns the payer's float, so the phone can answer the only
-    follow-up question there is — how much of the advance is left.
+    follow-up question there is - how much of the advance is left.
     """
     _check_job_permission(job, "write")
     expense = frappe.get_doc(
@@ -775,8 +714,8 @@ def log_job_expense(
 def _attach_photo(expense, file_url):
     """Point a just-uploaded receipt at the expense it documents.
 
-    The photo is taken before the expense exists — that is the whole
-    point of the phone flow — so it arrives as a private file attached
+    The photo is taken before the expense exists - that is the whole
+    point of the phone flow - so it arrives as a private file attached
     to nothing, readable only by whoever uploaded it. Re-parenting it
     onto the expense hands it the expense's own permissions, which is
     how the founder gets to see the producer's receipts.
@@ -812,7 +751,7 @@ def _holder_float(job, holder):
 def settle_job(job, holder, note=None):
     """Close one person's float: the one click of story 34.
 
-    The settlement is the transfer, recorded — so the float goes to zero
+    The settlement is the transfer, recorded - so the float goes to zero
     and a job that carries on paying for things opens a fresh one.
     """
     _check_job_permission(job, "write")
@@ -862,7 +801,7 @@ def job_milestones(job):
 
 @frappe.whitelist()
 def save_job_milestones(job, milestones):
-    """Replace a job's milestone plan — names, shares and trigger stages.
+    """Replace a job's milestone plan - names, shares and trigger stages.
 
     Rows the caller sends back with their row name keep the collection
     status and timestamps they have already earned; rows it leaves out
@@ -933,7 +872,7 @@ def milestone_invoice_request(job, milestone):
 
 @frappe.whitelist()
 def overdue_milestones():
-    """Money owed past the company's payment terms — the founder's nudge.
+    """Money owed past the company's payment terms - the founder's nudge.
 
     Lives here rather than on a dashboard page because the dashboard is
     T12's ticket; the Jobs board carries it in the meantime, and the
@@ -965,7 +904,7 @@ def _paperwork_rows(filters=None):
 
     `unknown_placeholders` is why this is more than a list query: a
     template asking for `{{clint.tax_code}}` is broken, and the founder
-    should meet that on a screen — where the fix is to edit the docx —
+    should meet that on a screen - where the fix is to edit the docx -
     rather than on a contract already coming off the printer.
     """
     known = set(paperwork.document_values())
@@ -980,7 +919,7 @@ def _paperwork_rows(filters=None):
         names = paperwork_template.stored_placeholders(row)
         row["placeholders"] = names
         row["unknown_placeholders"] = [n for n in names if n not in known]
-        # Which extra record this paper is about, if any — the screen
+        # Which extra record this paper is about, if any - the screen
         # asks for exactly the parties the template mentions.
         row["needs_vendor"] = any(n.startswith("vendor.") for n in names)
         row["needs_freelancer"] = any(n.startswith("freelancer.") for n in names)
@@ -989,7 +928,7 @@ def _paperwork_rows(filters=None):
 
 @frappe.whitelist()
 def paperwork_templates():
-    """The templates a job can be papered from — the retired ones hidden."""
+    """The templates a job can be papered from - the retired ones hidden."""
     frappe.has_permission("Paperwork Template", "read", throw=True)
     return _paperwork_rows(filters={"disabled": 0})
 
@@ -1006,7 +945,7 @@ def paperwork_library():
     frappe.has_permission("Paperwork Template", "read", throw=True)
     return {
         # Producers generate paperwork; the founder owns the templates.
-        # The server enforces it either way — this only decides whether
+        # The server enforces it either way - this only decides whether
         # the screen offers controls that would be refused.
         "can_manage": bool(frappe.has_permission("Paperwork Template", "create")),
         "placeholders": paperwork.fillable_placeholders(),
@@ -1023,8 +962,8 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     paperwork to it either.
 
     What could not be filled comes back with the file rather than
-    instead of it. The document exists — it is printable, and the gaps
-    are marked on the page — but the caller is told about them, because
+    instead of it. The document exists - it is printable, and the gaps
+    are marked on the page - but the caller is told about them, because
     the founder is the only one who can close them.
     """
     _check_job_permission(job, "write")
@@ -1056,7 +995,7 @@ def job_paperwork(job):
 
 def _register_paper(job, template, vendor, freelancer, document):
     """The registry row (A5 round 2): every paper ever generated, in
-    one place, with who it was for — the file alone hangs off its job
+    one place, with who it was for - the file alone hangs off its job
     and is invisible from anywhere else."""
     frappe.get_doc(
         {
@@ -1077,7 +1016,7 @@ def _register_paper(job, template, vendor, freelancer, document):
 @frappe.whitelist()
 def save_job_paperwork_draft(job, template, html, vendor=None, freelancer=None):
     """The draft as edited on screen, kept as a .docx on the job (A5
-    round 4) — what the founder approved, not the raw fill.
+    round 4) - what the founder approved, not the raw fill.
 
     vendor/freelancer ride along only for the registry: the html is
     already filled and edited; nothing is substituted here.
@@ -1096,7 +1035,7 @@ def save_job_paperwork_draft(job, template, html, vendor=None, freelancer=None):
 @frappe.whitelist()
 def preview_template(template):
     """A template read before anything else (A5 round 5): its own HTML
-    for a web one, its text for an uploaded Word file — placeholders
+    for a web one, its text for an uploaded Word file - placeholders
     visible as written."""
     frappe.has_permission("Paperwork Template", "read", throw=True)
     doc = frappe.get_doc("Paperwork Template", template)
@@ -1128,7 +1067,7 @@ def preview_paper(file_url):
 def preview_job_paperwork(job, template, vendor=None, freelancer=None):
     """The paper on screen before anything is generated (A5 round 3).
 
-    Read on the job is enough — nothing is attached; the screen shows
+    Read on the job is enough - nothing is attached; the screen shows
     what generate would print, gap markers highlighted, and offers the
     browser's own print dialog.
     """
@@ -1141,7 +1080,7 @@ def preview_job_paperwork(job, template, vendor=None, freelancer=None):
 
 @frappe.whitelist()
 def generated_papers():
-    """Every paper ever generated, newest first — the registry screen.
+    """Every paper ever generated, newest first - the registry screen.
 
     get_list, not get_all: row permissions apply, so this shows exactly
     what the session may read.
@@ -1313,13 +1252,18 @@ def set_positioning_rules(cash=None, bridge=None, brand=None, positioning_types=
     for row in frappe.get_all("Project Type", fields=["name", "is_positioning"]):
         should = 1 if row.name in flagged else 0
         if row.is_positioning != should:
-            frappe.db.set_value("Project Type", row.name, "is_positioning", should)
+            # Through the document, not db.set_value: the flag decides
+            # tiers, so the change should validate and leave a trail
+            # like every other write in this file.
+            doc = frappe.get_doc("Project Type", row.name)
+            doc.is_positioning = should
+            doc.save()
     return get_positioning_rules()
 
 
 @frappe.whitelist()
 def classification_hints():
-    """The mix targets alone — for the deal form's positioning labels
+    """The mix targets alone - for the deal form's positioning labels
     and the SOP page. Readable by anyone who can read deals; the
     founder-only dials stay behind get_positioning_rules."""
     frappe.has_permission("Deal", "read", throw=True)
@@ -1328,7 +1272,7 @@ def classification_hints():
 
 @frappe.whitelist()
 def preview_tier(estimated_budget=0, project_type=None, positioning=None):
-    """The tier the rules would assign — the deal form's live chip.
+    """The tier the rules would assign - the deal form's live chip.
 
     Computed here, not in the browser, so a producer session (which has
     no read permission on Settings) sees the outcome without ever
@@ -1387,7 +1331,7 @@ def get_company_identity():
 
 @frappe.whitelist()
 def set_company_identity(values):
-    """Save the company block — and only the company block.
+    """Save the company block - and only the company block.
 
     The same narrow-surface rule as the deals table: a settings screen
     that can write any field on this Single is one bug away from setting

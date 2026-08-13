@@ -1,4 +1,4 @@
-// Who is signed in, read off Frappe's cookie — API-free on purpose: a
+// Who is signed in, read off Frappe's cookie - API-free on purpose: a
 // failed call here would break pages that only need a preference key.
 export function currentUser() {
   const cookie = document.cookie

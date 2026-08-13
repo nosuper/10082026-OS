@@ -1,7 +1,7 @@
 """Docx templates and the papers made from them (T11, issue #13).
 
-The founder designs each paper once in Word — letterhead, clauses,
-signature block, seal space — and types ``{{client.tax_code}}`` where a
+The founder designs each paper once in Word - letterhead, clauses,
+signature block, seal space - and types ``{{client.tax_code}}`` where a
 value belongs. This module is the thin Frappe half of that: it reads the
 uploaded file, assembles the records a paper is written about, and hands
 both to `auraos.lib.paperwork`, which knows nothing about Frappe.
@@ -17,16 +17,16 @@ from frappe.model.document import Document
 from auraos.lib import paperwork
 
 # The generated file's name: the job it belongs to, the paper it is, and
-# when it was made — so a regenerated contract sits beside the first one
+# when it was made - so a regenerated contract sits beside the first one
 # rather than quietly replacing it.
-FILENAME = "{job} — {template} — {stamp}.docx"
+FILENAME = "{job} - {template} - {stamp}.docx"
 STAMP_FORMAT = "%Y%m%d-%H%M"
 
 
 class PaperworkTemplate(Document):
     def validate(self):
         # A template written in the app carries its paragraphs in
-        # template_source; the .docx is built from them (A5 round 2 —
+        # template_source; the .docx is built from them (A5 round 2 -
         # the founder wanted templates viewable and editable on the
         # website, not only uploaded from Word).
         if (self.template_source or "").strip():
@@ -90,7 +90,7 @@ def content(template) -> bytes:
     name = frappe.db.get_value("File", {"file_url": template.template_file}, "name")
     if not name:
         frappe.throw(
-            _("The template file for {0} is missing — upload it again.").format(
+            _("The template file for {0} is missing - upload it again.").format(
                 template.template_name
             ),
             frappe.DoesNotExistError,
@@ -99,7 +99,7 @@ def content(template) -> bytes:
 
 
 def party(doctype, name):
-    """One client, vendor or freelancer as a plain dict — or nothing.
+    """One client, vendor or freelancer as a plain dict - or nothing.
 
     Permission-checked even though both operating roles read the party
     doctypes today: a template can pull a bank account and an ID number
@@ -115,7 +115,7 @@ def party(doctype, name):
 
 
 def values_for(job, vendor=None, freelancer=None):
-    """Everything a paper about this job may say — one builder, shared
+    """Everything a paper about this job may say - one builder, shared
     by the generated .docx and the on-screen preview so the two can
     never disagree about a value."""
     return paperwork.document_values(
@@ -143,7 +143,7 @@ def preview(template_name, job_name, vendor=None, freelancer=None):
 
     A web-authored template previews from its own HTML source. An
     uploaded Word template previews as its filled text, paragraph by
-    paragraph — formatting stays in the .docx, but every word and every
+    paragraph - formatting stays in the .docx, but every word and every
     gap marker is on screen before anything is generated.
     """
     template = loaded_template(template_name)
@@ -180,7 +180,7 @@ def _mark_gaps(text):
 
 
 def paper_html(content: bytes):
-    """A stored .docx as screen HTML — emphasis and alignment kept —
+    """A stored .docx as screen HTML - emphasis and alignment kept -
     or None for a file that isn't one (a receipt photo hangs off jobs
     too)."""
     try:
@@ -190,7 +190,7 @@ def paper_html(content: bytes):
 
 
 def template_html(template):
-    """A template as the screen shows it, unfilled — its own HTML for a
+    """A template as the screen shows it, unfilled - its own HTML for a
     web-authored one, its text paragraphs for an uploaded Word file."""
     source = template.get("template_source") or ""
     if source.strip():
@@ -207,7 +207,7 @@ def attach_draft(template_name, job_name, html):
     """An on-screen draft, kept as a .docx on the job (A5 round 4).
 
     The PandaDoc-shaped flow: fill the template, let the founder edit
-    the draft on screen, and what they approved — not the raw fill —
+    the draft on screen, and what they approved - not the raw fill -
     becomes the job's paper. Built through the same HTML→Word
     translator the web editor uses.
     """

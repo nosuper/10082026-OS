@@ -17,7 +17,7 @@
         </span>
       </label>
       <p class="mt-1 text-xs text-gray-500">
-        Quotes whose margin falls below this warn every role — without
+        Quotes whose margin falls below this warn every role - without
         revealing where the number comes from. 0 turns the warning off.
       </p>
       <div class="mt-3 flex items-center gap-2">
@@ -95,8 +95,8 @@
         Tier thresholds (VND)
       </label>
       <p class="mt-1 text-xs text-gray-500">
-        Every deal's tier is derived (playbook §2.2): Brand positioning —
-        or a positioning-segment job type — means Tier 3 whatever it
+        Every deal's tier is derived (playbook §2.2): Brand positioning -
+        or a positioning-segment job type - means Tier 3 whatever it
         pays; otherwise Tier 2 from the first number, Tier 3 from the
         second. Hand-setting a tier on a deal pins it against the rules.
       </p>
@@ -199,13 +199,13 @@
 
     <!--
       What a client reads at the top of every quote. Rendered live, so
-      editing this changes quotes already sent — see
+      editing this changes quotes already sent - see
       docs/adr/0002-quote-branding-renders-live.md.
     -->
     <div v-if="!denied" class="mt-4 rounded-lg border bg-white p-4">
       <h2 class="text-sm font-semibold text-gray-800">Company identity</h2>
       <p class="mt-1 text-xs text-gray-500">
-        Printed on every quote page and PDF. These render live — changing
+        Printed on every quote page and PDF. These render live - changing
         one updates quotes already sent, without making a new version. An
         empty field prints nothing at all.
       </p>

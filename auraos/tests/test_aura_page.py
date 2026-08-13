@@ -22,7 +22,7 @@ class TestAuraPage(FrappeTestCase):
 
     def test_aura_assets_are_servable(self):
         # A page shell that serves while its JS/CSS 404 renders as a
-        # blank white page — assert every referenced asset resolves on
+        # blank white page - assert every referenced asset resolves on
         # disk under sites/assets (i.e. the app assets symlink exists).
         set_request(method="GET", path="/aura")
         html = get_response().get_data().decode()

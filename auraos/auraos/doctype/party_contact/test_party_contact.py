@@ -1,4 +1,4 @@
-"""Seam tests for T2 (issue #4): contacts — required fields, company
+"""Seam tests for T2 (issue #4): contacts - required fields, company
 linking, multiple role tags, and role access.
 
 Both operating roles (Founder and Producer) must be able to create,
@@ -15,7 +15,7 @@ from auraos.tests.utils import make_test_user
 
 FOUNDER = "founder@test.auraos.local"
 PRODUCER = "producer@test.auraos.local"
-# A System User with neither app role — the negative control.
+# A System User with neither app role - the negative control.
 OUTSIDER = "outsider@test.auraos.local"
 
 
@@ -86,7 +86,7 @@ class TestPartyContact(FrappeTestCase):
             ).insert()
 
     def test_contact_requires_phone(self):
-        # Phone doubles as the Zalo handle in Vietnam — a contact
+        # Phone doubles as the Zalo handle in Vietnam - a contact
         # without one is unreachable, so the field is mandatory.
         with self.assertRaises(frappe.MandatoryError):
             frappe.get_doc(
@@ -164,7 +164,7 @@ class TestPartyContact(FrappeTestCase):
         # a full round trip: create above, then edit and list
         contact.phone = "0912345678"
         contact.save()
-        # frappe.client.get_list backs GET /api/resource/<doctype> — the
+        # frappe.client.get_list backs GET /api/resource/<doctype> - the
         # REST list seam, not just the internal document API.
         from frappe.client import get_list
 

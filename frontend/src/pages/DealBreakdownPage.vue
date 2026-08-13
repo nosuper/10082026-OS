@@ -21,10 +21,10 @@
       <div class="ml-auto flex items-center gap-3">
         <span v-if="saving" class="text-xs text-gray-500">Saving…</span>
         <span v-else-if="dirty && !allLinesComplete" class="text-xs text-red-600">
-          A line is missing its description — autosave is waiting
+          A line is missing its description - autosave is waiting
         </span>
         <span v-else-if="dirty" class="text-xs text-amber-700">
-          Unsaved changes — autosaves in a moment, Ctrl+S saves now
+          Unsaved changes - autosaves in a moment, Ctrl+S saves now
         </span>
         <span v-else-if="baseline" class="text-xs text-gray-400">
           All changes saved
@@ -38,7 +38,7 @@
       class="mb-4 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
     >
       <FeatherIcon name="alert-triangle" class="h-4 w-4 shrink-0" />
-      Margin is below the company floor — this quote is flagged as
+      Margin is below the company floor - this quote is flagged as
       unprofitable.
     </div>
 
@@ -278,7 +278,7 @@
             </tr>
             <tr v-if="!state.lines.length">
               <td :colspan="14 + visibleMeta.length" class="px-3 py-6 text-center text-gray-400">
-                No cost lines yet — add the first one.
+                No cost lines yet - add the first one.
               </td>
             </tr>
           </tbody>
@@ -368,7 +368,7 @@
                 </tr>
                 <tr v-if="!state.packages.length">
                   <td colspan="7" class="px-3 py-6 text-center text-gray-400">
-                    No packages — the client would see raw lines.
+                    No packages - the client would see raw lines.
                   </td>
                 </tr>
               </tbody>
@@ -492,7 +492,7 @@
               Quote detail level
             </h3>
             <p class="mb-2 text-xs text-gray-500">
-              How much of the build the client's page and PDF show — the
+              How much of the build the client's page and PDF show - the
               next published version uses this.
             </p>
             <select
@@ -500,13 +500,13 @@
               class="w-full rounded border-gray-300 py-1.5 text-sm text-gray-800 focus:border-gray-500 focus:ring-0"
             >
               <option value="Package totals">
-                Package totals — one price per package
+                Package totals - one price per package
               </option>
               <option value="Line by line">
-                Line by line — every item with quantities (AICP-style)
+                Line by line - every item with quantities (AICP-style)
               </option>
               <option value="Lump sum">
-                Lump sum — a single figure for the whole job
+                Lump sum - a single figure for the whole job
               </option>
             </select>
           </div>
@@ -542,7 +542,7 @@ import { stageClass } from "../utils/stages"
 import { currentUser } from "../utils/user"
 
 // Must match the Deal Cost Line tax_type options. Internal work carries
-// no invoice — Không hoá đơn.
+// no invoice - Không hoá đơn.
 const TAX_TYPES = ["Công ty", "Cá nhân", "Không hoá đơn"]
 const COST_PHASES = [
   "Pre-production",
@@ -552,7 +552,7 @@ const COST_PHASES = [
 ]
 const SOURCE_TYPES = ["Internal", "Freelancer", "Vendor"]
 
-// T5.1 metadata — real, but not what pricing a job needs on screen.
+// T5.1 metadata - real, but not what pricing a job needs on screen.
 // Hidden by default so the table fits a laptop without sideways
 // scrolling; the choice sticks per user.
 const META_COLUMNS = [
@@ -626,7 +626,7 @@ function snapshot() {
 
 const dirty = computed(() => Boolean(baseline.value) && snapshot() !== baseline.value)
 
-// Autosave holds off while a line has no description — the save would
+// Autosave holds off while a line has no description - the save would
 // only bounce off server validation; the red border says why.
 const allLinesComplete = computed(() =>
   state.lines.every((line) => (line.description || "").trim())
@@ -844,7 +844,7 @@ function setOverride(pkg, value) {
 }
 
 // Typing a new name in a line's package cell creates the package on the
-// spot (T5 walkthrough request) — otherwise the save would reject an
+// spot (T5 walkthrough request) - otherwise the save would reject an
 // unknown package reference.
 function ensurePackage(title) {
   const trimmed = (title || "").trim()

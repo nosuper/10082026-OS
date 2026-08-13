@@ -32,7 +32,7 @@
 import { computed, ref } from "vue"
 
 // A datalist looked like a bare dialog and hid its options until typing
-// (founder, A2 walkthrough) — this is the query-style picker instead:
+// (founder, A2 walkthrough) - this is the query-style picker instead:
 // click shows everything, typing filters, free text still allowed so
 // vocabularies keep growing in place.
 const props = defineProps({

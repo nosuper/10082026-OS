@@ -2,7 +2,7 @@
 
 A client-facing quote that says nothing about who is offering it cannot
 be printed and attached to a contract. Putting the company on it means
-reading a *second* document into a guest render context — AuraOS
+reading a *second* document into a guest render context - AuraOS
 Settings, which also holds the margin floor. So the identity travels the
 same way the quote does: a named whitelist, not a blocklist.
 
@@ -10,7 +10,7 @@ Three things are pinned here, all provable without Frappe:
 
 1. **The second guest boundary.** `company_view` copies the named fields
    and nothing else. A future setting is invisible to clients until
-   someone adds it here on purpose — and the margin floor never is.
+   someone adds it here on purpose - and the margin floor never is.
 2. **Empty means absent.** An unfilled field comes back None so the
    template can drop the line entirely, rather than printing a label
    with a blank beside it. A bank block with nothing in it prints no
@@ -143,7 +143,7 @@ def test_a_letterhead_survives_a_missing_company_name():
     """Per field, not all-or-nothing.
 
     Gating the whole letterhead on the name would drop a filled tax code
-    and address off the page — the opposite of the rule that an unfilled
+    and address off the page - the opposite of the rule that an unfilled
     field prints nothing.
     """
     view = company_view(settings(company_name="", logo=""))

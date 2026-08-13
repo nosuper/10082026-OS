@@ -3,7 +3,7 @@
 Both nudges (quote silence, payment terms) treat 0 as "never nudge", so
 every reader has to tell a deliberate 0 from a value nobody has set.
 `frappe.db.get_single_value` cannot: it casts a missing Int to 0. And a
-value *is* missing more often than it looks — a Single's row is only
+value *is* missing more often than it looks - a Single's row is only
 written when its document is saved, so a field added by a later
 migration has no stored value on any existing site, and reading it as a
 deliberate 0 would quietly switch the nudge off.

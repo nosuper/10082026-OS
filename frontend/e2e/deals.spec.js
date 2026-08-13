@@ -106,7 +106,7 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
   await budgetCell.click()
   const editor = budgetCell.locator("input")
   await editor.fill("12500000")
-  // The field itself reads the way money is written — the A1
+  // The field itself reads the way money is written - the A1
   // walkthrough failed on raw digits sitting beside formatted cells.
   await expect(editor).toHaveValue(persistedBudget)
   await editor.blur()
@@ -166,7 +166,7 @@ test("two users keep distinct view and column preferences in one browser context
     await page.getByRole("checkbox", { name: "Source" }).uncheck()
     await page.getByRole("button", { name: "Board", exact: true }).click()
     // Wait for the click to land (and its preference to persist) before
-    // swapping users — switching mid-flight flaked this spec twice.
+    // swapping users - switching mid-flight flaked this spec twice.
     await expect(
       page.getByRole("button", { name: "Board", exact: true })
     ).toHaveClass(/bg-white/)

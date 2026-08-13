@@ -133,7 +133,7 @@
    "read_only": 1
   },
   {
-   "description": "Chi phí tính lãi — cost basis for the profit chain",
+   "description": "Chi phí tính lãi - cost basis for the profit chain",
    "fieldname": "cost_basis",
    "fieldtype": "Currency",
    "label": "Cost Basis",

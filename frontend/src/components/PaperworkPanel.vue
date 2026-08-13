@@ -36,7 +36,7 @@
             v-model="freelancer"
             class="mt-0.5 block w-48 rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
           >
-            <option value="">— pick a person —</option>
+            <option value="">- pick a person -</option>
             <optgroup v-if="crew.length" label="On this job">
               <option v-for="row in crew" :key="row.name" :value="row.name">
                 {{ row.full_name }}
@@ -60,14 +60,14 @@
             v-model="vendor"
             class="mt-0.5 block w-48 rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
           >
-            <option value="">— pick a company —</option>
+            <option value="">- pick a company -</option>
             <option v-for="row in companies.data" :key="row.name" :value="row.name">
               {{ row.company_name }}
             </option>
           </select>
         </label>
 
-        <!-- One door: every paper is read before it exists — Generate
+        <!-- One door: every paper is read before it exists - Generate
              lives inside the window (founder, A5 round 5). -->
         <Button
           variant="solid"
@@ -91,7 +91,7 @@
 
       <p v-if="template?.unknown_placeholders?.length" class="mt-2 text-xs text-amber-700">
         ⚠ This template asks for
-        {{ template.unknown_placeholders.join(", ") }} — no such placeholder
+        {{ template.unknown_placeholders.join(", ") }} - no such placeholder
         exists, so it will print as a gap marker. Fix the docx in the
         <router-link to="/paperwork" class="underline">library</router-link>.
       </p>
@@ -103,7 +103,7 @@
         class="mt-3 rounded-md border p-2 text-sm"
         :class="gaps.length ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'"
       >
-        <!-- Opens the reading window like every other paper — no
+        <!-- Opens the reading window like every other paper - no
              surprise downloads (founder, A5 round 7). -->
         <button
           class="text-left font-medium text-blue-700 hover:underline"
@@ -112,20 +112,20 @@
           {{ generated.file_name }}
         </button>
         <p v-if="!gaps.length" class="mt-1 text-xs text-green-800">
-          Every placeholder filled — ready to print.
+          Every placeholder filled - ready to print.
         </p>
         <template v-else>
           <p class="mt-1 text-xs text-amber-900">
             Printed with {{ gaps.length }}
-            {{ gaps.length === 1 ? "gap" : "gaps" }} marked on the page —
+            {{ gaps.length === 1 ? "gap" : "gaps" }} marked on the page -
             fill these in and generate again:
           </p>
           <ul class="mt-1 space-y-0.5 text-xs text-amber-900">
             <li v-for="name in generated.missing" :key="name">
-              · <code>{{ name }}</code> — no data on the record
+              · <code>{{ name }}</code> - no data on the record
             </li>
             <li v-for="name in generated.unknown" :key="name">
-              · <code>{{ name }}</code> — not a placeholder this system has
+              · <code>{{ name }}</code> - not a placeholder this system has
             </li>
           </ul>
         </template>
@@ -212,7 +212,7 @@ const documents = createResource({
   onError: onFail,
 })
 
-// The party lists are only fetched for templates that name one — most
+// The party lists are only fetched for templates that name one - most
 // papers are between us and the client, who is already on the job.
 const contacts = createResource({
   url: "frappe.client.get_list",
@@ -237,7 +237,7 @@ const companies = createResource({
 })
 
 // A freelancer contract is nearly always for someone already on the
-// job's cost lines — they come first, everyone else below.
+// job's cost lines - they come first, everyone else below.
 const parties = createResource({
   url: "auraos.api.job_parties",
   makeParams: () => ({ job: props.job }),
@@ -299,7 +299,7 @@ const previewer = createResource({
 })
 
 const draftTitle = computed(
-  () => `Draft — ${template.value?.template_name || "paper"}`
+  () => `Draft - ${template.value?.template_name || "paper"}`
 )
 
 function openPreview() {
@@ -324,7 +324,7 @@ const draftSaver = createResource({
 })
 
 // Generate lives inside the window. An untouched draft generates from
-// the original file — an uploaded Word template keeps its exact
+// the original file - an uploaded Word template keeps its exact
 // formatting that way; an edited draft is what the founder approved,
 // so the edit wins and builds through the HTML→Word translator.
 function generateFromWindow(html) {
@@ -377,7 +377,7 @@ function generate() {
 </script>
 
 <style>
-/* The preview's gap markers — v-html content is out of Tailwind's
+/* The preview's gap markers - v-html content is out of Tailwind's
    reach, so the highlight is plain CSS. */
 .aura-paper mark[data-gap] {
   background-color: #fde68a;

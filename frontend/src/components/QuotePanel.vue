@@ -5,7 +5,7 @@
     </h3>
     <p class="text-xs text-gray-500">
       Publishing freezes the packages and totals above into a new version
-      at its own link. Published versions never change — send a new one
+      at its own link. Published versions never change - send a new one
       instead.
     </p>
 

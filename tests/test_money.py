@@ -1,4 +1,4 @@
-"""Pure-python tests for auraos.lib.money — no Frappe required.
+"""Pure-python tests for auraos.lib.money - no Frappe required.
 
 House style (per spec Testing Decisions): assert external behavior at a
 seam. This seam is the framework-free library that the pricing engine

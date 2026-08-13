@@ -3,7 +3,7 @@
 Settling is one click on the job's money view (story 34), and this is
 what that click leaves behind. It is a transfer that happened, so the
 numbers are frozen after the fact: a float that turns out to be wrong
-is corrected by advancing, spending or settling again — never by
+is corrected by advancing, spending or settling again - never by
 rewriting a payment already made.
 """
 
@@ -25,7 +25,7 @@ class JobSettlement(Document):
 
     def validate(self):
         self.validate_amount()
-        # Derived, never input — and only once the amount is known to be
+        # Derived, never input - and only once the amount is known to be
         # a real transfer, because "Even" is not one of the options.
         self.direction = direction_of(self.amount)
         self.reject_changes()
@@ -33,7 +33,7 @@ class JobSettlement(Document):
     def validate_amount(self):
         if not self.amount or float(self.amount) == 0:
             frappe.throw(
-                _("A settlement moves money — an even float has nothing to settle"),
+                _("A settlement moves money - an even float has nothing to settle"),
                 frappe.ValidationError,
             )
 
@@ -46,7 +46,7 @@ class JobSettlement(Document):
                 frappe.throw(
                     _(
                         "{0} records a transfer that already happened and cannot "
-                        "be edited — settle again instead."
+                        "be edited - settle again instead."
                     ).format(_(self.meta.get_label(field))),
                     frappe.ValidationError,
                 )

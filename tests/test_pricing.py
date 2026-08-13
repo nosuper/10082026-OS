@@ -1,4 +1,4 @@
-"""Pure-python tests for auraos.lib.pricing — no Frappe required.
+"""Pure-python tests for auraos.lib.pricing - no Frappe required.
 
 The engine's normative definition is the repo's cost-breakdown xlsx
 (docs/samples/cost-breakdown-template.xlsx). These tests pin each rule

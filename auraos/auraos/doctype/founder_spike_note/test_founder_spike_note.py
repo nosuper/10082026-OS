@@ -25,7 +25,7 @@ class TestFounderSpikeNote(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Register hook-declared doctypes in Global Search Settings —
+        # Register hook-declared doctypes in Global Search Settings -
         # normally done by migrate, which CI's fresh site never runs.
         from frappe.desk.doctype.global_search_settings.global_search_settings import (
             update_global_search_doctypes,
@@ -39,7 +39,7 @@ class TestFounderSpikeNote(FrappeTestCase):
             {
                 "doctype": "Founder Spike Note",
                 "title": f"Overhead spike {SECRET}",
-                "note": f"Monthly overhead draft — {SECRET}",
+                "note": f"Monthly overhead draft - {SECRET}",
             }
         ).insert(ignore_permissions=True)
         cls.note_name = note.name

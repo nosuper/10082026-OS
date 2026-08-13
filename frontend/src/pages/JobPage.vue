@@ -67,7 +67,7 @@
         </button>
       </div>
 
-      <!-- The job's money at a glance — collected against quoted is the
+      <!-- The job's money at a glance - collected against quoted is the
            number the founder chases (spec #2, story 39). -->
       <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="rounded-lg border bg-white p-3">
@@ -118,7 +118,7 @@
         </div>
       </div>
 
-      <!-- Tabs: production work, money, paperwork — the market pattern
+      <!-- Tabs: production work, money, paperwork - the market pattern
            for a record this deep. v-show, not v-if: panels keep their
            state and their reload handles while hidden. -->
       <div class="mb-4 flex items-center gap-1 border-b">
@@ -152,7 +152,7 @@
                 <input
                   v-model="filesLocation"
                   class="min-w-0 flex-1 rounded border-gray-200 px-2 py-1 text-sm"
-                  :placeholder="`Shared folder for this job code — e.g. //nas/jobs/${name}`"
+                  :placeholder="`Shared folder for this job code - e.g. //nas/jobs/${name}`"
                 />
                 <Button
                   :disabled="filesLocation === (doc.files_location || '')"
@@ -162,7 +162,7 @@
                 </Button>
               </div>
               <p v-if="!doc.files_location" class="mt-1 text-xs text-amber-700">
-                No folder recorded yet — files still live on someone's personal
+                No folder recorded yet - files still live on someone's personal
                 drive.
               </p>
             </div>
@@ -176,7 +176,7 @@
                   class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
                 >
                   <FeatherIcon name="alert-triangle" class="h-3 w-3" />
-                  Round {{ doc.revision_rounds }} — chargeable change order
+                  Round {{ doc.revision_rounds }} - chargeable change order
                 </span>
                 <span v-else class="text-xs text-gray-500">
                   {{ doc.revision_rounds || 0 }} of
@@ -256,14 +256,14 @@
                   Log revision
                 </Button>
               </div>
-              <p v-if="reopenNotice" class="mt-1 text-xs text-blue-700">
-                {{ reopenNotice }}
+              <p v-if="redoNotice" class="mt-1 text-xs text-blue-700">
+                {{ redoNotice }}
               </p>
               <p v-if="nextIsChargeable" class="mt-1 text-xs text-amber-700">
-                The next round is past the included ones — it will be flagged
+                The next round is past the included ones - it will be flagged
                 as a chargeable change order.
               </p>
-              <p v-if="reopensOnLog" class="mt-1 text-xs text-gray-500">
+              <p v-if="redoOnLog" class="mt-1 text-xs text-gray-500">
                 Logging a revision sends this job back to {{ REDO_STAGE }}.
               </p>
             </div>
@@ -416,7 +416,7 @@ import {
   STAGES,
   INCLUDED_REVISION_ROUNDS,
   REDO_STAGE,
-  LAST_REOPENABLE_STAGE,
+  LAST_REDOABLE_STAGE,
 } from "../data/jobStages"
 
 const route = useRoute()
@@ -429,7 +429,7 @@ const error = ref("")
 const stage = ref("")
 const filesLocation = ref("")
 const revisionNote = ref("")
-const reopenNotice = ref("")
+const redoNotice = ref("")
 // Per job, negotiated deal by deal; the constant is only what a new job
 // starts with, and the server is the authority on both.
 const includedRounds = ref(INCLUDED_REVISION_ROUNDS)
@@ -519,11 +519,11 @@ const nextIsChargeable = computed(
 
 // Mirrors redo_stage_for on the server: between being shown a cut and
 // signing it off, a revision sends the job back to the edit.
-const reopensOnLog = computed(() => {
+const redoOnLog = computed(() => {
   const current = STAGES.indexOf(doc.value?.stage)
   return (
     current > STAGES.indexOf(REDO_STAGE) &&
-    current <= STAGES.indexOf(LAST_REOPENABLE_STAGE)
+    current <= STAGES.indexOf(LAST_REDOABLE_STAGE)
   )
 })
 
@@ -581,8 +581,8 @@ const revision = createResource({
     revisionNote.value = ""
     error.value = ""
     // Say it out loud: the stage moved without anyone dragging a card.
-    reopenNotice.value = result.reopened
-      ? `Round ${result.round} logged — this job is back in ${result.stage}.`
+    redoNotice.value = result.redo
+      ? `Round ${result.round} logged - this job is back in ${result.stage}.`
       : ""
     job.reload()
   },
@@ -593,7 +593,7 @@ const revision = createResource({
 
 function logRevision() {
   if (!revisionNote.value.trim()) return
-  reopenNotice.value = ""
+  redoNotice.value = ""
   revision.submit({ job: name, note: revisionNote.value })
 }
 </script>

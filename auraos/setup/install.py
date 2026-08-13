@@ -11,7 +11,7 @@ ROLES = ("Founder", "Producer")
 PARTY_ROLES = ("Client", "Vendor", "Freelancer")
 
 # Founder-confirmed starting vocabularies (issue #21). Both are
-# founder-expandable doctypes, not frozen Selects — the founder asked
+# founder-expandable doctypes, not frozen Selects - the founder asked
 # for the source list to keep growing.
 DEAL_SOURCES = ("Website", "Referral", "Zalo", "Expo")
 PROJECT_TYPES = ("TVC", "Social Video", "Event", "Documentary")

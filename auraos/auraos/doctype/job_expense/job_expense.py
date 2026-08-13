@@ -1,4 +1,4 @@
-"""One payment out on a job — the thing logged on a phone during a shoot.
+"""One payment out on a job - the thing logged on a phone during a shoot.
 
 Kept to what can be entered in seconds: an amount, a category, and a
 photo of the receipt. Everything else has a default that is right often
@@ -34,7 +34,7 @@ class JobExpense(Document):
 
         That is the whole mechanism behind actual-vs-quoted per package
         (story 32): a category that could be anything would leave the
-        comparison full of holes. Empty stays allowed — money gets spent
+        comparison full of holes. Empty stays allowed - money gets spent
         on things nobody quoted, and a row called Uncategorised is far
         better than pretending it wasn't spent.
         """
@@ -43,7 +43,7 @@ class JobExpense(Document):
         allowed = frappe.get_doc("Job", self.job).expense_categories()
         if self.category not in allowed:
             frappe.throw(
-                _("{0} is not a category on this job — its packages are: {1}").format(
+                _("{0} is not a category on this job - its packages are: {1}").format(
                     self.category, ", ".join(allowed) or _("none")
                 ),
                 frappe.ValidationError,
