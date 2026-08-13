@@ -36,3 +36,4 @@ frontend/playwright-report/
 frontend/test-results/
 .agents/
 .worktrees/
+docker/.env.prod

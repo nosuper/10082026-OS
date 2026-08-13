@@ -1,0 +1,31 @@
+# Production overlay (T13-lite) - the same stack as dev, run as its own
+# compose project with its own volumes, real passwords, and no
+# developer mode. TLS and the public hostname live on the reverse proxy
+# the founder already operates (domain → Cloudflare → proxy → this box).
+#
+#   cd docker && docker compose --project-name aura-prod \
+#     --file compose.yaml --file compose.prod.yaml \
+#     --env-file .env.prod up -d
+#
+# .env.prod is written by scripts/wizard-production.sh and never
+# committed (see env.prod.example for the variables).
+#
+# The proxy forwards two things:
+#   https://<domain>          → 127.0.0.1:${AURA_WEB_PORT}
+#   https://<domain>/socket.io → 127.0.0.1:${AURA_SOCKET_PORT}
+services:
+  mariadb:
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${AURA_DB_ROOT_PW:?write docker/.env.prod first (scripts/wizard-production.sh)}
+
+  redis:
+    restart: unless-stopped
+
+  frappe:
+    restart: unless-stopped
+    environment:
+      AURA_SITE: ${AURA_SITE:?write docker/.env.prod first}
+      AURA_DB_ROOT_PW: ${AURA_DB_ROOT_PW:?}
+      AURA_ADMIN_PW: ${AURA_ADMIN_PW:?}
+      AURA_DEV_MODE: "0"
