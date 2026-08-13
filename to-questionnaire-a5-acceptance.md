@@ -84,6 +84,35 @@ the paper show up under Paperwork → Generated papers?
 
 >
 
+## Round 3 — the founder's answers (in-session, 2026-08-13) and what shipped
+
+(1) Clicking a web template's name opened a download — now it opens the
+editor (download lives behind a small icon). (2) The editor became a
+document editor: TipTap with the full toolbar (headings, bold/italic/
+underline, lists, alignment), and the built .docx keeps that
+formatting via a new HTML→Word translator. (3) **Preview & print on
+the web**: a Preview button on the job shows the filled paper on
+screen, every gap highlighted amber exactly where it would print, and
+Print opens the browser's print dialog — the .docx stays as the
+record.
+
+### Round-3 checks
+
+**R3.1** Paperwork → click "Hợp đồng cộng tác viên (mẫu)" — does the
+rich editor open, looking like the document (centered heading, bold,
+bullets)? Format something, save, download the .docx — did it survive?
+
+>
+
+**R3.2** MV job → Paperwork → chọn hợp đồng CTV → Preview với và không
+chọn freelancer — gaps amber đúng chỗ? Print ra giấy đẹp?
+
+>
+
+**R3.3** Còn gì thiếu trước khi đóng Phase A?
+
+>
+
 ## Verdict
 
 - [ ] **GO** — merge it; Phase B/C starts
