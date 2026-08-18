@@ -162,13 +162,21 @@ def test_the_row_names_the_deal_and_the_client_it_belongs_to():
     assert tracked["company"] == "COM-0004"
 
 
-def test_the_row_carries_the_delivery_dates_as_dates():
+def test_the_row_carries_the_delivery_dates_as_iso_strings():
+    """Dates leave as ISO strings, never as date or datetime objects.
+
+    A datetime that reaches the response serialises as
+    "2026-08-13 16:45:26.952510" - a space where the T belongs, which
+    not every browser parses. The contract tests caught this on the
+    quote stamps while the finance reports were already normalising.
+    """
     tracked = row()
 
-    assert tracked["published_on"] == AUG_09
-    assert tracked["sent_on"] == AUG_09
+    assert tracked["published_on"] == AUG_09.isoformat()
+    assert tracked["sent_on"] == AUG_09.isoformat()
     assert tracked["confirmed_on"] is None
     assert tracked["status"] == "Sent"
+    assert isinstance(tracked["published_on"], str)
 
 
 def test_the_total_is_whole_dong_not_a_float():

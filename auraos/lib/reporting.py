@@ -66,6 +66,18 @@ def open_tracking(rows: Iterable[Row]) -> dict[str, dict]:
     return tracking
 
 
+def iso(value: Any) -> str | None:
+    """A timestamp as an ISO string, or None.
+
+    Frappe hands back datetimes, and letting one reach the response
+    serialises it as "2026-08-13 16:45:26.952510" - a space instead of
+    the T, which not every browser parses. The finance reports already
+    normalise; the quote stamps did not, which the contract tests
+    caught. Spec #81 requires ISO strings on the wire.
+    """
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
 def quotation_row(
     quote: Row,
     *,
@@ -91,14 +103,15 @@ def quotation_row(
         "version": quote.get("version"),
         "status": quote.get("status"),
         "total": round_vnd(quote.get("total") or 0),
-        "published_on": quote.get("published_on"),
-        "sent_on": quote.get("sent_on"),
-        "confirmed_on": quote.get("confirmed_on"),
+        "published_on": iso(quote.get("published_on")),
+        "sent_on": iso(quote.get("sent_on")),
+        "confirmed_on": iso(quote.get("confirmed_on")),
         "url": url,
         "open_count": int(tracking.get(PAGE) or 0),
         "download_count": int(tracking.get(PDF) or 0),
-        "last_opened_at": tracking.get(LAST_OPEN),
+        "last_opened_at": iso(tracking.get(LAST_OPEN)),
     }
+
 
 
 def matches_search(row: Row, search: str | None) -> bool:

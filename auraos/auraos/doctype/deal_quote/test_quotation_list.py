@@ -240,17 +240,17 @@ class TestQuotationListContract(QuotationListTestCase):
         rows = quotation_list(search="no client by this name exists")
         self.assertEqual(rows, [])
 
-    def test_the_quote_stamps_leave_as_datetimes_rather_than_iso_strings(self):
-        """Named rather than accommodated.
+    def test_the_quote_stamps_cross_the_wire_as_iso_strings(self):
+        """Spec #81 requires ISO strings on the wire.
 
-        Spec #81 says dates cross the wire as ISO strings, and the
-        finance reports honour that through lib/finance._iso. This
-        endpoint passes the stored stamp straight out of get_all, so it
-        leaves Python as a datetime and leaves Frappe's JSON encoder as
-        `2026-08-13 16:45:26.952510` - space separated, which is not
-        what `datetime.isoformat` writes and not what every browser's
-        Date parser accepts. Pinned so that the day api.py starts
-        emitting `_iso`, this test fails and points at the reason.
+        This test was written the other way round, pinning the bug it
+        found: the endpoint passed the stored stamp straight out of
+        get_all, so it left Python as a datetime and left Frappe's JSON
+        encoder as `2026-08-13 16:45:26.952510` - a space where the T
+        belongs, which not every browser's Date parser accepts. The
+        finance reports already normalised. lib/reporting.iso now does
+        the same here, and this test asserts the fix rather than the
+        defect.
         """
         quote = publish_quote(self.deal.name)
         mark_quote_sent(quote["name"])
@@ -258,5 +258,6 @@ class TestQuotationListContract(QuotationListTestCase):
 
         (row,) = rows_for(self.deal.name)
         for field in ("published_on", "sent_on", "last_opened_at"):
-            self.assertIsInstance(row[field], datetime, f"{field} is not a datetime")
+            self.assertIsInstance(row[field], str, f"{field} is not a string")
+            datetime.fromisoformat(row[field])
         self.assertIsNone(row["confirmed_on"], "an unsigned quote has no signing date")
