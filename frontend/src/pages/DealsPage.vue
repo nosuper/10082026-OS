@@ -24,7 +24,7 @@
         <div class="min-w-0">
           <h2 class="font-display text-sm font-semibold text-carbon">All deals</h2>
           <div v-if="tableBudgetTotal" class="mt-0.5 text-xs text-muted">
-            Total value <span class="text-carbon">{{ vndShort(tableBudgetTotal) }}</span>
+            Total value <span class="text-carbon">{{ vnd(tableBudgetTotal) }}</span>
           </div>
         </div>
 
@@ -123,7 +123,7 @@
                 class="ml-auto shrink-0 text-[11px] text-muted"
                 :title="`${vnd(stageTotals[stage.value])} ₫ total in ${stage.label}`"
               >
-                {{ vndShort(stageTotals[stage.value]) }}
+                {{ vnd(stageTotals[stage.value]) }}
               </span>
             </div>
 
@@ -530,7 +530,7 @@ import StatusPill from "../components/StatusPill.vue"
 import MoneyValue from "../components/MoneyValue.vue"
 import EmptyState from "../components/EmptyState.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd, vndShort } from "../utils/money"
+import { vnd } from "../utils/money"
 import { ago, daysSince } from "../utils/time"
 import { STAGES } from "../utils/stages"
 import { currentUser } from "../utils/user"

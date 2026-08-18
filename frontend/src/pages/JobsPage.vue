@@ -9,7 +9,7 @@
         <p class="mt-0.5 text-sm text-muted">
           {{ filteredJobs.length }} job{{ filteredJobs.length === 1 ? "" : "s" }}
           <template v-if="boardTotal">
-            · <span class="tabular-nums">{{ vndShort(boardTotal) }} ₫</span> in production
+            · <span class="tabular-nums">{{ vnd(boardTotal) }} ₫</span> in production
           </template>
         </p>
         <p class="mt-0.5 text-xs text-faint">
@@ -21,6 +21,7 @@
         <FeatherIcon
           name="search"
           class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
+          aria-hidden="true"
         />
         <input
           v-model.trim="query"
@@ -43,7 +44,11 @@
       <div
         class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-accent/20 bg-accent-soft px-4 py-3"
       >
-        <FeatherIcon name="alert-circle" class="h-4 w-4 shrink-0 text-accent" />
+        <FeatherIcon
+          name="alert-circle"
+          class="h-5 w-5 shrink-0 text-accent"
+          aria-hidden="true"
+        />
         <div class="min-w-0">
           <div class="aura-eyebrow text-accent-ink">Uncollected</div>
           <div class="mt-0.5 flex items-baseline gap-1">
@@ -70,11 +75,10 @@
             {{ row.job_title || row.job }}
           </router-link>
           <span class="min-w-0 truncate text-xs text-muted">{{ row.title }}</span>
-          <StatusPill
-            :label="overdueLabel(row.days_overdue)"
-            tone="accent"
-            class="shrink-0"
-          />
+          <StatusPill tone="accent" class="shrink-0">
+            <FeatherIcon name="clock" class="mr-1 h-3 w-3" aria-hidden="true" />
+            {{ overdueLabel(row.days_overdue) }}
+          </StatusPill>
           <span class="shrink-0 text-xs text-faint">{{ row.status }}</span>
           <MoneyValue :amount="row.amount" class="ml-auto shrink-0 font-medium" />
         </li>
@@ -103,15 +107,12 @@
           <span class="aura-num shrink-0 text-[11px] text-faint">
             {{ jobsByStage[stage]?.length || 0 }}
           </span>
-          <!-- Column money is sans, not the mono ledger face: vndShort spells
-               the unit in Vietnamese ("triệu", "tỷ") and the mono face has no
-               diacritics to spell it with. -->
           <span
             v-if="stageTotals[stage]"
             class="ml-auto shrink-0 text-[11px] font-medium tabular-nums text-muted"
             :title="`${vnd(stageTotals[stage])} ₫ quoted in ${stage}`"
           >
-            {{ vndShort(stageTotals[stage]) }}
+            {{ vnd(stageTotals[stage]) }}
           </span>
         </div>
 
@@ -152,7 +153,11 @@
                 tone="warn"
                 title="Revision rounds past the included ones - chargeable"
               >
-                <FeatherIcon name="alert-triangle" class="mr-1 h-3 w-3" />
+                <FeatherIcon
+                  name="alert-triangle"
+                  class="mr-1 h-3 w-3"
+                  aria-hidden="true"
+                />
                 Change order · {{ job.revision_rounds }} rounds
               </StatusPill>
               <StatusPill
@@ -196,7 +201,7 @@ import StatusPill from "../components/StatusPill.vue"
 import MoneyValue from "../components/MoneyValue.vue"
 import EmptyState from "../components/EmptyState.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd, vndShort } from "../utils/money"
+import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
 import { jobStageDot } from "../utils/stages"
 import { overdueLabel } from "../data/milestones"

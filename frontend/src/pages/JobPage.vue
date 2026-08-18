@@ -4,8 +4,12 @@
          The app shell's header is already sticky, so this reads as a title
          block, not a second bar. -->
     <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
-      <router-link to="/jobs" class="text-sm text-muted hover:text-accent">
-        ← Jobs
+      <router-link
+        to="/jobs"
+        class="inline-flex shrink-0 items-center gap-1 text-sm text-muted hover:text-accent"
+      >
+        <FeatherIcon name="chevron-left" class="h-3.5 w-3.5" aria-hidden="true" />
+        Jobs
       </router-link>
       <h1 class="text-xl font-semibold text-carbon">
         {{ doc?.title || name }}
@@ -52,6 +56,7 @@
             v-if="index < STAGES.length - 1"
             name="chevron-right"
             class="h-3 w-3 shrink-0 text-faint/60"
+            aria-hidden="true"
           />
         </template>
       </div>
@@ -65,7 +70,7 @@
 
         <BentoCard title="Collected">
           <span class="aura-num text-2xl font-medium text-ok">
-            {{ vndShort(collected) }}
+            {{ vnd(collected) }}
           </span>
           <div class="mt-2 h-1.5 overflow-hidden rounded-pill bg-hairline">
             <div
@@ -108,7 +113,7 @@
         <button
           v-for="tab in TABS"
           :key="tab"
-          class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors"
+          class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors"
           :class="
             activeTab === tab
               ? 'border-accent text-carbon'
@@ -116,6 +121,11 @@
           "
           @click="activeTab = tab"
         >
+          <FeatherIcon
+            :name="TAB_ICONS[tab]"
+            class="h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          />
           {{ tab }}
           <span
             v-if="tab === 'Money' && overdueCount"
@@ -189,6 +199,7 @@
                     name="alert-triangle"
                     class="h-3 w-3 text-warn"
                     title="Chargeable"
+                    aria-hidden="true"
                   />
                 </span>
               </template>
@@ -355,7 +366,7 @@ import DataTable from "../components/DataTable.vue"
 import StatusPill from "../components/StatusPill.vue"
 import MoneyValue from "../components/MoneyValue.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd, vndShort } from "../utils/money"
+import { vnd } from "../utils/money"
 import JobMoneyPanel from "../components/JobMoneyPanel.vue"
 import MilestonesPanel from "../components/MilestonesPanel.vue"
 import { PAID } from "../data/milestones"
@@ -370,6 +381,13 @@ const route = useRoute()
 const name = route.params.name
 
 const TABS = ["Production", "Money", "Paperwork"]
+// The tab's subject in one glyph - the shell's own vocabulary: a reel for
+// the work, the money sign for the money, a page for the paperwork.
+const TAB_ICONS = {
+  Production: "film",
+  Money: "dollar-sign",
+  Paperwork: "file-text",
+}
 const activeTab = ref("Production")
 
 const error = ref("")

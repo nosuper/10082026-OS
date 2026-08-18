@@ -10,8 +10,9 @@
 
     <!-- The founder gate. Any settings call failing replaces the whole body:
          a producer session must never see a settings field, even empty. -->
-    <div v-if="denied" class="aura-card p-4 text-sm text-muted">
-      Only the founder can view company settings.
+    <div v-if="denied" class="aura-card flex items-start gap-2 p-4 text-sm text-muted">
+      <FeatherIcon name="lock" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" aria-hidden="true" />
+      <span>Only the founder can view company settings.</span>
     </div>
 
     <div v-else class="space-y-3">
@@ -249,7 +250,7 @@
             @failure="onFail"
           >
             <template #default="{ openFileSelector, uploading }">
-              <Button :loading="uploading" @click="openFileSelector">
+              <Button icon-left="upload" :loading="uploading" @click="openFileSelector">
                 {{ company.logo ? "Replace logo" : "Upload logo" }}
               </Button>
             </template>
@@ -298,7 +299,7 @@
 
 <script setup>
 import { computed, reactive, ref } from "vue"
-import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, FileUploader, createResource } from "frappe-ui"
 import BentoCard from "../components/BentoCard.vue"
 import StatusPill from "../components/StatusPill.vue"
 import VndInput from "../components/VndInput.vue"

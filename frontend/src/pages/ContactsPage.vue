@@ -10,7 +10,7 @@
         </template>
       </p>
       <div class="ml-auto">
-        <Button variant="solid" @click="openNew">
+        <Button variant="solid" icon-left="plus" @click="openNew">
           {{ activeTab === "companies" ? "New Company" : "New Person" }}
         </Button>
       </div>
@@ -31,6 +31,11 @@
               : 'text-muted hover:text-carbon'
           "
         >
+          <FeatherIcon
+            :name="tab.icon"
+            class="h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          />
           {{ tab.label }}
           <span
             class="aura-num text-[11px]"
@@ -44,7 +49,11 @@
       <label
         class="flex min-w-[200px] flex-1 items-center gap-2 rounded-[10px] border border-hairline bg-paper px-2.5 py-2 shadow-card transition-colors focus-within:border-accent/40"
       >
-        <FeatherIcon name="search" class="h-3.5 w-3.5 shrink-0 text-faint" />
+        <FeatherIcon
+          name="search"
+          class="h-3.5 w-3.5 shrink-0 text-faint"
+          aria-hidden="true"
+        />
         <input
           v-model="search"
           type="text"
@@ -105,11 +114,25 @@
       </template>
 
       <template #cell-phone="{ row }">
-        <span class="aura-num text-xs text-muted">{{ row.phone || "-" }}</span>
+        <span class="flex min-w-0 items-center gap-1.5">
+          <FeatherIcon
+            name="phone"
+            class="h-3 w-3 shrink-0 text-faint"
+            aria-hidden="true"
+          />
+          <span class="aura-num text-xs text-muted">{{ row.phone || "-" }}</span>
+        </span>
       </template>
 
       <template #cell-email="{ row }">
-        <span class="block truncate text-sm text-muted">{{ row.email || "-" }}</span>
+        <span class="flex min-w-0 items-center gap-1.5">
+          <FeatherIcon
+            name="mail"
+            class="h-3 w-3 shrink-0 text-faint"
+            aria-hidden="true"
+          />
+          <span class="block truncate text-sm text-muted">{{ row.email || "-" }}</span>
+        </span>
       </template>
 
       <!-- Paperwork completeness: incomplete records cannot generate a contract
@@ -154,8 +177,8 @@ import EmptyState from "../components/EmptyState.vue"
 import PartyFormDialog from "../components/PartyFormDialog.vue"
 
 const tabs = [
-  { label: "Companies", value: "companies", to: "/contacts/companies" },
-  { label: "People", value: "people", to: "/contacts/people" },
+  { label: "Companies", value: "companies", to: "/contacts/companies", icon: "briefcase" },
+  { label: "People", value: "people", to: "/contacts/people", icon: "users" },
 ]
 
 // The tab is the URL: /contacts/companies and /contacts/people already resolve

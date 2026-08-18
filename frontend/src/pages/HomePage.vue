@@ -63,6 +63,12 @@
       >
         <ul v-if="attention.length" class="divide-y divide-hairline">
           <li v-for="item in attention" :key="item.key" class="flex items-baseline gap-2 py-2 first:pt-0">
+            <FeatherIcon
+              name="alert-triangle"
+              class="h-4 w-4 shrink-0 self-center"
+              :class="item.tone === 'warn' ? 'text-warn' : 'text-accent'"
+              aria-hidden="true"
+            />
             <StatusPill :label="item.kind" :tone="item.tone" />
             <router-link :to="item.to" class="min-w-0 truncate text-sm font-medium text-carbon hover:text-accent">
               {{ item.title }}
@@ -181,7 +187,12 @@
             <MoneyValue :amount="row.amount" class="ml-auto shrink-0" />
           </li>
         </ul>
-        <EmptyState v-else title="No milestone is overdue." detail="Collections are current." />
+        <EmptyState
+          v-else
+          icon="check-circle"
+          title="No milestone is overdue."
+          detail="Collections are current."
+        />
       </BentoCard>
     </div>
   </div>
@@ -189,7 +200,7 @@
 
 <script setup>
 import { ref, computed, watch } from "vue"
-import { Button, ErrorMessage, createResource, createListResource } from "frappe-ui"
+import { Button, ErrorMessage, FeatherIcon, createResource, createListResource } from "frappe-ui"
 import BentoCard from "../components/BentoCard.vue"
 import DataTable from "../components/DataTable.vue"
 import StatusPill from "../components/StatusPill.vue"

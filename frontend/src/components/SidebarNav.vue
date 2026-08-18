@@ -18,20 +18,22 @@
             v-for="child in item.children"
             :key="child.route"
             :to="child.route"
-            class="block rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-carbon"
+            class="flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-carbon"
             active-class="bg-accent-soft text-accent-ink"
           >
-            {{ child.label }}
+            <FeatherIcon :name="child.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span class="truncate">{{ child.label }}</span>
           </router-link>
         </div>
 
         <router-link
           v-else
           :to="item.route"
-          class="block rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-carbon"
+          class="flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-carbon"
           active-class="bg-accent-soft text-accent-ink"
         >
-          {{ item.label }}
+          <FeatherIcon :name="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span class="truncate">{{ item.label }}</span>
         </router-link>
       </template>
     </nav>
@@ -68,16 +70,20 @@ defineEmits(["logout"])
 
 // Contacts is a group, not a page: Companies and People are their own routes so
 // refresh and deep links land where the user was.
+//
+// Icons follow the design reference's sidebar. Feather has no counterpart for
+// its Handshake, Clapperboard or Building2, so those become trending-up, film
+// and briefcase - the nearest thing that still reads as the right idea.
 const items = computed(() => [
-  { label: "Home", route: "/" },
-  { label: "Deals", route: "/deals" },
-  { label: "Jobs", route: "/jobs" },
-  { label: "Paperwork", route: "/paperwork" },
+  { label: "Home", route: "/", icon: "home" },
+  { label: "Deals", route: "/deals", icon: "trending-up" },
+  { label: "Jobs", route: "/jobs", icon: "film" },
+  { label: "Paperwork", route: "/paperwork", icon: "file-text" },
   {
     label: "Contacts",
     children: [
-      { label: "Companies", route: "/contacts/companies" },
-      { label: "People", route: "/contacts/people" },
+      { label: "Companies", route: "/contacts/companies", icon: "briefcase" },
+      { label: "People", route: "/contacts/people", icon: "users" },
     ],
   },
   ...(props.isFounder
@@ -85,8 +91,8 @@ const items = computed(() => [
         {
           label: "Founder",
           children: [
-            { label: "Settings", route: "/settings" },
-            { label: "SOP · Deals", route: "/sop/deals" },
+            { label: "Settings", route: "/settings", icon: "settings" },
+            { label: "SOP · Deals", route: "/sop/deals", icon: "book-open" },
           ],
         },
       ]

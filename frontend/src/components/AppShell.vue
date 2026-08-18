@@ -28,9 +28,10 @@
           v-for="item in mobileNav"
           :key="item.route"
           :to="item.route"
-          class="whitespace-nowrap rounded-[8px] px-2 py-1 text-sm text-muted"
+          class="flex items-center gap-1.5 whitespace-nowrap rounded-[8px] px-2 py-1 text-sm text-muted"
           active-class="bg-accent-soft text-accent-ink"
         >
+          <FeatherIcon :name="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
           {{ item.label }}
         </router-link>
       </nav>
@@ -44,6 +45,7 @@
 
 <script setup>
 import { computed } from "vue"
+import { FeatherIcon } from "frappe-ui"
 import SidebarNav from "./SidebarNav.vue"
 import QuickActions from "./QuickActions.vue"
 
@@ -54,13 +56,15 @@ const props = defineProps({
 
 defineEmits(["logout", "search"])
 
+// Same icons as the sidebar, so a route looks the same whichever nav you meet
+// it in.
 const mobileNav = computed(() => [
-  { label: "Home", route: "/" },
-  { label: "Deals", route: "/deals" },
-  { label: "Jobs", route: "/jobs" },
-  { label: "Paperwork", route: "/paperwork" },
-  { label: "Companies", route: "/contacts/companies" },
-  { label: "People", route: "/contacts/people" },
-  ...(props.isFounder ? [{ label: "Settings", route: "/settings" }] : []),
+  { label: "Home", route: "/", icon: "home" },
+  { label: "Deals", route: "/deals", icon: "trending-up" },
+  { label: "Jobs", route: "/jobs", icon: "film" },
+  { label: "Paperwork", route: "/paperwork", icon: "file-text" },
+  { label: "Companies", route: "/contacts/companies", icon: "briefcase" },
+  { label: "People", route: "/contacts/people", icon: "users" },
+  ...(props.isFounder ? [{ label: "Settings", route: "/settings", icon: "settings" }] : []),
 ])
 </script>

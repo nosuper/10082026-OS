@@ -1,13 +1,22 @@
 <template>
-  <span class="aura-num" :class="[sizeClass, toneClass]">{{ text }}</span>
+  <span class="aura-num whitespace-nowrap" :class="[sizeClass, toneClass]"
+    >{{ text }}<span v-if="value !== null" class="ml-1 text-faint">₫</span></span
+  >
 </template>
 
 <script setup>
 import { computed } from "vue"
-import { vnd, vndShort } from "../utils/money"
+import { vnd } from "../utils/money"
 
 // One place decides how money reads: grouped thousands, no decimals, tabular
-// numerals so columns line up. `short` is for headline tiles only.
+// numerals so columns line up, and a đồng sign so a figure is never mistaken
+// for a count.
+//
+// `short` no longer spells the magnitude. vndShort renders "1,9 tỷ" and
+// "850 triệu", and the founder reads those as words where a figure belongs -
+// the design reference uses full digits everywhere and never abbreviates.
+// The prop stays so call sites keep working, but it now only means "this is a
+// headline figure"; it no longer changes the number.
 const props = defineProps({
   amount: { type: [Number, String], default: null },
   short: { type: Boolean, default: false },
@@ -37,7 +46,7 @@ const value = computed(() => {
 
 const text = computed(() => {
   if (value.value === null) return props.placeholder
-  return props.short ? vndShort(value.value) : vnd(value.value)
+  return vnd(value.value)
 })
 
 const sizeClass = computed(() => SIZES[props.size] || SIZES.md)
