@@ -18,7 +18,6 @@
     --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
     --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
 
-    /* the measure now belongs to the shell (.measure) - the sheet inherits it */
     --pad: 22px;
   }
 
@@ -50,31 +49,38 @@
   .spine-foot a{color:#8d887a;text-decoration:none}
   .spine-foot a:hover{color:var(--stock)}
 
-  /* the working area */
+  /* the working area.
+     REVISED 2026-08-18 round 3: there is no narrow measure any more. Every
+     screen fills app-main edge to edge. The founder asked for full width on
+     all screens for consistency, plus "gom nhóm / rút gọn UI lại cho phù hợp".
+     Those two go together: width is spent by GROUPING content into columns,
+     never by stretching one column of text or a lone row across 1200px.
+     Stretching is what was rejected in round 1, not width itself - and a real
+     call sheet is already a multi-column document, so this is the more
+     faithful reading of the direction. */
   .app-main{min-width:0;padding:22px 24px 90px}
-  .measure{max-width:1120px;margin:0 auto}   /* document screens */
-  .bleed{max-width:none}                      /* wide tables: fill app-main, scroll inside */
+
+  /* grouping grids - use these rather than inventing per-page column systems */
+  .grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:22px;align-items:start}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;align-items:start}
+  @media (max-width:1100px){ .grid2,.grid3{grid-template-columns:minmax(0,1fr)} }
 
   /* below 900px the spine lies down as a top strip */
   @media (max-width:900px){
-    .app{grid-template-columns:1fr}
+    /* minmax(0,1fr), not 1fr: a plain 1fr track takes its min-content from the
+       nav labels and lets the page scroll sideways on a phone */
+    .app{grid-template-columns:minmax(0,1fr)}
     .spine{position:static;height:auto;flex-direction:row;align-items:center;
       flex-wrap:wrap;gap:0 2px;padding:0 8px}
     .spine-mark{border-bottom:0;padding:10px 10px 10px 4px}
     .spine-mark span{display:none}
-    .spine-nav{display:flex;padding:0}
+    /* must wrap: six items at min-content are ~430px, wider than a 390px phone,
+       which forced 56px of horizontal page scroll before this was added */
+    .spine-nav{display:flex;flex-wrap:wrap;padding:0}
     .spine-nav a{padding:10px;border-left:0;border-bottom:3px solid transparent}
     .spine-nav .on a{border-left-color:transparent;border-bottom-color:#A81F16}
     .spine-foot{margin-left:auto;border-top:0;padding:10px}
     .app-main{padding:14px 12px 90px}
-  }
-  /* adaptation, not a restyle: the laid-down spine is a non-wrapping flex row,
-     so below ~440px its six labels set the grid track and the whole page
-     scrolls sideways. Letting the row wrap fixes it without touching a
-     single measure. */
-  @media (max-width:900px){
-    .app{grid-template-columns:minmax(0,1fr)}
-    .spine-nav{flex-wrap:wrap}
   }
 
   body{
@@ -87,9 +93,20 @@
     line-height:1.35;
   }
 
+  /* ============ PAGE GROUPING =============================================
+     Three bands, not one tall column:
+       1  the alarm band - full width, split into the two labelled sub-blocks
+       2  the working band - jobs + standing figures | the tear-off docket
+       3  the alternate state, with its caption as a margin note
+     Each band is an inline-size container, so the blocks inside respond to the
+     column they actually sit in rather than to the viewport. That is what keeps
+     a 1920px screen from stretching anything. */
+  .band{container:band / inline-size}
+  .col{container:col / inline-size;min-width:0}
+  .stack{margin-top:30px}
+  .stack-alt{margin-top:44px}
+
   /* ============ THE SHEET ON THE DESK ============ */
-  /* the shell's .measure now sets the width and the centring - the sheet
-     only has to be a sheet */
   .sheet{
     width:100%;
     margin:0;
@@ -101,17 +118,25 @@
     background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
     overflow:hidden;
   }
-  .sheet + .sheet{margin-top:38px}
+  .sheet + .sheet{margin-top:30px}
 
   .desk-cap{
-    margin:44px 0 -12px;
-    padding:0 2px 8px;
+    margin:0;
+    padding:2px 2px 0;
     font-family:var(--form);
     font-size:10px;
     font-weight:700;
     letter-spacing:.2em;
     text-transform:uppercase;
     color:var(--ink);
+    line-height:1.7;
+  }
+  .desk-cap span{
+    display:block;
+    margin-top:8px;
+    font-weight:600;
+    letter-spacing:.13em;
+    color:var(--ink-mid);
   }
 
   /* ============ SHARED ATOMS ============ */
@@ -139,12 +164,12 @@
     align-items:flex-end;
     justify-content:space-between;
     gap:.6rem 1.5rem;
-    padding:20px var(--pad) 16px;
+    padding:16px var(--pad) 14px;
   }
   .sheet-title h1{
     margin:0;
     font-family:var(--form);
-    font-size:clamp(20px,3vw,28px);
+    font-size:clamp(20px,2.2cqi,26px);
     font-weight:700;
     letter-spacing:.16em;
     text-transform:uppercase;
@@ -158,24 +183,29 @@
     letter-spacing:.22em;
     text-transform:uppercase;
     color:var(--ink-mid);
-    margin-bottom:8px;
+    margin-bottom:7px;
   }
+  /* the date line is a run of stamps along the head, not a stack - it costs one
+     line instead of three and reads like the top of a real call sheet */
   .sheet-stamp-no{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:baseline;
+    gap:2px 18px;
     font-family:var(--form);
     font-size:10px;
     font-weight:600;
     letter-spacing:.16em;
     text-transform:uppercase;
-    text-align:right;
     color:var(--ink-mid);
-    line-height:1.7;
+    line-height:1.6;
   }
   .sheet-stamp-no b{color:var(--ink);font-weight:700}
 
   /* ============ SECTION SHELL ============ */
   /* every section opens with a reversed bar - that bar IS the boundary */
   .sec{position:relative}
-  .sec + .sec{margin-top:30px}
+  .sec + .sec{margin-top:26px}
 
   .sec-bar{
     display:flex;
@@ -216,19 +246,33 @@
   .sec-close{border-bottom:3px solid var(--ink)}
 
   /* ============ SECTION A - THE FOCAL POINT ============ */
+  /* The two labelled sub-blocks are genuinely parallel - two kinds of money,
+     one already ours, one not ours yet. Side by side they compare instead of
+     queue, and section A loses about 150px of height. The 2fr/1fr ratio is the
+     shell's own .grid2 ratio; only the gap differs, because inside one sheet
+     the boundary must be a ruled line, not a strip of desk. */
+  .alarm-split{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+  .alarm,.risk{min-width:0}
+  .risk{border-top:2px solid var(--ink);container:risk / inline-size}
+  @container band (min-width:780px){
+    .alarm-split{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+    .risk{border-top:0;border-left:2px solid var(--ink)}
+  }
+
   /* A1: money already ours that has not arrived. Loud, solid, red. */
-  .alarm{padding:0}
-  .alarm-head{
-    position:relative;
+  .alarm-head,
+  .risk-head{
     display:grid;
     grid-template-columns:minmax(0,1fr) auto;
+    column-gap:20px;
     align-items:end;
-    gap:6px 22px;
-    padding:22px var(--pad) 20px;
+    padding:18px var(--pad) 16px;
   }
-  .alarm-kind{
+  .alarm-kind,
+  .risk-kind{
     grid-column:1;
-    margin:0 0 10px;
+    grid-row:1;
+    margin:0 0 11px;
     font-family:var(--form);
     font-size:11px;
     font-weight:700;
@@ -236,24 +280,36 @@
     text-transform:uppercase;
     color:var(--stamp-red);
   }
-  .alarm-kind .qual{color:var(--ink-mid);font-weight:600;letter-spacing:.14em}
+  /* the quiet label is the longest string in the narrowest block, so it runs a
+     touch tighter to hold one line */
+  .risk-kind{color:var(--ink);letter-spacing:.15em}
+  .alarm-kind .qual,
+  .risk-kind .qual{color:var(--ink-mid);font-weight:600;letter-spacing:.14em}
+  .risk-kind .qual{letter-spacing:.09em}
   .alarm-fig{
     grid-column:1;
+    grid-row:2;
     margin:0;
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
     font-weight:700;
-    font-size:clamp(36px,5.4vw,62px);
+    /* sized against the band, not the viewport: 62px is the accepted stamp size
+       and it holds from ~1150px up, but a cqi ceiling means the figure can
+       never outgrow the block it sits in */
+    font-size:clamp(36px,7cqi,62px);
     letter-spacing:-.045em;
     line-height:.92;
     color:var(--stamp-red);
     white-space:nowrap;
   }
   .alarm-fig .u{font-size:.3em;letter-spacing:.14em;margin-left:.55em}
-  .alarm-count{
+  .alarm-count,
+  .risk-count{
     grid-column:2;
-    grid-row:2;
-    text-align:right;
+    grid-row:1;
+    justify-self:end;
+    align-self:end;
+    margin-bottom:11px;
     font-family:var(--form);
     font-size:10px;
     font-weight:700;
@@ -261,31 +317,31 @@
     text-transform:uppercase;
     color:var(--ink-mid);
     white-space:nowrap;
-    padding-bottom:6px;
+  }
+  /* the quiet block is only a third of the band. Narrow, it stacks label /
+     figure / count so the figure always owns a whole line and can never be
+     clipped; wide, the count tucks in beside the figure and the label keeps a
+     single line. */
+  .risk-head{grid-template-columns:minmax(0,1fr)}
+  .risk-count{grid-column:1;grid-row:3;justify-self:start;margin:9px 0 0}
+  @container risk (min-width:380px){
+    .risk-head{grid-template-columns:minmax(0,1fr) auto}
+    .risk-count{grid-column:2;grid-row:2;justify-self:end;align-self:end;margin:0 0 1px}
+  }
+  .risk-count{
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
   }
 
   /* A2: at risk, not yet ours. Quiet, void, ink - never red money. */
-  .risk-head{
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    align-items:end;
-    gap:4px 22px;
-    padding:16px var(--pad) 14px;
-    border-top:2px solid var(--ink);
-  }
-  .risk-kind{
-    grid-column:1;
-    margin:0 0 8px;
-    font-family:var(--form);
-    font-size:11px;
-    font-weight:700;
-    letter-spacing:.2em;
-    text-transform:uppercase;
-    color:var(--ink);
-  }
-  .risk-kind .qual{color:var(--ink-mid);font-weight:600;letter-spacing:.14em}
   .risk-fig{
     grid-column:1;
+    grid-row:2;
     margin:0;
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
@@ -296,18 +352,8 @@
     color:var(--ink);
     white-space:nowrap;
   }
-  .risk-count{
-    grid-column:2;
-    grid-row:2;
-    text-align:right;
-    font-family:var(--form);
-    font-size:10px;
-    font-weight:700;
-    letter-spacing:.17em;
-    text-transform:uppercase;
-    color:var(--ink-mid);
-    white-space:nowrap;
-  }
+  /* the quiet block carries no 62px figure, so it can sit tighter */
+  .risk-head{padding-bottom:14px}
 
   .att-list{border-top:1px solid var(--ink)}
   .att-row{
@@ -317,7 +363,7 @@
     gap:2px 18px;
     text-decoration:none;
     color:inherit;
-    padding:12px var(--pad) 11px;
+    padding:11px var(--pad) 10px;
     border-bottom:1px solid var(--rule);
     transition:background .12s linear;
   }
@@ -377,6 +423,13 @@
     padding:2px 5px 1px;
     background-image:repeating-linear-gradient(45deg, rgba(168,31,22,.16) 0 1px, transparent 1px 4px);
   }
+  /* the quiet block is a third of the band, so its one row folds instead of
+     squeezing the name to two characters */
+  @container band (max-width:1360px){
+    .risk .att-row{grid-template-columns:minmax(0,1fr)}
+    .risk .att-right{grid-column:1;justify-content:space-between;margin-top:8px;gap:8px 10px;flex-wrap:wrap}
+    .risk .att-age{min-width:0}
+  }
 
   /* ============ RUBBER STAMP - one per section, maximum ============ */
   .stamp{
@@ -414,11 +467,17 @@
     padding-top:3px;
     border-top:1px solid currentColor;
   }
+  /* the action stamp is now a grid cell, not a floating absolute box: it lands
+     beside the figure it stamps and can never crash into it */
   .stamp--action{
+    position:relative;
+    grid-column:2;
+    grid-row:2;
+    justify-self:end;
+    align-self:end;
+    margin-bottom:2px;
     color:var(--stamp-red);
     transform:rotate(-3.5deg);
-    right:var(--pad);
-    top:20px;
   }
   .stamp--clear{
     color:var(--stamp-green);
@@ -428,7 +487,10 @@
   }
 
   /* ============ SECTION B - JOBS ============ */
-  .jobs{width:100%;border-collapse:collapse;table-layout:fixed}
+  /* a table is the one block that can take width honestly, so client comes out
+     from under the job name into its own column: four honest columns, and every
+     row drops from two lines to one */
+  .jobs{width:100%;border-collapse:collapse;table-layout:auto}
   .jobs caption{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .jobs th{
     font-family:var(--form);
@@ -438,13 +500,15 @@
     text-transform:uppercase;
     color:var(--ink-mid);
     text-align:left;
-    padding:8px var(--pad) 7px;
+    padding:7px var(--pad) 6px;
     border-bottom:1px solid var(--ink);
     white-space:nowrap;
   }
   .jobs th.num,.jobs td.num{text-align:right}
+  .jobs th.num,.jobs td.num,
+  .jobs th.fit,.jobs td.fit{width:1%;white-space:nowrap}
   .jobs td{
-    padding:12px var(--pad) 11px;
+    padding:10px var(--pad) 9px;
     border-bottom:1px solid var(--rule);
     vertical-align:middle;
   }
@@ -465,11 +529,13 @@
     font-family:var(--entry);
     font-size:11px;
     font-weight:600;
-    letter-spacing:.11em;
+    letter-spacing:.09em;
     text-transform:uppercase;
     color:var(--ink-mid);
-    overflow-wrap:anywhere;
+    white-space:nowrap;
   }
+  .job-link .job-client,
+  .job-link .job-money{display:none}
   .job-money{
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
@@ -491,8 +557,8 @@
     white-space:nowrap;
   }
   .job-stage.is-hold{border-color:var(--stamp-red);color:var(--stamp-red)}
-  /* the only ruled filler left on the sheet: two write-in lines, inside the table */
-  .jobs tr.blank td{height:38px;border-bottom:1px solid var(--rule)}
+  /* the only ruled filler left on the sheet: one write-in line, inside the table */
+  .jobs tr.blank td{height:34px;border-bottom:1px solid var(--rule)}
   .jobs tr.blank td:first-child{
     font-family:var(--form);
     font-size:9px;
@@ -506,7 +572,7 @@
     justify-content:space-between;
     gap:.5rem 1rem;
     flex-wrap:wrap;
-    padding:10px var(--pad) 11px;
+    padding:9px var(--pad) 10px;
     border-top:2px solid var(--ink);
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
@@ -525,22 +591,41 @@
     letter-spacing:-.02em;
     white-space:nowrap;
   }
+  /* narrow column: fold the two middle columns back under the job name */
+  /* a narrower column buys the table back with tighter gutters before it gives
+     up a column - four honest columns hold down to about 600px */
+  @container col (max-width:790px){
+    .jobs th,.jobs td{padding-left:14px;padding-right:14px}
+  }
+  @container col (max-width:600px){
+    .jobs th.fold,.jobs td.fold{display:none}
+    .job-link .job-client,
+    .job-link .job-money{display:block;margin-top:3px}
+    .job-link .job-client{white-space:normal}
+    .job-link .job-money{font-size:15px}
+  }
 
   /* ============ SECTION C - STANDING FIGURES (demoted) ============ */
+  /* four across where the column can hold a 13-digit figure, otherwise a tidy
+     2 x 2 - never three-and-a-gap */
   .standing{
     display:grid;
-    grid-template-columns:repeat(4,1fr);
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:1px;
+    background:var(--rule);
+  }
+  @container col (min-width:660px){
+    .standing{grid-template-columns:repeat(4,minmax(0,1fr))}
   }
   .st-cell{
-    padding:11px var(--pad) 13px;
-    border-left:1px solid var(--rule);
+    padding:10px var(--pad) 12px;
+    background:var(--paper);
     min-width:0;
     text-decoration:none;
     color:inherit;
     display:block;
     transition:background .12s linear;
   }
-  .st-cell:first-child{border-left:0}
   .st-cell:hover{box-shadow:inset 0 0 0 999px rgba(20,19,14,.05)}
   .st-cell:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
   .st-lab{
@@ -551,7 +636,7 @@
     letter-spacing:.17em;
     text-transform:uppercase;
     color:var(--ink-mid);
-    margin-bottom:6px;
+    margin-bottom:5px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
@@ -568,7 +653,7 @@
   }
   .st-sub{
     display:block;
-    margin-top:5px;
+    margin-top:4px;
     font-family:var(--form);
     font-size:9px;
     font-weight:600;
@@ -583,10 +668,11 @@
   .st-cell.is-alarm .st-sub{color:var(--stamp-red)}
 
   /* ============ SECTION D - TEAR-OFF VOUCHER ============ */
+  /* the voucher is now the counterfoil in the right rail: it starts level with
+     the jobs table instead of 1300px down the page, so it needs no scrolling */
   .perf{
-    height:26px;
-    margin-top:30px;
-    border-top:1px dashed var(--ink);
+    height:24px;
+    margin:0;
     border-bottom:1px dashed var(--ink);
     display:flex;
     align-items:center;
@@ -607,21 +693,21 @@
   }
   .docket-grid{
     display:grid;
-    grid-template-columns:minmax(0,1.15fr) minmax(0,.8fr) minmax(0,1.4fr);
+    grid-template-columns:minmax(0,1fr);
     align-items:end;
     gap:0;
   }
   .field{
-    padding:14px var(--pad) 16px;
-    border-left:1px solid var(--rule);
+    padding:11px var(--pad) 12px;
+    border-top:1px solid var(--rule);
     min-width:0;
   }
-  .field:first-child{border-left:0}
-  .field > .label{display:block;margin-bottom:8px}
+  .field:first-child{border-top:0}
+  .field > .label{display:block;margin-bottom:6px}
   .field .hint,
   .amount-field .hint{
     display:block;
-    margin-top:7px;
+    margin-top:6px;
     font-family:var(--form);
     font-size:9px;
     font-weight:600;
@@ -644,6 +730,7 @@
     line-height:1.3;
     appearance:none;
     -webkit-appearance:none;
+    min-width:0;
   }
   .note-in{padding-right:2px;font-weight:500}
   .note-in::placeholder{color:var(--ink-mid);font-weight:500}
@@ -665,8 +752,8 @@
   .amt-in:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 
   .amount-field{
-    border-left:1px solid var(--ink);
-    padding:14px var(--pad) 16px;
+    border-top:1px solid var(--ink);
+    padding:11px var(--pad) 12px;
   }
   .amt-line{display:flex;align-items:flex-end;gap:.45rem;border-bottom:3px solid var(--ink)}
   .amt-in{
@@ -675,7 +762,7 @@
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
     font-weight:700;
-    font-size:clamp(26px,3.2vw,38px);
+    font-size:clamp(24px,9cqi,34px);
     letter-spacing:-.04em;
     line-height:1.05;
     text-align:right;
@@ -693,7 +780,16 @@
     font-weight:700;
     letter-spacing:.16em;
     color:var(--ink-mid);
-    padding-bottom:9px;
+    padding-bottom:8px;
+  }
+  /* when the rail is not a rail - stacked under 1100px - the docket goes back
+     to being a wide three-up docket rather than one stretched column */
+  @container col (min-width:620px){
+    .docket-grid{grid-template-columns:minmax(0,1.15fr) minmax(0,.8fr) minmax(0,1.4fr)}
+    .field{border-top:0;border-left:1px solid var(--rule)}
+    .field:first-child{border-left:0}
+    .amount-field{border-top:0;border-left:1px solid var(--ink)}
+    .field--note{grid-column:1 / -1;border-left:0;border-top:1px solid var(--rule)}
   }
   .docket-foot{
     display:flex;
@@ -701,7 +797,7 @@
     align-items:center;
     justify-content:space-between;
     gap:10px var(--pad);
-    padding:13px var(--pad) 15px;
+    padding:11px var(--pad) 12px;
     border-top:1px solid var(--ink);
   }
   .docket-note{
@@ -728,7 +824,7 @@
     font-weight:700;
     letter-spacing:.19em;
     text-transform:uppercase;
-    padding:9px 20px 8px;
+    padding:8px 18px 7px;
     border-radius:0;
     cursor:pointer;
     line-height:1.2;
@@ -744,7 +840,7 @@
   /* ============ ALTERNATE (EMPTY) STATE - a second sheet on the desk ============ */
   .alt-body{
     position:relative;
-    padding:26px var(--pad) 30px;
+    padding:22px var(--pad) 26px;
   }
   .alt-msg{
     margin:0;
@@ -755,7 +851,7 @@
     line-height:1.3;
   }
   .alt-sub{
-    margin:10px 0 0;
+    margin:9px 0 0;
     font-family:var(--form);
     font-size:9.5px;
     font-weight:600;
@@ -765,29 +861,14 @@
   }
 
   /* ============ RESPONSIVE ============ */
-  @media (max-width:1180px){
-    /* the desk each side is now app-main's padding - the sheet still has an edge */
-    .desk-cap{margin:34px 0 -8px}
-  }
   @media (max-width:900px){
     :root{--pad:16px}
-    .standing{grid-template-columns:repeat(2,1fr)}
-    .st-cell:nth-child(3),.st-cell:nth-child(4){border-top:1px solid var(--rule)}
-    .st-cell:nth-child(3){border-left:0}
-    /* minmax(0,...) + min-width:0 so a long job name in the select cannot
-       push the voucher wider than the sheet */
-    .docket-grid{grid-template-columns:minmax(0,1fr)}
-    .pick{min-width:0}
-    .field{border-left:0;border-top:1px solid var(--rule)}
-    .field:first-child{border-top:0}
-    .amount-field{border-left:0;border-top:1px solid var(--ink)}
   }
   @media (max-width:620px){
-    /* the shell still leaves 12px of desk each side, so the sheet keeps its
-       edge instead of bleeding to the screen */
     .sheet + .sheet{margin-top:22px}
-    .desk-cap{margin:24px 0 -6px}
-    .sheet-stamp-no{text-align:left}
+    .stack{margin-top:22px}
+    .stack-alt{margin-top:30px}
+    .sheet-stamp-no{gap:0 12px}
     .att-row{grid-template-columns:minmax(0,1fr)}
     .att-right{
       grid-column:1;
@@ -797,23 +878,14 @@
     }
     .att-age{min-width:0}
     .alarm-head,.risk-head{grid-template-columns:minmax(0,1fr)}
-    .alarm-count,.risk-count{grid-column:1;grid-row:auto;text-align:left;padding-bottom:0;margin-top:10px}
-    .stamp--action{top:auto;bottom:14px}
+    .alarm-kind,.risk-kind{grid-row:1}
+    .alarm-fig,.risk-fig{grid-row:2}
+    .alarm-count,.risk-count{grid-column:1;grid-row:3;justify-self:start;margin:10px 0 0}
+    .stamp--action{grid-column:1;grid-row:4;justify-self:start;margin:14px 0 0}
     /* the nil-return stamp drops below the message instead of over it */
-    .stamp--clear{position:static;display:inline-block;margin:18px 0 0}
+    .stamp--clear{position:static;display:inline-block;margin:16px 0 0}
     .alt-msg{max-width:none}
     .jobs th,.jobs td{padding-left:12px;padding-right:12px}
-    .jobs th:nth-child(2),.jobs td:nth-child(2){display:none}
-    .job-client{display:block;margin-top:3px}
-    .jobs td:first-child .job-money{
-      display:block;
-      margin-top:6px;
-      font-size:15px;
-    }
-  }
-  @media (min-width:621px){
-    .jobs td:first-child .job-money{display:none}
-    .job-client{display:block;margin-top:3px}
   }
 
   @media (prefers-reduced-motion:reduce){
@@ -826,8 +898,8 @@
     .app{display:block}
     .spine{display:none}
     .app-main{padding:0}
-    .measure{max-width:none}
-    .sheet{max-width:none;margin:0;border:0;box-shadow:none;background-image:none}
+    .grid2,.grid3{display:block}
+    .sheet{max-width:none;margin:0 0 18px;border:0;box-shadow:none;background-image:none}
     .stamp{opacity:1}
   }
 </style>
@@ -848,11 +920,11 @@
   <div class="spine-foot"><a href="#logout">Log out</a></div>
 </nav>
 <main class="app-main">
-<div class="measure">
 
 <!-- ============================================================
-     LIVE STATE
+     BAND 1 - THE ALARM BAND (full width, two parallel sub-blocks)
      ============================================================ -->
+<div class="band">
 <div class="sheet">
 
   <header class="sheet-head">
@@ -862,9 +934,9 @@
         <h1>Day sheet</h1>
       </div>
       <div class="sheet-stamp-no">
-        Sheet 01 of 09<br>
-        Tue 18 Aug 2026<br>
-        <b>Prepared 06:57 ICT</b>
+        <span>Sheet 01 of 09</span>
+        <span>Tue 18 Aug 2026</span>
+        <span><b>Prepared 06:57 ICT</b></span>
       </div>
     </div>
   </header>
@@ -876,255 +948,296 @@
       <span class="bar-note">03 items - figures in VND</span>
     </div>
 
-    <div class="alarm">
+    <div class="alarm-split">
 
       <!-- A.1 money that is already ours and has not arrived -->
-      <div class="alarm-head">
-        <p class="alarm-kind">Past terms <span class="qual">- already ours, not arrived</span></p>
-        <p class="alarm-fig">86,500,000<span class="u">VND</span></p>
-        <span class="alarm-count">02 milestones</span>
-        <span class="stamp stamp--action">
-          <span class="big">Action</span>
-          <span class="sub">Today</span>
-        </span>
-      </div>
-
-      <div class="att-list">
-        <a class="att-row att-row--due" href="#item-1">
-          <span class="att-what">T&#7871;t campaign cutdowns - 50% on delivery</span>
-          <span class="att-right">
-            <span class="att-money">47,500,000<span class="u">VND</span></span>
-            <span class="att-age">12 days past terms</span>
+      <div class="alarm">
+        <div class="alarm-head">
+          <p class="alarm-kind">Past terms <span class="qual">- already ours, not arrived</span></p>
+          <span class="alarm-count">02 milestones</span>
+          <p class="alarm-fig">86,500,000<span class="u">VND</span></p>
+          <span class="stamp stamp--action">
+            <span class="big">Action</span>
+            <span class="sub">Today</span>
           </span>
-        </a>
+        </div>
 
-        <a class="att-row att-row--due" href="#item-2">
-          <span class="att-what">Recruitment film - final 30%</span>
-          <span class="att-right">
-            <span class="att-money">39,000,000<span class="u">VND</span></span>
-            <span class="att-age">5 days past terms</span>
-          </span>
-        </a>
+        <div class="att-list">
+          <a class="att-row att-row--due" href="#item-1">
+            <span class="att-what">T&#7871;t campaign cutdowns - 50% on delivery</span>
+            <span class="att-right">
+              <span class="att-money">47,500,000<span class="u">VND</span></span>
+              <span class="att-age">12 days past terms</span>
+            </span>
+          </a>
+
+          <a class="att-row att-row--due" href="#item-2">
+            <span class="att-what">Recruitment film - final 30%</span>
+            <span class="att-right">
+              <span class="att-money">39,000,000<span class="u">VND</span></span>
+              <span class="att-age">5 days past terms</span>
+            </span>
+          </a>
+        </div>
       </div>
 
       <!-- A.2 money that is only at risk - never printed in red -->
-      <div class="risk-head">
-        <p class="risk-kind">No reply <span class="qual">- at risk, not ours yet</span></p>
-        <p class="risk-fig">95,000,000<span class="u">VND</span></p>
-        <span class="risk-count">01 quote</span>
+      <div class="risk">
+        <div class="risk-head">
+          <p class="risk-kind">No reply <span class="qual">- at risk, not ours yet</span></p>
+          <span class="risk-count">01 quote</span>
+          <p class="risk-fig">95,000,000<span class="u">VND</span></p>
+        </div>
+
+        <div class="att-list">
+          <a class="att-row att-row--quiet" href="#item-3">
+            <span class="att-what">Social cutdowns x12 - Nh&#7845;t Minh Beverage</span>
+            <span class="att-right">
+              <span class="att-money">95,000,000<span class="u">VND</span></span>
+              <span class="att-age">9 days no reply</span>
+            </span>
+          </a>
+        </div>
       </div>
 
-      <div class="att-list">
-        <a class="att-row att-row--quiet" href="#item-3">
-          <span class="att-what">Social cutdowns x12 - Nh&#7845;t Minh Beverage</span>
-          <span class="att-right">
-            <span class="att-money">95,000,000<span class="u">VND</span></span>
-            <span class="att-age">9 days no reply</span>
-          </span>
-        </a>
-      </div>
-
     </div>
   </section>
 
-  <!-- ===== SECTION B - JOBS IN PRODUCTION ===== -->
-  <section class="sec sec-close" id="jobs" aria-labelledby="h-jobs">
-    <div class="sec-bar">
-      <h2 id="h-jobs"><span class="sec-no">B</span>Jobs in production</h2>
-      <span class="bar-note">04 open</span>
-    </div>
+</div>
+</div>
 
-    <table class="jobs">
-      <caption>Jobs currently in production, with client, quoted figure and stage</caption>
-      <colgroup>
-        <col>
-        <col style="width:26%">
-        <col style="width:22%">
-      </colgroup>
-      <thead>
-        <tr>
-          <th scope="col">Job / client</th>
-          <th scope="col" class="num">Quoted</th>
-          <th scope="col">Stage</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>
-            <a class="job-link" href="#job-1">Factory safety series
-              <span class="job-client">S&#244;ng H&#224; Logistics</span>
-              <span class="job-money">210,000,000<span class="u">VND</span></span>
-            </a>
-          </td>
-          <td class="num"><span class="job-money">210,000,000</span></td>
-          <td><span class="job-stage">Production</span></td>
-        </tr>
-        <tr>
-          <td>
-            <a class="job-link" href="#job-2">Brand film &ldquo;H&#7841;t G&#7841;o Qu&#234;&rdquo;
-              <span class="job-client">L&#7897;c Tr&#7901;i Agri</span>
-              <span class="job-money">380,000,000<span class="u">VND</span></span>
-            </a>
-          </td>
-          <td class="num"><span class="job-money">380,000,000</span></td>
-          <td><span class="job-stage">Post-production</span></td>
-        </tr>
-        <tr>
-          <td>
-            <a class="job-link" href="#job-3">T&#7871;t campaign cutdowns
-              <span class="job-client">G&#7889;m S&#7913; Minh Long</span>
-              <span class="job-money">95,000,000<span class="u">VND</span></span>
-            </a>
-          </td>
-          <td class="num"><span class="job-money">95,000,000</span></td>
-          <td><span class="job-stage">Delivery</span></td>
-        </tr>
-        <tr>
-          <td>
-            <a class="job-link" href="#job-4">Recruitment film
-              <span class="job-client">&#272;&#7841;i Vi&#7879;t Foods</span>
-              <span class="job-money">130,000,000<span class="u">VND</span></span>
-            </a>
-          </td>
-          <td class="num"><span class="job-money">130,000,000</span></td>
-          <td><span class="job-stage is-hold">Awaiting payment</span></td>
-        </tr>
-        <tr class="blank" aria-hidden="true"><td>05</td><td></td><td></td></tr>
-        <tr class="blank" aria-hidden="true"><td>06</td><td></td><td></td></tr>
-      </tbody>
-    </table>
+<!-- ============================================================
+     BAND 2 - THE WORKING BAND
+       left  : what is running (jobs) and what it all stands at
+       right : the tear-off counterfoil you write on
+     ============================================================ -->
+<div class="grid2 stack">
 
-    <div class="sec-foot">
-      <span class="f-label">04 jobs - quoted</span>
-      <span class="f-sum">815,000,000<span class="u">VND</span></span>
-    </div>
-  </section>
+  <div class="col">
+  <div class="sheet">
 
-  <!-- ===== SECTION C - STANDING FIGURES (demoted from four hero tiles) ===== -->
-  <section class="sec sec-close" id="standing" aria-labelledby="h-st">
-    <div class="sec-bar">
-      <h2 id="h-st"><span class="sec-no">C</span>Standing figures</h2>
-      <span class="bar-note">As at 06:57 ICT - VND</span>
-    </div>
-
-    <nav class="standing" aria-label="Standing figures">
-      <a class="st-cell" href="#pipeline">
-        <span class="st-lab">Pipeline - open deals</span>
-        <span class="st-fig">1,925,000,000</span>
-        <span class="st-sub">06 open deals</span>
-      </a>
-      <a class="st-cell" href="#jobs">
-        <span class="st-lab">In production</span>
-        <span class="st-fig">815,000,000</span>
-        <span class="st-sub">04 open jobs</span>
-      </a>
-      <a class="st-cell is-alarm" href="#attention">
-        <span class="st-lab">Overdue payments</span>
-        <span class="st-fig">86,500,000</span>
-        <span class="st-sub">See section A</span>
-      </a>
-      <a class="st-cell is-alarm" href="#attention">
-        <span class="st-lab">Quotes gone quiet</span>
-        <span class="st-fig">95,000,000</span>
-        <span class="st-sub">See section A</span>
-      </a>
-    </nav>
-  </section>
-
-  <!-- ===== SECTION D - TEAR-OFF PETTY CASH VOUCHER ===== -->
-  <div class="perf" aria-hidden="true"><span>Detach here</span></div>
-
-  <section class="sec" id="expense" aria-labelledby="h-exp">
-    <form action="#" method="post" onsubmit="return false">
+    <!-- ===== SECTION B - JOBS IN PRODUCTION ===== -->
+    <section class="sec sec-close" id="jobs" aria-labelledby="h-jobs">
       <div class="sec-bar">
-        <h2 id="h-exp"><span class="sec-no">D</span>Quick expense</h2>
-        <span class="bar-note">VCH-2026-0418 - unposted</span>
+        <h2 id="h-jobs"><span class="sec-no">B</span>Jobs in production</h2>
+        <span class="bar-note">04 open</span>
       </div>
 
-      <div class="docket-grid">
+      <table class="jobs">
+        <caption>Jobs currently in production, with client, quoted figure and stage</caption>
+        <thead>
+          <tr>
+            <th scope="col">Job</th>
+            <th scope="col" class="fold">Client</th>
+            <th scope="col" class="num fold">Quoted</th>
+            <th scope="col" class="fit">Stage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <a class="job-link" href="#job-1">Factory safety series
+                <span class="job-client">S&#244;ng H&#224; Logistics</span>
+                <span class="job-money">210,000,000<span class="u">VND</span></span>
+              </a>
+            </td>
+            <td class="fold"><span class="job-client">S&#244;ng H&#224; Logistics</span></td>
+            <td class="num fold"><span class="job-money">210,000,000</span></td>
+            <td class="fit"><span class="job-stage">Production</span></td>
+          </tr>
+          <tr>
+            <td>
+              <a class="job-link" href="#job-2">Brand film &ldquo;H&#7841;t G&#7841;o Qu&#234;&rdquo;
+                <span class="job-client">L&#7897;c Tr&#7901;i Agri</span>
+                <span class="job-money">380,000,000<span class="u">VND</span></span>
+              </a>
+            </td>
+            <td class="fold"><span class="job-client">L&#7897;c Tr&#7901;i Agri</span></td>
+            <td class="num fold"><span class="job-money">380,000,000</span></td>
+            <td class="fit"><span class="job-stage">Post-production</span></td>
+          </tr>
+          <tr>
+            <td>
+              <a class="job-link" href="#job-3">T&#7871;t campaign cutdowns
+                <span class="job-client">G&#7889;m S&#7913; Minh Long</span>
+                <span class="job-money">95,000,000<span class="u">VND</span></span>
+              </a>
+            </td>
+            <td class="fold"><span class="job-client">G&#7889;m S&#7913; Minh Long</span></td>
+            <td class="num fold"><span class="job-money">95,000,000</span></td>
+            <td class="fit"><span class="job-stage">Delivery</span></td>
+          </tr>
+          <tr>
+            <td>
+              <a class="job-link" href="#job-4">Recruitment film
+                <span class="job-client">&#272;&#7841;i Vi&#7879;t Foods</span>
+                <span class="job-money">130,000,000<span class="u">VND</span></span>
+              </a>
+            </td>
+            <td class="fold"><span class="job-client">&#272;&#7841;i Vi&#7879;t Foods</span></td>
+            <td class="num fold"><span class="job-money">130,000,000</span></td>
+            <td class="fit"><span class="job-stage is-hold">Awaiting payment</span></td>
+          </tr>
+          <tr class="blank" aria-hidden="true"><td>05</td><td class="fold"></td><td class="fold"></td><td class="fit"></td></tr>
+        </tbody>
+      </table>
 
-        <div class="field">
-          <label class="label" for="exp-job">Charge to job</label>
-          <span class="pick-wrap">
-            <select class="pick" id="exp-job" name="job">
-              <option>Factory safety series - S&#244;ng H&#224; Logistics</option>
-              <option>Brand film &ldquo;H&#7841;t G&#7841;o Qu&#234;&rdquo; - L&#7897;c Tr&#7901;i Agri</option>
-              <option>T&#7871;t campaign cutdowns - G&#7889;m S&#7913; Minh Long</option>
-              <option>Recruitment film - &#272;&#7841;i Vi&#7879;t Foods</option>
-            </select>
-          </span>
-          <span class="hint">04 open jobs</span>
-        </div>
+      <div class="sec-foot">
+        <span class="f-label">04 jobs - quoted</span>
+        <span class="f-sum">815,000,000<span class="u">VND</span></span>
+      </div>
+    </section>
 
-        <div class="field">
-          <label class="label" for="exp-cat">Category</label>
-          <span class="pick-wrap">
-            <select class="pick" id="exp-cat" name="category">
-              <option>Crew</option>
-              <option>Equipment</option>
-              <option>Art</option>
-              <option>Catering</option>
-              <option>Transport</option>
-              <option selected>Uncategorised</option>
-            </select>
-          </span>
-          <span class="hint">Sort it later if unsure</span>
-        </div>
-
-        <div class="amount-field">
-          <label class="label" for="exp-amount">Amount</label>
-          <span class="amt-line">
-            <input class="amt-in" id="exp-amount" name="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0">
-            <span class="amt-unit">VND</span>
-          </span>
-          <span class="hint">Whole dong - no decimals</span>
-        </div>
-
-        <div class="field" style="grid-column:1 / -1;border-left:0;border-top:1px solid var(--rule)">
-          <label class="label" for="exp-note">Note - optional</label>
-          <input class="note-in" id="exp-note" name="note" type="text" autocomplete="off" placeholder="Who, what, where">
-        </div>
-
+    <!-- ===== SECTION C - STANDING FIGURES (demoted from four hero tiles) ===== -->
+    <section class="sec sec-close" id="standing" aria-labelledby="h-st">
+      <div class="sec-bar">
+        <h2 id="h-st"><span class="sec-no">C</span>Standing figures</h2>
+        <span class="bar-note">As at 06:57 ICT - VND</span>
       </div>
 
-      <div class="docket-foot">
-        <span class="docket-note">Filed by <span class="name">Tr&#7847;n Qu&#7889;c B&#7843;o</span> - posts to the job cost sheet on submit</span>
-        <span class="btn-row">
-          <button class="btn btn--ghost" type="reset">Clear</button>
-          <button class="btn" type="submit">File expense</button>
-        </span>
-      </div>
-    </form>
-  </section>
+      <nav class="standing" aria-label="Standing figures">
+        <a class="st-cell" href="#pipeline">
+          <span class="st-lab">Pipeline</span>
+          <span class="st-fig">1,925,000,000</span>
+          <span class="st-sub">06 open deals</span>
+        </a>
+        <a class="st-cell" href="#jobs">
+          <span class="st-lab">In production</span>
+          <span class="st-fig">815,000,000</span>
+          <span class="st-sub">04 open jobs</span>
+        </a>
+        <a class="st-cell is-alarm" href="#attention">
+          <span class="st-lab">Overdue payments</span>
+          <span class="st-fig">86,500,000</span>
+          <span class="st-sub">See section A</span>
+        </a>
+        <a class="st-cell is-alarm" href="#attention">
+          <span class="st-lab">Quotes gone quiet</span>
+          <span class="st-fig">95,000,000</span>
+          <span class="st-sub">See section A</span>
+        </a>
+      </nav>
+    </section>
+
+  </div>
+  </div>
+
+  <!-- ===== SECTION D - TEAR-OFF PETTY CASH VOUCHER (the counterfoil) ===== -->
+  <div class="col">
+  <div class="sheet">
+    <div class="perf" aria-hidden="true"><span>Detach here</span></div>
+
+    <section class="sec" id="expense" aria-labelledby="h-exp">
+      <form action="#" method="post" onsubmit="return false">
+        <div class="sec-bar">
+          <h2 id="h-exp"><span class="sec-no">D</span>Quick expense</h2>
+          <span class="bar-note">VCH-2026-0418</span>
+        </div>
+
+        <div class="docket-grid">
+
+          <div class="field">
+            <label class="label" for="exp-job">Charge to job</label>
+            <span class="pick-wrap">
+              <select class="pick" id="exp-job" name="job">
+                <option>Factory safety series - S&#244;ng H&#224; Logistics</option>
+                <option>Brand film &ldquo;H&#7841;t G&#7841;o Qu&#234;&rdquo; - L&#7897;c Tr&#7901;i Agri</option>
+                <option>T&#7871;t campaign cutdowns - G&#7889;m S&#7913; Minh Long</option>
+                <option>Recruitment film - &#272;&#7841;i Vi&#7879;t Foods</option>
+              </select>
+            </span>
+            <span class="hint">04 open jobs</span>
+          </div>
+
+          <div class="field">
+            <label class="label" for="exp-cat">Category</label>
+            <span class="pick-wrap">
+              <select class="pick" id="exp-cat" name="category">
+                <option>Crew</option>
+                <option>Equipment</option>
+                <option>Art</option>
+                <option>Catering</option>
+                <option>Transport</option>
+                <option selected>Uncategorised</option>
+              </select>
+            </span>
+            <span class="hint">Sort it later if unsure</span>
+          </div>
+
+          <div class="amount-field">
+            <label class="label" for="exp-amount">Amount</label>
+            <span class="amt-line">
+              <input class="amt-in" id="exp-amount" name="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0">
+              <span class="amt-unit">VND</span>
+            </span>
+            <span class="hint">Whole dong - no decimals</span>
+          </div>
+
+          <div class="field field--note">
+            <label class="label" for="exp-note">Note - optional</label>
+            <input class="note-in" id="exp-note" name="note" type="text" autocomplete="off" placeholder="Who, what, where">
+          </div>
+
+        </div>
+
+        <div class="docket-foot">
+          <span class="docket-note">Filed by <span class="name">Tr&#7847;n Qu&#7889;c B&#7843;o</span> - posts to the job cost sheet</span>
+          <span class="btn-row">
+            <button class="btn btn--ghost" type="reset">Clear</button>
+            <button class="btn" type="submit">File expense</button>
+          </span>
+        </div>
+      </form>
+    </section>
+  </div>
+  </div>
 
 </div>
 
 <!-- ============================================================
-     ALTERNATE STATE - a second sheet on the desk
+     BAND 3 - ALTERNATE STATE, with its caption as a margin note
      ============================================================ -->
-<p class="desk-cap">Alternate state - section A on a day when nothing is outstanding</p>
+<div class="grid2 stack-alt">
 
-<div class="sheet">
-  <section class="sec" aria-labelledby="h-alt">
-    <div class="sec-bar">
-      <h2 id="h-alt"><span class="sec-no">A</span>Needs attention</h2>
-      <span class="bar-note">00 items</span>
-    </div>
-    <div class="alt-body">
-      <p class="alt-msg">Nothing chasing you - the board is quiet.</p>
-      <p class="alt-sub">00 items - last swept 06:57 ICT</p>
-      <span class="stamp stamp--clear">
-        <span class="big">Clear</span>
-        <span class="sub">Nil return</span>
-      </span>
-    </div>
-  </section>
+  <div class="col">
+  <div class="sheet">
+    <section class="sec" aria-labelledby="h-alt">
+      <div class="sec-bar">
+        <h2 id="h-alt"><span class="sec-no">A</span>Needs attention</h2>
+        <span class="bar-note">00 items</span>
+      </div>
+      <div class="alt-body">
+        <p class="alt-msg">Nothing chasing you - the board is quiet.</p>
+        <p class="alt-sub">00 items - last swept 06:57 ICT</p>
+        <span class="stamp stamp--clear">
+          <span class="big">Clear</span>
+          <span class="sub">Nil return</span>
+        </span>
+      </div>
+    </section>
+  </div>
+  </div>
+
+  <p class="desk-cap">Alternate state
+    <span>Section A on a day when nothing is outstanding. The rest of the sheet is unchanged.</span>
+  </p>
+
 </div>
 
-</div><!-- /.measure -->
 </main>
 </div><!-- /.app -->
 
+<style>
+/* ---- round 4, founder: "nếu chừa thì đổi màu cho nó match với trang chứ" --
+   The 24px band around the sheet was the desk tone showing through. That read
+   as "paper on a desk" while the content was narrow; now the content is full
+   width it just reads as leftover margin. The working area IS the sheet, so
+   the ground becomes stock and the padding turns invisible. Padding is kept -
+   text must not touch the spine - it simply stops being a visible edge. */
+body{background:var(--stock)}
+.app-main{background:var(--stock)}
+.sheet{border-color:transparent;box-shadow:none}
+</style>
 <!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
 <div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
   <button type="button" data-dir="-1" aria-label="Previous screen">&#8592;</button>

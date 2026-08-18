@@ -18,8 +18,6 @@
     --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
     --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
 
-    /* the measure: a sheet of paper has an edge. Matched to the dashboard sheet. */
-    --measure: 1120px;
     --pad: 22px;
   }
 
@@ -60,18 +58,33 @@ body{background:var(--desk);}
 .spine-foot a{color:#8d887a;text-decoration:none}
 .spine-foot a:hover{color:var(--stock)}
 
-/* the working area */
+/* the working area.
+   REVISED 2026-08-18 round 3: there is no narrow measure any more. Every
+   screen fills app-main edge to edge. The founder asked for full width on
+   all screens for consistency, plus "gom nhóm / rút gọn UI lại cho phù hợp".
+   Those two go together: width is spent by GROUPING content into columns,
+   never by stretching one column of text or a lone row across 1200px.
+   Stretching is what was rejected in round 1, not width itself - and a real
+   call sheet is already a multi-column document, so this is the more
+   faithful reading of the direction. */
 .app-main{min-width:0;padding:22px 24px 90px}
-.measure{max-width:1120px;margin:0 auto}   /* document screens */
-.bleed{max-width:none}                      /* wide tables: fill app-main, scroll inside */
+
+/* grouping grids - use these rather than inventing per-page column systems */
+.grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:22px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;align-items:start}
+@media (max-width:1100px){ .grid2,.grid3{grid-template-columns:minmax(0,1fr)} }
 
 /* below 900px the spine lies down as a top strip */
 @media (max-width:900px){
+  /* minmax(0,1fr), not 1fr: a plain 1fr track takes its min-content from the
+     nav labels and lets the page scroll sideways on a phone */
   .app{grid-template-columns:minmax(0,1fr)}
   .spine{position:static;height:auto;flex-direction:row;align-items:center;
     flex-wrap:wrap;gap:0 2px;padding:0 8px}
   .spine-mark{border-bottom:0;padding:10px 10px 10px 4px}
   .spine-mark span{display:none}
+  /* must wrap: six items at min-content are ~430px, wider than a 390px phone,
+     which forced 56px of horizontal page scroll before this was added */
   .spine-nav{display:flex;flex-wrap:wrap;padding:0}
   .spine-nav a{padding:10px;border-left:0;border-bottom:3px solid transparent}
   .spine-nav .on a{border-left-color:transparent;border-bottom-color:#A81F16}
@@ -81,24 +94,24 @@ body{background:var(--desk);}
   /* ---- end app shell ------------------------------------------------- */
 
   /* ============ THE SHEET ============ */
-  /* Paper has an edge. Everything below lives inside it. */
-  /* The shell's .measure now holds the 1120px trim and centres it, so the
-     sheet only keeps its vertical desk gutter. */
+  /* Paper has an edge. The sheet now fills app-main: the edge is the trim of
+     the working area, not a narrow measure floating in the middle of it. */
   .sheet{
     width:100%;
-    margin:30px 0 34px;
+    margin:0 0 26px;
     background:var(--paper);
     border:1px solid var(--rule);
     /* one subtle lift so the sheet edge reads against the desk */
     box-shadow:0 1px 0 rgba(20,19,14,.16), 0 14px 30px -14px rgba(20,19,14,.34);
     /* faint ruled-stock tint, on the sheet only */
     background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
-    padding-bottom:16px;
+    padding-bottom:14px;
   }
 
   /* ---------- shared type roles ---------- */
   /* .f = preprinted form face. ASCII by construction. Never Vietnamese. */
   .f{font-family:var(--form)}
+  .vh{position:absolute;left:-9999px}
   .num{
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
@@ -223,20 +236,14 @@ body{background:var(--desk);}
     line-height:1.75;
   }
   .head-meta b{color:var(--ink);font-weight:700}
-  .head-meta .vn{
-    font-family:var(--entry);
-    font-size:11.5px;
-    letter-spacing:0;
-    text-transform:none;
-    color:var(--ink);
-    font-weight:600;
-  }
 
-  /* Four fields, but not four equal voices. The total is the headline
-     figure of the sheet, the margin answers it, the other two are context. */
+  /* Six fields, but not six equal voices. The total is the headline figure of
+     the sheet, the margin answers it, the rest are context. Client and owner
+     were a floating right-hand block before; folded into the strip they stop
+     leaving a hole in the middle of the title row at full width. */
   .info-strip{
     display:grid;
-    grid-template-columns:1.6fr 1.3fr 1fr 1fr;
+    grid-template-columns:1.5fr 1.25fr 1fr;
     border-top:1px solid var(--ink);
     margin:0;
     align-items:end;
@@ -246,7 +253,8 @@ body{background:var(--desk);}
     border-left:1px solid var(--rule);
     min-width:0;
   }
-  .info-cell:first-child{border-left:0}
+  .info-cell:nth-child(3n+1){border-left:0}
+  .info-cell:nth-child(n+4){border-top:1px solid var(--rule)}
   .info-cell dt{margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .info-cell dd{
     margin:0;
@@ -259,6 +267,16 @@ body{background:var(--desk);}
     color:var(--ink-mid);
   }
   .info-cell dd .u{font-size:.62em}
+  /* Vietnamese values cannot sit in the form face */
+  .info-cell dd.vn{
+    font-family:var(--entry);
+    font-size:14px;
+    font-weight:600;
+    letter-spacing:0;
+    color:var(--ink);
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
 
   /* rank 1 - the quote total */
   .info-cell--total{padding-top:9px}
@@ -276,11 +294,30 @@ body{background:var(--desk);}
   .info-cell--margin dd{color:var(--ink);font-size:19px;letter-spacing:-.025em}
   .info-cell--margin dd .pct-tag{font-size:11px;vertical-align:2px}
 
-  /* ============ SHEET SECTIONS ============ */
-  .sec{
-    border-bottom:3px solid var(--ink);
-    padding:0 var(--pad) 18px;
+  /* one row of six only where six fit without cramping the leading figure */
+  @media (min-width:1600px){
+    .info-strip{grid-template-columns:1.5fr 1.25fr 1fr .85fr 1.15fr 1.15fr}
+    .info-cell:nth-child(3n+1){border-left:1px solid var(--rule)}
+    .info-cell:first-child{border-left:0}
+    .info-cell:nth-child(n+4){border-top:0}
   }
+
+  /* ============ BANDS - the grouping the width is spent on ============ */
+  /* A band is one horizontal course of the form. It owns the sheet's side
+     padding and the heavy rule under it, so the columns inside it can be
+     different heights without leaving ragged section rules. */
+  .band{
+    padding:0 var(--pad) 20px;
+    border-bottom:3px solid var(--ink);
+  }
+  /* the gutter rule between two columns of the same band */
+  .col-rule{
+    border-left:1px solid var(--rule);
+    padding-left:22px;
+  }
+
+  /* ============ SHEET SECTIONS ============ */
+  .sec{min-width:0}
   .sec-head{
     display:flex;
     align-items:baseline;
@@ -317,6 +354,12 @@ body{background:var(--desk);}
     text-transform:uppercase;
     color:var(--ink-mid);
   }
+  /* a labelled block inside a section, ruled off like a subheading */
+  .subsec{
+    margin-top:15px;
+    border-top:2px solid var(--ink);
+    padding-top:11px;
+  }
 
   /* ============ PACKAGES TABLE ============ */
   .tw{overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--ink-mid) transparent}
@@ -324,13 +367,13 @@ body{background:var(--desk);}
   .tw::-webkit-scrollbar-thumb{background:var(--ink-mid)}
   table.pk{
     width:100%;
-    min-width:940px;
+    min-width:620px;
     border-collapse:collapse;
     text-align:left;
   }
   table.pk th,
   table.pk td{
-    padding:9px 10px 8px;
+    padding:9px 8px 8px;
     border-bottom:1px solid var(--rule);
     vertical-align:top;
   }
@@ -354,7 +397,11 @@ body{background:var(--desk);}
     text-transform:none;
     color:var(--ink-mid);
     margin-top:2px;
+    white-space:normal;
   }
+  /* the money columns take only what they need; the description absorbs the
+     slack, so extra width never turns into stretched figures */
+  .w1{width:1%;white-space:nowrap}
   .c-r{text-align:right}
   .c-c{text-align:center}
   td.pkg-code{
@@ -407,7 +454,7 @@ body{background:var(--desk);}
     border:0;
     border-bottom:1.5px solid var(--ink);
     padding:2px 3px 1px;
-    width:120px;
+    width:112px;
     max-width:100%;
     border-radius:0;
   }
@@ -421,18 +468,21 @@ body{background:var(--desk);}
   .field:focus{outline:2px solid var(--ink);outline-offset:2px;background:rgba(20,19,14,.05)}
   .field.pct{width:56px;text-align:center}
 
-  /* variance: an initialled amendment, never an error */
+  /* variance: an initialled amendment, never an error. It now sits directly
+     under the write-in box that caused it - which is where a pencilled
+     amendment goes on paper, and it retires a whole table column. */
   .var{
     display:flex;
     align-items:center;
     justify-content:flex-end;
     gap:6px;
     white-space:nowrap;
+    margin-top:5px;
   }
   .var b{
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
-    font-size:13.5px;
+    font-size:13px;
     font-weight:700;
     letter-spacing:-.01em;
     border-bottom:1px dotted var(--ink);
@@ -470,14 +520,15 @@ body{background:var(--desk);}
   .btn--quiet:hover{border-color:var(--ink);color:var(--ink)}
   .btn--solid{background:var(--ink);color:var(--paper);border-color:var(--ink)}
   .btn--solid:hover{background:#000}
-  .btn--wide{width:100%;text-align:center;border-style:dashed;padding:9px 8px 8px}
+  .btn--wide{width:100%;text-align:center;border-style:dashed;padding:8px 8px 7px}
   .btn--lg{font-size:11px;padding:8px 14px 7px;letter-spacing:.18em}
 
-  tfoot td{border-bottom:0;padding:10px 10px 0}
+  tfoot td{border-bottom:0;padding:9px 9px 0}
 
   .pk-key{
     display:flex;
     flex-wrap:wrap;
+    justify-content:space-between;
     gap:.3rem 1.4rem;
     padding:9px 0 0;
     font-family:var(--form);
@@ -488,15 +539,7 @@ body{background:var(--desk);}
     color:var(--ink-mid);
   }
 
-  /* ============ TOTALS + DETAIL LEVEL ============ */
-  .grid2{
-    display:grid;
-    grid-template-columns:minmax(280px,1fr) minmax(360px,520px);
-    gap:0 26px;
-    align-items:start;
-    padding-top:14px;
-  }
-
+  /* ============ LEDGER ============ */
   .ledger{width:100%;border-collapse:collapse}
   .ledger th,
   .ledger td{padding:6px 0 5px;vertical-align:baseline}
@@ -504,8 +547,7 @@ body{background:var(--desk);}
     text-align:left;
     font-family:var(--form);
     font-size:10.5px;
-    font-weight:600;
-    letter-spacing:.16em;
+    letter-spacing:.14em;
     text-transform:uppercase;
     color:var(--ink-mid);
     font-weight:600;
@@ -553,15 +595,20 @@ body{background:var(--desk);}
     padding:1px 5px 0;
   }
 
-  .margin-wrap{position:relative;padding-top:8px;text-align:right}
+  /* the rotated stamp and its ink-fleck overlay sit a few px proud of their
+     box; the padding keeps that from poking through the column edge */
+  .margin-wrap{position:relative;padding:10px 6px 0 0;text-align:right}
 
   .floor-key{
-    margin-top:16px;
+    margin-top:14px;
     border-top:1px solid var(--rule);
     padding-top:10px;
     display:flex;
     gap:14px;
     align-items:flex-start;
+    /* a note is a note: it keeps a readable measure even when the column is
+       1000px wide. Width goes to the columns, never to a line of text. */
+    max-width:780px;
   }
   .floor-key p{
     margin:0;
@@ -592,15 +639,19 @@ body{background:var(--desk);}
     color:var(--ink-mid);
     padding:0 0 7px;
   }
+  /* three mutually exclusive choices read faster side by side than stacked,
+     and side by side is what the width is for */
+  .opt-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}
   .opt{
     display:flex;
     align-items:flex-start;
-    gap:10px;
+    gap:9px;
     padding:8px 0;
     border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
     cursor:pointer;
+    min-width:0;
   }
-  .opt:last-child{border-bottom:1px solid var(--rule)}
   .opt input{position:absolute;opacity:0;width:0;height:0}
   .tick{
     flex:0 0 auto;
@@ -618,6 +669,7 @@ body{background:var(--desk);}
   }
   .opt input:checked + .tick{color:var(--ink)}
   .opt input:focus-visible + .tick{outline:2px solid var(--ink);outline-offset:2px}
+  .opt-txt{min-width:0;color:var(--ink)}
   .opt-txt strong{
     display:block;
     font-family:var(--form);
@@ -635,7 +687,6 @@ body{background:var(--desk);}
     margin-top:2px;
   }
   .opt input:checked ~ .opt-txt strong{color:var(--ink)}
-  .opt-txt{color:var(--ink)}
   .opt input:not(:checked) ~ .opt-txt strong{color:var(--ink-mid)}
   .opts-note{
     font-family:var(--form);
@@ -686,19 +737,14 @@ body{background:var(--desk);}
   .stamp--ok{color:var(--stamp-green);transform:rotate(-3deg)}
   .stamp--alarm{color:var(--stamp-red);transform:rotate(3.5deg)}
   .stamp--gate{color:var(--stamp-red);transform:rotate(-4deg)}
-  .stamp--float{
-    position:absolute;
-    right:0;
-    top:-6px;
-  }
 
   /* ============ FOUNDER-ONLY TEAR-OFF ============ */
-  .founder{
-    margin:0 var(--pad);
-    border:2px solid var(--ink);
-    border-top:0;
-    background-image:repeating-linear-gradient(45deg, rgba(20,19,14,.05) 0 1px, transparent 1px 6px);
-  }
+  /* In a column now, not across the page. It has to keep reading as a
+     physically separate slip, so it keeps the whole apparatus: perforation
+     with its caption, hatched stock, inverted head, and no gutter rule tying
+     it to the column beside it. A narrow slip is if anything more like the
+     real thing than a full-width one. */
+  .founder-col{min-width:0}
   .tear{
     position:relative;
     height:22px;
@@ -710,7 +756,7 @@ body{background:var(--desk);}
     display:flex;
     align-items:center;
     justify-content:center;
-    margin:22px var(--pad) 0;
+    margin:13px 0 0;
   }
   .tear span{
     background:var(--paper);
@@ -721,15 +767,22 @@ body{background:var(--desk);}
     letter-spacing:.28em;
     text-transform:uppercase;
     color:var(--ink);
+    white-space:nowrap;
+  }
+  .founder{
+    margin:0;
+    border:2px solid var(--ink);
+    border-top:0;
+    background-image:repeating-linear-gradient(45deg, rgba(20,19,14,.05) 0 1px, transparent 1px 6px);
   }
   .founder-head{
     background:var(--ink);
     color:var(--paper);
-    padding:9px 14px 9px;
+    padding:9px 13px;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    gap:.6rem 1rem;
+    gap:.5rem 1rem;
     flex-wrap:wrap;
   }
   .founder-head h2{
@@ -752,22 +805,17 @@ body{background:var(--desk);}
     line-height:1.7;
   }
   .founder-head .who b{color:var(--paper)}
-  .founder-body{
-    position:relative;
-    padding:14px 14px 16px;
-    display:grid;
-    grid-template-columns:minmax(300px,1fr) minmax(220px,300px);
-    gap:0 26px;
-    align-items:start;
-  }
+  .founder-body{padding:12px 13px 14px}
   .founder-body .ledger td{font-size:15px}
   .founder-gate{
     display:flex;
-    flex-direction:column;
-    align-items:flex-end;
-    gap:12px;
-    padding-top:4px;
+    gap:13px;
+    align-items:flex-start;
+    margin-top:12px;
+    border-top:1px solid rgba(20,19,14,.38);
+    padding-top:11px;
   }
+  .founder-gate .stamp{flex:0 0 auto;margin-top:2px}
   .founder-gate p{
     margin:0;
     font-family:var(--form);
@@ -776,19 +824,17 @@ body{background:var(--desk);}
     letter-spacing:.1em;
     text-transform:uppercase;
     color:var(--ink-mid);
-    text-align:right;
     line-height:1.65;
-    max-width:280px;
   }
 
   /* ============ VERSIONS ============ */
   .ver{
     border-left:4px solid var(--ink);
     border-bottom:1px solid var(--rule);
-    padding:11px 12px 11px;
+    padding:10px 12px;
     display:grid;
-    grid-template-columns:minmax(220px,1.15fr) minmax(180px,.85fr) minmax(260px,1.2fr);
-    gap:10px 22px;
+    grid-template-columns:minmax(140px,1fr) minmax(150px,1fr) minmax(230px,1.4fr);
+    gap:8px 20px;
     align-items:start;
   }
   .ver--superseded{border-left-color:var(--rule)}
@@ -810,7 +856,7 @@ body{background:var(--desk);}
     font-weight:700;
     letter-spacing:.17em;
     text-transform:uppercase;
-    margin-top:7px;
+    margin:6px 0 0;
   }
   .ver-status .dot{
     display:inline-block;
@@ -831,9 +877,10 @@ body{background:var(--desk);}
     letter-spacing:.13em;
     text-transform:uppercase;
     color:var(--ink-mid);
-    margin-top:4px;
+    margin-top:3px;
   }
   .ver-total{
+    margin:0;
     font-family:var(--form);
     font-variant-numeric:tabular-nums;
     font-size:19px;
@@ -844,7 +891,7 @@ body{background:var(--desk);}
   }
   .ver-total .u{font-size:.5em}
   .opens{
-    margin-top:7px;
+    margin:6px 0 0;
     font-family:var(--form);
     font-size:10px;
     font-weight:600;
@@ -865,7 +912,7 @@ body{background:var(--desk);}
   .tally.none{color:var(--ink-mid);letter-spacing:.1em}
   .linkrow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
   .linkbox{
-    flex:1 1 190px;
+    flex:1 1 170px;
     min-width:0;
     font-family:var(--form);
     font-size:11.5px;
@@ -883,14 +930,20 @@ body{background:var(--desk);}
   }
   .linkbox:focus{outline:2px solid var(--ink);outline-offset:-1px}
   .linkrow .btn{border-left-width:1px;margin-left:-1px;padding-top:5px;padding-bottom:4px}
-  .ver-acts{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .ver-acts{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
 
-  .notes{padding-top:14px;display:grid;grid-template-columns:minmax(300px,1fr) minmax(240px,320px);gap:14px 26px;align-items:end}
+  .notes{
+    padding-top:13px;
+    display:grid;
+    grid-template-columns:minmax(220px,1.4fr) minmax(200px,1fr);
+    gap:13px 22px;
+    align-items:end;
+  }
   .notes label{display:block}
   textarea.field-area{
     display:block;
     width:100%;
-    min-height:74px;
+    min-height:62px;
     resize:vertical;
     font-family:var(--entry);
     font-size:14px;
@@ -918,7 +971,7 @@ body{background:var(--desk);}
   }
 
   .foot-rule{
-    padding:12px var(--pad) 0;
+    padding:11px var(--pad) 0;
     font-family:var(--form);
     font-size:9.5px;
     font-weight:600;
@@ -927,33 +980,31 @@ body{background:var(--desk);}
     color:var(--ink-mid);
     display:flex;
     flex-wrap:wrap;
+    justify-content:space-between;
     gap:.3rem 1.4rem;
   }
 
   /* ============ RESPONSIVE ============ */
-  @media (max-width:1180px){
-    .sheet{margin-top:20px}
-  }
-  /* Below this a desk gutter would be narrower than the trim, which reads as
-     a mistake rather than as a desk. The sheet takes the window instead. */
-  @media (max-width:620px){
-    /* still takes the window: the negative margins cancel app-main's 12px */
-    .sheet{width:auto;margin:0 -12px;border-left:0;border-right:0;box-shadow:none}
+  /* at the width where the shell's grids fold to one column, the gutter rule
+     has to fold with them or it hangs off the side of a stacked block */
+  @media (max-width:1100px){
+    .col-rule{border-left:0;padding-left:0;border-top:2px solid var(--ink);padding-top:2px;margin-top:4px}
+    .founder-col{margin-top:4px}
+    .opt-row{grid-template-columns:repeat(2,minmax(0,1fr))}
   }
   @media (max-width:900px){
     :root{--pad:16px}
-    .grid2{grid-template-columns:1fr;gap:22px}
-    .founder-body{grid-template-columns:1fr;gap:18px}
-    .founder-gate{align-items:flex-start}
-    .founder-gate p{text-align:left}
-    .ver{grid-template-columns:1fr;gap:8px}
-    .notes{grid-template-columns:1fr;align-items:start}
+    .opt-row{grid-template-columns:minmax(0,1fr)}
+    .opt{border-bottom:0}
+    .opt:last-child{border-bottom:1px solid var(--rule)}
+    .ver{grid-template-columns:minmax(0,1fr);gap:8px}
+    .notes{grid-template-columns:minmax(0,1fr);align-items:start}
   }
   @media (max-width:760px){
-    .info-strip{grid-template-columns:repeat(2,1fr)}
-    .info-cell:nth-child(3),
-    .info-cell:nth-child(4){border-top:1px solid var(--rule)}
-    .info-cell:nth-child(3){border-left:0}
+    .info-strip{grid-template-columns:1fr 1fr}
+    .info-cell:nth-child(3n+1){border-left:1px solid var(--rule)}
+    .info-cell:nth-child(2n+1){border-left:0}
+    .info-cell:nth-child(n+3){border-top:1px solid var(--rule)}
     .head-meta{text-align:left}
     .sheet-head{position:static}
     .info-cell--margin{border-left-color:var(--rule)}
@@ -961,22 +1012,33 @@ body{background:var(--desk);}
     .info-cell--margin dd{font-size:17px}
     .ledger tr.total td{font-size:24px}
   }
+  /* Below this a desk gutter would be narrower than the trim, which reads as
+     a mistake rather than as a desk. The sheet takes the window instead. */
+  @media (max-width:620px){
+    /* still takes the window: the negative margins cancel app-main's 12px */
+    .sheet{width:auto;margin:0 -12px 20px;border-left:0;border-right:0;box-shadow:none}
+  }
   @media (max-width:430px){
-    .info-strip{grid-template-columns:1fr}
-    .info-cell{border-left:0;border-top:1px solid var(--rule)}
-    .info-cell--total{border-top:0}
-    .info-cell:nth-child(3){border-left:0}
+    /* the two ranked figures keep a line each; the four context fields pair
+       up, so six fields cost four rows instead of six */
+    .info-strip{grid-template-columns:1fr 1fr}
+    .info-cell{border-left:1px solid var(--rule);border-top:1px solid var(--rule);padding:6px var(--pad) 7px}
+    .info-cell:nth-child(2n+1){border-left:0}
+    .info-cell--total,
+    .info-cell--margin{grid-column:1 / -1;border-left:0}
+    .info-cell:first-child{border-top:0}
   }
   @media (prefers-reduced-motion:reduce){
     *{transition:none !important;animation:none !important}
   }
   @media print{
-    body{padding-bottom:0;background:#fff}
+    body{background:#fff}
     /* the shell is furniture, not paper: it does not print */
     .app{display:block;min-height:0}
     .spine{display:none}
     .app-main{padding:0}
-    .measure{max-width:none;margin:0}
+    .grid2,.grid3{display:block}
+    .col-rule{border-left:0;padding-left:0}
     .sheet{width:auto;margin:0;max-width:none;border:0;box-shadow:none;background:#fff;background-image:none}
     .sheet-head{position:static}
     .stamp{opacity:1}
@@ -1001,8 +1063,6 @@ body{background:var(--desk);}
 </nav>
 <main class="app-main">
 
-<div class="measure">
-
 <div class="sheet">
 
 <header class="sheet-head">
@@ -1019,8 +1079,6 @@ body{background:var(--desk);}
       </div>
     </div>
     <div class="head-meta">
-      Client <span class="vn">Nh&#7845;t Minh Beverage</span><br>
-      Owner <span class="vn">Tr&#7847;n Qu&#7889;c B&#7843;o</span><br>
       <b>Tue 18 Aug 2026 - 06:57 ICT</b>
     </div>
   </div>
@@ -1042,295 +1100,234 @@ body{background:var(--desk);}
       <dt class="lbl">Live version</dt>
       <dd>v2<span class="u">PUBLISHED</span></dd>
     </div>
+    <div class="info-cell">
+      <dt class="lbl">Client</dt>
+      <dd class="vn">Nh&#7845;t Minh Beverage</dd>
+    </div>
+    <div class="info-cell">
+      <dt class="lbl">Owner</dt>
+      <dd class="vn">Tr&#7847;n Qu&#7889;c B&#7843;o</dd>
+    </div>
   </dl>
 </header>
 
 <!-- was <main>: the shell owns the page's single <main> now -->
 <div class="sheet-body">
 
-<!-- ============ 01 PACKAGES ============ -->
-<section class="sec" aria-labelledby="s-pkg">
-  <div class="sec-head">
-    <div>
-      <span class="sec-no">Section 01</span>
-      <h2 id="s-pkg">Client-facing packages</h2>
+<!-- ============ BAND 1 - what the client sees | what the money does ====== -->
+<div class="band grid2">
+
+  <!-- ---- 01 packages + detail level ---- -->
+  <section class="sec" aria-labelledby="s-pkg">
+    <div class="sec-head">
+      <div>
+        <span class="sec-no">Section 01</span>
+        <h2 id="s-pkg">Client-facing packages</h2>
+      </div>
+      <span class="sec-note">3 packages - priced from 17 cost lines - figures in VND</span>
     </div>
-    <span class="sec-note">3 packages - priced from 17 cost lines - figures in VND</span>
-  </div>
 
-  <div class="tw">
-    <table class="pk">
-      <thead>
-        <tr>
-          <th scope="col">Pkg</th>
-          <th scope="col">Title / description</th>
-          <th scope="col" class="c-r">Member sum</th>
-          <th scope="col" class="c-r">Override<span class="sub">blank = auto</span></th>
-          <th scope="col" class="c-r">Price</th>
-          <th scope="col" class="c-r">Variance<span class="sub">initialled</span></th>
-          <th scope="col" class="c-c">Strike</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="pkg-code"><span>P1</span></td>
-          <td>
-            <p class="pk-title">Pre-production &amp; concept</p>
-            <p class="pk-desc">Script, storyboard, casting, recce and permits</p>
-          </td>
-          <td class="money sum">71,490,000</td>
-          <td class="c-r">
-            <label class="lbl" for="ov1" style="position:absolute;left:-9999px">Override price for package P1</label>
-            <input class="field" id="ov1" type="text" inputmode="numeric" value="72,000,000" placeholder="auto">
-          </td>
-          <td class="money price">72,000,000</td>
-          <td>
-            <span class="var"><b>+510,000</b><span class="initial">TQB</span></span>
-          </td>
-          <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P1 from the quote">Strike</button></td>
-        </tr>
-        <tr>
-          <td class="pkg-code"><span>P2</span></td>
-          <td>
-            <p class="pk-title">Production - 2 shoot days</p>
-            <p class="pk-desc">Crew, cast, camera, lighting, art and studio</p>
-          </td>
-          <td class="money sum">399,700,000</td>
-          <td class="c-r">
-            <label class="lbl" for="ov2" style="position:absolute;left:-9999px">Override price for package P2</label>
-            <input class="field" id="ov2" type="text" inputmode="numeric" value="400,000,000" placeholder="auto">
-          </td>
-          <td class="money price">400,000,000</td>
-          <td>
-            <span class="var"><b>+300,000</b><span class="initial">TQB</span></span>
-          </td>
-          <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P2 from the quote">Strike</button></td>
-        </tr>
-        <tr>
-          <td class="pkg-code"><span>P3</span></td>
-          <td>
-            <p class="pk-title">Post-production &amp; delivery</p>
-            <p class="pk-desc">Edit, grade, sound, music licence, VFX, masters</p>
-          </td>
-          <td class="money sum">146,400,000</td>
-          <td class="c-r">
-            <label class="lbl" for="ov3" style="position:absolute;left:-9999px">Override price for package P3</label>
-            <input class="field" id="ov3" type="text" inputmode="numeric" value="148,000,000" placeholder="auto">
-          </td>
-          <td class="money price">148,000,000</td>
-          <td>
-            <span class="var"><b>+1,600,000</b><span class="initial">TQB</span></span>
-          </td>
-          <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P3 from the quote">Strike</button></td>
-        </tr>
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="7">
-            <button class="btn btn--wide" type="button">+ Add package</button>
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-
-  <div class="pk-key">
-    <span>Member sum 617,590,000 - priced 620,000,000</span>
-    <span>Variance = override minus member sum</span>
-    <span>Initials = who wrote the override in</span>
-    <span>Rounding up is deliberate, not a fault</span>
-  </div>
-</section>
-
-<!-- ============ 02 TOTALS + DETAIL LEVEL ============ -->
-<section class="sec" aria-labelledby="s-tot">
-  <div class="sec-head">
-    <div>
-      <span class="sec-no">Section 02</span>
-      <h2 id="s-tot">Totals and detail level</h2>
+    <div class="tw">
+      <table class="pk">
+        <thead>
+          <tr>
+            <th scope="col">Pkg</th>
+            <th scope="col">Title / description</th>
+            <th scope="col" class="c-r w1">Member sum</th>
+            <th scope="col" class="c-r w1">Override<span class="sub">blank = auto</span></th>
+            <th scope="col" class="c-r w1">Price</th>
+            <th scope="col" class="c-c w1">Strike</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pkg-code"><span>P1</span></td>
+            <td>
+              <p class="pk-title">Pre-production &amp; concept</p>
+              <p class="pk-desc">Script, storyboard, casting, recce and permits</p>
+            </td>
+            <td class="money sum">71,490,000</td>
+            <td class="c-r">
+              <label class="lbl vh" for="ov1">Override price for package P1</label>
+              <input class="field" id="ov1" type="text" inputmode="numeric" value="72,000,000" placeholder="auto">
+              <span class="var"><b>+510,000</b><span class="initial">TQB</span></span>
+            </td>
+            <td class="money price">72,000,000</td>
+            <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P1 from the quote">Strike</button></td>
+          </tr>
+          <tr>
+            <td class="pkg-code"><span>P2</span></td>
+            <td>
+              <p class="pk-title">Production - 2 shoot days</p>
+              <p class="pk-desc">Crew, cast, camera, lighting, art and studio</p>
+            </td>
+            <td class="money sum">399,700,000</td>
+            <td class="c-r">
+              <label class="lbl vh" for="ov2">Override price for package P2</label>
+              <input class="field" id="ov2" type="text" inputmode="numeric" value="400,000,000" placeholder="auto">
+              <span class="var"><b>+300,000</b><span class="initial">TQB</span></span>
+            </td>
+            <td class="money price">400,000,000</td>
+            <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P2 from the quote">Strike</button></td>
+          </tr>
+          <tr>
+            <td class="pkg-code"><span>P3</span></td>
+            <td>
+              <p class="pk-title">Post-production &amp; delivery</p>
+              <p class="pk-desc">Edit, grade, sound, music licence, VFX, masters</p>
+            </td>
+            <td class="money sum">146,400,000</td>
+            <td class="c-r">
+              <label class="lbl vh" for="ov3">Override price for package P3</label>
+              <input class="field" id="ov3" type="text" inputmode="numeric" value="148,000,000" placeholder="auto">
+              <span class="var"><b>+1,600,000</b><span class="initial">TQB</span></span>
+            </td>
+            <td class="money price">148,000,000</td>
+            <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P3 from the quote">Strike</button></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">
+              <button class="btn btn--wide" type="button">+ Add package</button>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
-    <span class="sec-note">Client-visible figures - margin floor 20 pct</span>
-  </div>
 
-  <div class="grid2">
+    <div class="pk-key">
+      <span>Member sum 617,590,000 - priced 620,000,000</span>
+      <span>Variance sits under the override it came from</span>
+      <span>Initials = who wrote the override in</span>
+      <span>Rounding up is deliberate, not a fault</span>
+    </div>
 
-    <!-- detail level -->
-    <div>
+    <!-- detail level: it governs how these packages are shown, so it sits
+         with them rather than in the money column -->
+    <div class="subsec">
       <fieldset class="opts">
         <legend>Quote detail level - what the client sees</legend>
 
-        <label class="opt">
-          <input type="radio" name="detail" value="package" checked>
-          <span class="tick" aria-hidden="true">X</span>
-          <span class="opt-txt">
-            <strong>Package totals</strong>
-            <span>One price per package. Three lines on the client PDF.</span>
-          </span>
-        </label>
+        <div class="opt-row">
+          <label class="opt">
+            <input type="radio" name="detail" value="package" checked>
+            <span class="tick" aria-hidden="true">X</span>
+            <span class="opt-txt">
+              <strong>Package totals</strong>
+              <span>One price per package. Three lines on the client PDF.</span>
+            </span>
+          </label>
 
-        <label class="opt">
-          <input type="radio" name="detail" value="line">
-          <span class="tick" aria-hidden="true">X</span>
-          <span class="opt-txt">
-            <strong>Line by line</strong>
-            <span>All 17 cost lines priced individually. Exposes rates.</span>
-          </span>
-        </label>
+          <label class="opt">
+            <input type="radio" name="detail" value="line">
+            <span class="tick" aria-hidden="true">X</span>
+            <span class="opt-txt">
+              <strong>Line by line</strong>
+              <span>All 17 cost lines priced individually. Exposes rates.</span>
+            </span>
+          </label>
 
-        <label class="opt">
-          <input type="radio" name="detail" value="lump">
-          <span class="tick" aria-hidden="true">X</span>
-          <span class="opt-txt">
-            <strong>Lump sum</strong>
-            <span>One figure only. No breakdown of any kind.</span>
-          </span>
-        </label>
+          <label class="opt">
+            <input type="radio" name="detail" value="lump">
+            <span class="tick" aria-hidden="true">X</span>
+            <span class="opt-txt">
+              <strong>Lump sum</strong>
+              <span>One figure only. No breakdown of any kind.</span>
+            </span>
+          </label>
+        </div>
       </fieldset>
-      <p class="opts-note">
-        Changing the level re-renders the public quote page and the PDF.<br>
-        It does not change any figure below.
-      </p>
 
       <div class="floor-key">
-        <span class="specimen">
-          <span class="stamp stamp--alarm">
-            <span class="big">Below floor</span>
-            <span class="sub">Margin under 20 pct</span>
-          </span>
+        <span class="stamp stamp--alarm specimen">
+          <span class="big">Below floor</span>
+          <span class="sub">Margin under 20 pct</span>
         </span>
         <p>
-          Specimen - not active on this quote.<br>
-          Under 20 pct the margin figure sets in stamp red, this stamp overprints the margin row, and Publish is held until a founder initials the exception.
+          Changing the level re-renders the public quote page and the PDF. It does not change any figure in Section 02.<br>
+          Specimen stamp - not active on this quote. Under 20 pct the margin figure sets in stamp red, this stamp overprints the margin row, and Publish is held until a founder initials the exception.
         </p>
       </div>
     </div>
+  </section>
 
-    <!-- ledger -->
-    <div>
-      <table class="ledger">
-        <caption class="lbl" style="text-align:left;padding-bottom:6px">Quote ledger - all figures VND</caption>
-        <tbody>
-          <tr class="inputrow">
-            <th scope="row"><label for="mf">Quote MF pct</label></th>
-            <td><input class="field pct" id="mf" type="text" inputmode="decimal" value="10"><span class="u">PCT</span></td>
-          </tr>
-          <tr class="inputrow">
-            <th scope="row"><label for="vat">VAT pct</label></th>
-            <td><input class="field pct" id="vat" type="text" inputmode="decimal" value="8"><span class="u">PCT</span></td>
-          </tr>
-
-          <tr class="rule-hard">
-            <th scope="row">Subtotal (packages)</th>
-            <td>620,000,000</td>
-          </tr>
-          <tr>
-            <th scope="row">Management fee 10 pct</th>
-            <td>62,000,000</td>
-          </tr>
-          <tr class="rule-top">
-            <th scope="row">Total before VAT</th>
-            <td>682,000,000</td>
-          </tr>
-          <tr>
-            <th scope="row">VAT 8 pct</th>
-            <td>54,560,000</td>
-          </tr>
-          <tr class="total rule-hard">
-            <th scope="row">Total</th>
-            <td>736,560,000<span class="u">VND</span></td>
-          </tr>
-
-          <tr class="cost rule-hard">
-            <th scope="row">Cost (17 lines)</th>
-            <td>530,600,000</td>
-          </tr>
-          <tr class="margin">
-            <th scope="row">Margin</th>
-            <td>151,400,000<span class="pct-tag">22.2 PCT</span></td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="margin-wrap">
-        <span class="stamp stamp--ok">
-          <span class="big">Above floor</span>
-          <span class="sub">Floor 20 pct - clear by 2.2</span>
-        </span>
+  <!-- ---- 02 totals ---- -->
+  <section class="sec col-rule" aria-labelledby="s-tot">
+    <div class="sec-head">
+      <div>
+        <span class="sec-no">Section 02</span>
+        <h2 id="s-tot">Totals</h2>
       </div>
+      <span class="sec-note">Client-visible - floor 20 pct</span>
     </div>
 
-  </div>
-</section>
-
-<!-- ============ 03 FOUNDER-ONLY TEAR-OFF ============ -->
-<div class="tear" aria-hidden="true"><span>Detach before sending</span></div>
-<section class="founder" aria-labelledby="s-founder">
-  <div class="founder-head">
-    <div>
-      <span class="sec-no lbl" style="color:#9E9C90">Section 03 - restricted insert</span>
-      <h2 id="s-founder">Founder only</h2>
-    </div>
-    <div class="who">
-      Visible to <b>Founder</b> role only<br>
-      Producers never receive this insert
-    </div>
-  </div>
-
-  <div class="founder-body">
     <table class="ledger">
-      <caption class="lbl" style="text-align:left;padding-bottom:6px">Post-quote position - all figures VND</caption>
+      <caption class="lbl" style="text-align:left;padding:8px 0 4px">Quote ledger - all figures VND</caption>
       <tbody>
-        <tr>
-          <th scope="row">Commission (CMF) 5 pct</th>
-          <td>34,100,000</td>
+        <tr class="inputrow">
+          <th scope="row"><label for="mf">Quote MF pct</label></th>
+          <td><input class="field pct" id="mf" type="text" inputmode="decimal" value="10"><span class="u">PCT</span></td>
         </tr>
-        <tr class="rule-top">
-          <th scope="row">CM after commission</th>
-          <td>117,300,000</td>
+        <tr class="inputrow">
+          <th scope="row"><label for="vat">VAT pct</label></th>
+          <td><input class="field pct" id="vat" type="text" inputmode="decimal" value="8"><span class="u">PCT</span></td>
         </tr>
-        <tr>
-          <th scope="row"><span class="lbl-vn">L&#7907;i nhu&#7853;n tr&#432;&#7899;c thu&#7871;</span></th>
-          <td>117,300,000</td>
-        </tr>
-        <tr>
-          <th scope="row">TNDN 20 pct</th>
-          <td>23,460,000</td>
-        </tr>
+
         <tr class="rule-hard">
-          <th scope="row">Net profit</th>
-          <td>93,840,000</td>
+          <th scope="row">Subtotal (packages)</th>
+          <td>620,000,000</td>
+        </tr>
+        <tr>
+          <th scope="row">Management fee 10 pct</th>
+          <td>62,000,000</td>
         </tr>
         <tr class="rule-top">
-          <th scope="row"><span class="lbl-vn">VAT ph&#7843;i n&#7897;p</span></th>
+          <th scope="row">Total before VAT</th>
+          <td>682,000,000</td>
+        </tr>
+        <tr>
+          <th scope="row">VAT 8 pct</th>
           <td>54,560,000</td>
+        </tr>
+        <tr class="total rule-hard">
+          <th scope="row">Total</th>
+          <td>736,560,000<span class="u">VND</span></td>
+        </tr>
+
+        <tr class="cost rule-hard">
+          <th scope="row">Cost (17 lines)</th>
+          <td>530,600,000</td>
+        </tr>
+        <tr class="margin">
+          <th scope="row">Margin</th>
+          <td>151,400,000<span class="pct-tag">22.2 PCT</span></td>
         </tr>
       </tbody>
     </table>
 
-    <div class="founder-gate">
-      <span class="stamp stamp--gate">
-        <span class="big">Founder only</span>
-        <span class="sub">Do not circulate</span>
+    <div class="margin-wrap">
+      <span class="stamp stamp--ok">
+        <span class="big">Above floor</span>
+        <span class="sub">Floor 20 pct - clear by 2.2</span>
       </span>
-      <p>
-        Withheld by role at the server, not folded away in the page.<br>
-        A producer opening DEAL-0182 gets Section 02 and then Section 04. This insert is not in their sheet at all.
-      </p>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ============ 04 VERSIONS ============ -->
-<section class="sec" aria-labelledby="s-ver" style="border-top:3px solid var(--ink);margin-top:22px">
-  <div class="sec-head">
-    <div>
-      <span class="sec-no">Section 04</span>
-      <h2 id="s-ver">Quote versions</h2>
+</div><!-- /band 1 -->
+
+<!-- ============ BAND 2 - the record | the slip that never leaves ======== -->
+<div class="band grid2">
+
+  <!-- ---- 03 versions ---- -->
+  <section class="sec" aria-labelledby="s-ver">
+    <div class="sec-head">
+      <div>
+        <span class="sec-no">Section 03</span>
+        <h2 id="s-ver">Quote versions</h2>
+      </div>
+      <span class="sec-note">2 versions - v2 is live on the public link</span>
     </div>
-    <span class="sec-note">2 versions - v2 is live on the public link</span>
-  </div>
-
-  <div>
 
     <!-- v2 -->
     <article class="ver ver--current">
@@ -1348,7 +1345,7 @@ body{background:var(--desk);}
       </div>
       <div>
         <div class="linkrow">
-          <label class="lbl" for="lk2" style="position:absolute;left:-9999px">Public link for version 2</label>
+          <label class="lbl vh" for="lk2">Public link for version 2</label>
           <input class="linkbox" id="lk2" type="text" readonly value="/q/8f2a-0182-v2">
           <button class="btn" type="button">Copy</button>
           <button class="btn" type="button">PDF</button>
@@ -1376,7 +1373,7 @@ body{background:var(--desk);}
       </div>
       <div>
         <div class="linkrow">
-          <label class="lbl" for="lk1" style="position:absolute;left:-9999px">Public link for version 1</label>
+          <label class="lbl vh" for="lk1">Public link for version 1</label>
           <input class="linkbox" id="lk1" type="text" readonly value="/q/8f2a-0182-v1">
           <button class="btn" type="button">Copy</button>
           <button class="btn" type="button">PDF</button>
@@ -1391,8 +1388,8 @@ body{background:var(--desk);}
     <div class="notes">
       <div>
         <label>
-          <span class="lbl">Version notes - goes on the internal record, not the client PDF</span>
-          <textarea class="field-area" rows="3" placeholder="What changed and why"></textarea>
+          <span class="lbl">Version notes - internal record, not the client PDF</span>
+          <textarea class="field-area" rows="2" placeholder="What changed and why"></textarea>
         </label>
       </div>
       <div class="publish">
@@ -1400,26 +1397,94 @@ body{background:var(--desk);}
         <p>Publishing freezes packages, totals and detail level, then mints a new public link. v2 stays readable at its own link.</p>
       </div>
     </div>
+  </section>
 
+  <!-- ---- 04 founder-only tear-off ---- -->
+  <div class="founder-col">
+    <div class="tear" aria-hidden="true"><span>Detach before sending</span></div>
+    <section class="founder" aria-labelledby="s-founder">
+      <div class="founder-head">
+        <div>
+          <span class="sec-no lbl" style="color:#9E9C90">Section 04 - restricted insert</span>
+          <h2 id="s-founder">Founder only</h2>
+        </div>
+        <div class="who">
+          <b>Founder</b> role only<br>
+          Producers never receive it
+        </div>
+      </div>
+
+      <div class="founder-body">
+        <table class="ledger">
+          <caption class="lbl" style="text-align:left;padding-bottom:4px">Post-quote position - all figures VND</caption>
+          <tbody>
+            <tr>
+              <th scope="row">Commission (CMF) 5 pct</th>
+              <td>34,100,000</td>
+            </tr>
+            <tr class="rule-top">
+              <th scope="row">CM after commission</th>
+              <td>117,300,000</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="lbl-vn">L&#7907;i nhu&#7853;n tr&#432;&#7899;c thu&#7871;</span></th>
+              <td>117,300,000</td>
+            </tr>
+            <tr>
+              <th scope="row">TNDN 20 pct</th>
+              <td>23,460,000</td>
+            </tr>
+            <tr class="rule-hard">
+              <th scope="row">Net profit</th>
+              <td>93,840,000</td>
+            </tr>
+            <tr class="rule-top">
+              <th scope="row"><span class="lbl-vn">VAT ph&#7843;i n&#7897;p</span></th>
+              <td>54,560,000</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="founder-gate">
+          <span class="stamp stamp--gate">
+            <span class="big">Founder only</span>
+            <span class="sub">Do not circulate</span>
+          </span>
+          <p>
+            Withheld by role at the server, not folded away in the page. A producer opening DEAL-0182 gets Sections 01 to 03 and nothing after them - this insert is not in their sheet at all.
+          </p>
+        </div>
+      </div>
+    </section>
   </div>
-</section>
+
+</div><!-- /band 2 -->
 
 <div class="foot-rule">
   <span>DEAL-0182 - quote builder</span>
   <span>Figures in VND - never abbreviated</span>
   <span>Margin floor 20 pct</span>
-  <span>Section 03 withheld from producer role</span>
+  <span>Section 04 withheld from producer role</span>
 </div>
 
 </div><!-- /.sheet-body -->
 
 </div><!-- /.sheet -->
 
-</div><!-- /.measure -->
-
 </main>
 </div><!-- /.app -->
 
+<style>
+/* ---- round 4, founder: "nếu chừa thì đổi màu cho nó match với trang chứ" --
+   The 24px band around the sheet was the desk tone showing through. That read
+   as "paper on a desk" while the content was narrow; now the content is full
+   width it just reads as leftover margin. The working area IS the sheet, so
+   the ground becomes stock and the padding turns invisible. Padding is kept -
+   text must not touch the spine - it simply stops being a visible edge. */
+body{background:var(--stock)}
+.app-main{background:var(--stock)}
+.sheet{border-color:transparent;box-shadow:none}
+</style>
 <!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
 <div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
   <button type="button" data-dir="-1" aria-label="Previous screen">&#8592;</button>

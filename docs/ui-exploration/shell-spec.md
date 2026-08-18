@@ -32,7 +32,12 @@ At 1440px: spine 208 + main 1232. A 1120px sheet inside 1232 leaves 56px of desk
 /* ---- app shell ---------------------------------------------------- */
 :root{ --desk:#BEBBB0; --stock:#E6E4DD; --ink:#14130E; --ink2:#6E6B60; --rule:#B9B6AA; }
 html,body{margin:0;padding:0}
-body{background:var(--desk);}
+/* ROUND 4: the ground is stock, not desk. While content was narrow, a desk
+   tone behind a bounded sheet read as paper on a desk. At full width all that
+   survived was a 24px band around the edge, which reads as leftover margin -
+   the founder called it out. The working area IS the sheet now. `--desk` is
+   kept only for the rare element that still wants a recessed tone. */
+body{background:var(--stock);}
 .app{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh;align-items:start}
 
 /* the spine: a binder edge, reusing the reversed-ink device the sections
@@ -54,10 +59,24 @@ body{background:var(--desk);}
 .spine-foot a{color:#8d887a;text-decoration:none}
 .spine-foot a:hover{color:var(--stock)}
 
-/* the working area */
-.app-main{min-width:0;padding:22px 24px 90px}
-.measure{max-width:1120px;margin:0 auto}   /* document screens */
-.bleed{max-width:none}                      /* wide tables: fill app-main, scroll inside */
+/* the working area.
+   REVISED 2026-08-18 round 3: there is no narrow measure any more. Every
+   screen fills app-main edge to edge. The founder asked for full width on
+   all screens for consistency, plus "gom nhóm / rút gọn UI lại cho phù hợp".
+   Those two go together: width is spent by GROUPING content into columns,
+   never by stretching one column of text or a lone row across 1200px.
+   Stretching is what was rejected in round 1, not width itself - and a real
+   call sheet is already a multi-column document, so this is the more
+   faithful reading of the direction. */
+.app-main{min-width:0;padding:22px 24px 90px;background:var(--stock)}
+/* the 24px padding stays - text must not touch the ink spine - but it is now
+   stock on stock, so it is breathing room rather than a visible edge */
+.sheet{border-color:transparent;box-shadow:none}
+
+/* grouping grids - use these rather than inventing per-page column systems */
+.grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:22px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;align-items:start}
+@media (max-width:1100px){ .grid2,.grid3{grid-template-columns:minmax(0,1fr)} }
 
 /* below 900px the spine lies down as a top strip */
 @media (max-width:900px){
@@ -115,12 +134,14 @@ Add `class="on"` to exactly one `<li>`:
 
 ## Per-page application
 
-| Page | Wrapper | Note |
-| --- | --- | --- |
-| Dashboard | `.measure` | Sheet already 1120px. Remove its own centring so the shell does it. |
-| Quote builder | `.measure` | Same. |
-| Breakdown | `.bleed` | The table keeps its full width and scrolls inside `app-main`. Its pinned stub and computed gutters still pin, now against the content area rather than the viewport. |
-| Pipeline board | `.bleed` | The board is genuinely wider than the screen; it keeps scrolling horizontally inside `app-main`. |
+| Page | Note |
+| --- | --- |
+| Dashboard | Fills `app-main`. Content regrouped into columns so nothing stretches. |
+| Quote builder | Fills `app-main`. Same. |
+| Breakdown | The table keeps its full width and scrolls inside `app-main`. Its pinned stub and computed gutters pin against the content area, not the viewport. |
+| Pipeline board | The board is genuinely wider than the screen; it keeps scrolling horizontally inside `app-main`. |
+
+Removing the measure also gives width back to the two screens that were paying for it: the breakdown's working band and the pipeline board both widen by the 56px of desk that used to sit either side.
 
 ## Rules that still apply
 

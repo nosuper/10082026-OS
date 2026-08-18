@@ -841,6 +841,17 @@ body{background:var(--desk);}
 </main>
 </div><!-- /.app -->
 
+<style>
+/* ---- round 4, founder: "nếu chừa thì đổi màu cho nó match với trang chứ" --
+   The 24px band around the sheet was the desk tone showing through. That read
+   as "paper on a desk" while the content was narrow; now the content is full
+   width it just reads as leftover margin. The working area IS the sheet, so
+   the ground becomes stock and the padding turns invisible. Padding is kept -
+   text must not touch the spine - it simply stops being a visible edge. */
+body{background:var(--stock)}
+.app-main{background:var(--stock)}
+.sheet{border-color:transparent;box-shadow:none}
+</style>
 <!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
 <div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
   <button type="button" data-dir="-1" aria-label="Previous screen">&#8592;</button>
