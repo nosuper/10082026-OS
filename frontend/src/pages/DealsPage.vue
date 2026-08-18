@@ -1,445 +1,472 @@
 <template>
-  <div class="px-4 py-6">
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <h1 class="text-lg font-semibold text-gray-900">Deals</h1>
-      <span class="text-sm tabular-nums text-gray-400">
-        {{ filteredDeals.length }}
-      </span>
-      <div class="relative ml-2">
-        <FeatherIcon
-          name="search"
-          class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-        />
-        <input
-          v-model.trim="query"
-          type="text"
-          placeholder="Search deals"
-          class="w-56 rounded-md border-gray-300 py-1.5 pl-8 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
-        />
-      </div>
-      <select
-        v-model="ownerFilter"
-        class="rounded-md border-gray-300 py-1.5 text-sm text-gray-700 focus:border-gray-500 focus:ring-0"
-      >
-        <option value="">All owners</option>
-        <option v-for="owner in owners" :key="owner.name" :value="owner.name">
-          {{ owner.full_name || owner.name }}
-        </option>
-      </select>
-      <div class="ml-auto flex items-center gap-2">
-        <div class="flex rounded-md bg-gray-100 p-0.5">
-          <button
-            v-for="mode in ['Board', 'Table']"
-            :key="mode"
-            class="rounded px-2.5 py-1 text-sm"
-            :class="
-              view === mode
-                ? 'bg-white font-medium text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            "
-            @click="setView(mode)"
-          >
-            {{ mode }}
-          </button>
-        </div>
+  <div class="space-y-4">
+    <!-- Page head: the pipeline in words before the board draws it. -->
+    <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
+      <h1 class="text-xl font-semibold text-carbon">Deals</h1>
+      <p class="text-sm text-muted">
+        {{ filteredDeals.length }} deal{{ filteredDeals.length === 1 ? "" : "s" }} in view
+        <template v-if="silentQuotes">
+          ·
+          <span class="text-accent">
+            {{ silentQuotes }} quote{{ silentQuotes === 1 ? "" : "s" }} gone quiet
+          </span>
+        </template>
+      </p>
+      <div class="ml-auto">
         <Button variant="solid" @click="openNew">New Deal</Button>
       </div>
     </div>
 
-    <div v-if="view === 'Board'" class="flex gap-3 overflow-x-auto pb-4">
-      <div
-        v-for="stage in STAGES"
-        :key="stage.value"
-        class="flex w-72 shrink-0 flex-col rounded-lg transition-colors"
-        :class="
-          dragOverStage === stage.value
-            ? 'bg-blue-50 ring-2 ring-inset ring-blue-300'
-            : 'bg-gray-100'
-        "
-        @dragover.prevent="dragOverStage = stage.value"
-        @dragleave="onDragLeave(stage.value, $event)"
-        @drop="onDrop(stage.value)"
-      >
-        <div class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-800">
-          <span class="h-2 w-2 shrink-0 rounded-full" :class="stage.dot"></span>
-          {{ stage.label }}
-          <span class="text-xs font-normal text-gray-500">
-            {{ dealsByStage[stage.value]?.length || 0 }}
-          </span>
-          <span
-            v-if="stageTotals[stage.value]"
-            class="ml-auto text-xs font-medium tabular-nums text-gray-600"
-            :title="`${vnd(stageTotals[stage.value])} ₫ total in ${stage.label}`"
-          >
-            {{ vndShort(stageTotals[stage.value]) }}
-          </span>
+    <!-- One card holds the pipeline; the header carries search, owner and the
+         Board/Table switch, so the chrome never moves between views. -->
+    <div class="rounded-card border border-hairline bg-paper shadow-card">
+      <div class="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
+        <div class="min-w-0">
+          <h2 class="font-display text-sm font-semibold text-carbon">All deals</h2>
+          <div v-if="tableBudgetTotal" class="mt-0.5 text-xs text-muted">
+            Total value <span class="text-carbon">{{ vndShort(tableBudgetTotal) }}</span>
+          </div>
         </div>
-        <div class="flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2">
-          <div
-            v-for="deal in dealsByStage[stage.value]"
-            :key="deal.name"
-            class="group cursor-grab rounded-md border bg-white p-3 shadow-sm transition-shadow hover:border-gray-300 hover:shadow"
-            :class="dragged === deal ? 'opacity-50' : ''"
-            draggable="true"
-            @dragstart="dragged = deal"
-            @dragend="((dragged = null), (dragOverStage = null))"
-            @click="openEdit(deal)"
+
+        <div class="ml-auto flex flex-wrap items-center gap-2">
+          <div class="relative">
+            <FeatherIcon
+              name="search"
+              class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
+            />
+            <input
+              v-model.trim="query"
+              type="text"
+              placeholder="Search deals"
+              class="w-48 rounded-[10px] border border-hairline bg-paper py-1.5 pl-8 pr-2.5 text-sm text-carbon placeholder-faint focus:border-carbon/30 focus:ring-0"
+            />
+          </div>
+
+          <select
+            v-model="ownerFilter"
+            class="rounded-[10px] border border-hairline bg-paper py-1.5 pl-2.5 pr-8 text-sm text-muted focus:border-carbon/30 focus:ring-0"
           >
-            <div class="flex items-start gap-2">
-              <div class="min-w-0 flex-1">
-                <div
-                  class="truncate text-sm font-medium text-gray-900"
-                  :title="`${deal.title} (${deal.name})`"
-                >
-                  {{ deal.title }}
+            <option value="">All owners</option>
+            <option v-for="owner in owners" :key="owner.name" :value="owner.name">
+              {{ owner.full_name || owner.name }}
+            </option>
+          </select>
+
+          <details v-if="view === 'Table'" class="relative">
+            <summary
+              class="cursor-pointer select-none list-none rounded-[10px] border border-hairline px-2.5 py-1.5 text-sm text-muted hover:text-carbon"
+            >
+              Columns
+            </summary>
+            <div
+              class="absolute right-0 z-20 mt-1 w-52 rounded-card border border-hairline bg-paper p-2 shadow-drawer"
+            >
+              <label
+                v-for="col in COLUMNS"
+                :key="col.key"
+                class="flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1 text-sm text-carbon hover:bg-canvas"
+              >
+                <input
+                  type="checkbox"
+                  :checked="visibleColumnKeys.includes(col.key)"
+                  :disabled="col.required"
+                  @change="toggleColumn(col.key)"
+                />
+                {{ col.label }}
+              </label>
+            </div>
+          </details>
+
+          <div class="inline-flex rounded-[10px] border border-hairline bg-canvas p-0.5">
+            <button
+              v-for="mode in ['Board', 'Table']"
+              :key="mode"
+              class="rounded-[8px] px-2.5 py-1 text-xs font-medium transition-colors"
+              :class="
+                view === mode
+                  ? 'bg-white text-carbon shadow-card'
+                  : 'text-muted hover:text-carbon'
+              "
+              @click="setView(mode)"
+            >
+              {{ mode }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Board -->
+      <div v-if="view === 'Board'" class="overflow-x-auto p-3">
+        <div class="flex min-w-max items-stretch gap-3">
+          <div
+            v-for="stage in STAGES"
+            :key="stage.value"
+            class="flex w-72 shrink-0 flex-col"
+            @dragover.prevent="dragOverStage = stage.value"
+            @dragleave="onDragLeave(stage.value, $event)"
+            @drop="onDrop(stage.value)"
+          >
+            <div
+              class="flex items-baseline gap-2 rounded-t-card border border-b-0 px-3 py-2.5 transition-colors"
+              :class="
+                dragOverStage === stage.value
+                  ? 'border-accent bg-accent-soft'
+                  : 'border-hairline bg-paper'
+              "
+            >
+              <span class="aura-eyebrow truncate text-carbon">{{ stage.label }}</span>
+              <span class="aura-num rounded-[6px] bg-canvas px-1.5 py-0.5 text-[11px] text-muted">
+                {{ dealsByStage[stage.value]?.length || 0 }}
+              </span>
+              <span
+                v-if="stageTotals[stage.value]"
+                class="ml-auto shrink-0 text-[11px] text-muted"
+                :title="`${vnd(stageTotals[stage.value])} ₫ total in ${stage.label}`"
+              >
+                {{ vndShort(stageTotals[stage.value]) }}
+              </span>
+            </div>
+
+            <div
+              class="aura-canvas flex min-h-24 flex-1 flex-col gap-2 rounded-b-card border border-t-0 p-2 transition-colors"
+              :class="dragOverStage === stage.value ? 'border-accent' : 'border-hairline'"
+            >
+              <div
+                v-for="deal in dealsByStage[stage.value]"
+                :key="deal.name"
+                class="group cursor-grab rounded-[10px] border border-hairline bg-paper p-3 shadow-card transition-colors hover:border-carbon/25"
+                :class="dragged === deal ? 'opacity-50' : ''"
+                draggable="true"
+                @dragstart="dragged = deal"
+                @dragend="((dragged = null), (dragOverStage = null))"
+                @click="openEdit(deal)"
+              >
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <div
+                      class="truncate text-sm font-medium text-carbon"
+                      :title="`${deal.title} (${deal.name})`"
+                    >
+                      {{ deal.title }}
+                    </div>
+                    <!-- The record code, findable: quote numbers and chat
+                         messages cite DEAL-xxxx, so the card must answer
+                         to it (C walkthrough note). The search box already
+                         matches it. -->
+                    <div class="mt-1 flex items-center gap-2 text-xs text-muted">
+                      <span v-if="deal.company" class="truncate">
+                        {{ companyNames[deal.company] || deal.company }}
+                      </span>
+                      <span class="aura-num ml-auto shrink-0 text-[10px] text-faint">
+                        {{ deal.name }}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    class="shrink-0 rounded-[8px] p-1 text-faint opacity-0 transition-opacity hover:bg-canvas hover:text-carbon group-hover:opacity-100"
+                    title="Breakdown & Quote"
+                    @click.stop="openBreakdown(deal)"
+                  >
+                    <FeatherIcon name="dollar-sign" class="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <!-- The record code, findable: quote numbers and chat
-                     messages cite DEAL-xxxx, so the card must answer
-                     to it (C walkthrough note). The search box already
-                     matches it. -->
-                <div class="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-                  <span v-if="deal.company" class="truncate">
-                    {{ companyNames[deal.company] || deal.company }}
+
+                <div
+                  v-if="deal.estimated_budget || deal.project_type"
+                  class="mt-2.5 flex flex-wrap items-baseline gap-2"
+                >
+                  <MoneyValue
+                    v-if="deal.estimated_budget"
+                    :amount="deal.estimated_budget"
+                    class="font-medium"
+                  />
+                  <span
+                    v-if="deal.project_type"
+                    class="rounded-pill border border-hairline bg-canvas px-2 py-0.5 text-[11px] text-muted"
+                  >
+                    {{ deal.project_type }}
                   </span>
-                  <span class="ml-auto shrink-0 tabular-nums text-[10px] text-gray-400">
-                    {{ deal.name }}
+                  <StatusPill
+                    v-if="deal.tier"
+                    :tone="tierTone(deal.tier)"
+                    :label="deal.tier.replace('Tier ', 'T')"
+                    :title="deal.positioning ? `${deal.tier} · ${deal.positioning}` : deal.tier"
+                  />
+                </div>
+
+                <div class="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  <span
+                    class="truncate rounded-pill border border-hairline bg-canvas px-2 py-0.5 text-[11px] text-muted"
+                  >
+                    {{ ownerLabel(deal.deal_owner) }}
+                  </span>
+                  <StatusPill
+                    v-if="deal.stage === 'Lost' && deal.lost_reason"
+                    tone="accent"
+                    :label="deal.lost_reason"
+                  />
+                  <StatusPill
+                    v-if="silentDeals[deal.name]"
+                    tone="warn"
+                    :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} - no reply after ${silence.data?.silence_days} days`"
+                  >
+                    <FeatherIcon name="clock" class="mr-1 h-3 w-3" />
+                    Silent
+                  </StatusPill>
+                  <a
+                    v-if="quoteLinks[deal.name]"
+                    :href="quoteLinks[deal.name].url"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1 rounded-pill border border-accent/30 bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent-ink hover:border-accent/60"
+                    :title="`Open the client's quote page (v${quoteLinks[deal.name].version})`"
+                    @click.stop
+                  >
+                    <FeatherIcon name="link" class="h-3 w-3" />
+                    v{{ quoteLinks[deal.name].version }}
+                  </a>
+                  <button
+                    v-if="deal.stage === 'Won'"
+                    class="rounded-pill border border-ok/25 bg-ok/5 px-2 py-0.5 text-[11px] font-medium text-ok hover:border-ok/50"
+                    :title="jobFor(deal) ? 'Open the job' : 'Create the job'"
+                    @click.stop="openOrCreateJob(deal)"
+                  >
+                    {{ jobFor(deal) ? "Job →" : "+ Job" }}
+                  </button>
+                  <span
+                    v-if="stageAge(deal) >= 1 && deal.stage !== 'Won' && deal.stage !== 'Lost'"
+                    class="aura-num ml-auto shrink-0 text-[11px]"
+                    :class="stageAge(deal) > STALE_DAYS ? 'text-accent' : 'text-faint'"
+                    :title="`In ${deal.stage} for ${stageAge(deal)} ${stageAge(deal) === 1 ? 'day' : 'days'}`"
+                  >
+                    {{ stageAge(deal) }}d
                   </span>
                 </div>
               </div>
-              <button
-                class="shrink-0 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100"
-                title="Breakdown & Quote"
-                @click.stop="openBreakdown(deal)"
+
+              <div
+                v-if="!dealsByStage[stage.value]?.length"
+                class="rounded-[10px] border border-dashed border-hairline px-3 py-6 text-center text-[11px] text-faint"
               >
-                <FeatherIcon name="dollar-sign" class="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div
-              v-if="deal.estimated_budget || deal.project_type"
-              class="mt-2 flex items-center gap-2"
-            >
-              <span
-                v-if="deal.estimated_budget"
-                class="text-sm font-medium tabular-nums text-gray-800"
-              >
-                {{ vnd(deal.estimated_budget) }}
-              </span>
-              <span
-                v-if="deal.project_type"
-                class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600"
-              >
-                {{ deal.project_type }}
-              </span>
-              <span
-                v-if="deal.tier"
-                class="rounded px-1.5 py-0.5 text-xs"
-                :class="tierClass(deal.tier)"
-                :title="deal.positioning ? `${deal.tier} · ${deal.positioning}` : deal.tier"
-              >
-                {{ deal.tier.replace("Tier ", "T") }}
-              </span>
-            </div>
-            <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span
-                class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
-              >
-                {{ ownerLabel(deal.deal_owner) }}
-              </span>
-              <span
-                v-if="deal.stage === 'Lost' && deal.lost_reason"
-                class="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700"
-              >
-                {{ deal.lost_reason }}
-              </span>
-              <span
-                v-if="silentDeals[deal.name]"
-                class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-                :title="`Quote sent ${silentDeals[deal.name].quote_sent_on?.slice(0, 10)} - no reply after ${silence.data?.silence_days} days`"
-              >
-                <FeatherIcon name="clock" class="h-3 w-3" />
-                Silent
-              </span>
-              <a
-                v-if="quoteLinks[deal.name]"
-                :href="quoteLinks[deal.name].url"
-                target="_blank"
-                rel="noopener"
-                class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
-                :title="`Open the client's quote page (v${quoteLinks[deal.name].version})`"
-                @click.stop
-              >
-                <FeatherIcon name="link" class="h-3 w-3" />
-                v{{ quoteLinks[deal.name].version }}
-              </a>
-              <button
-                v-if="deal.stage === 'Won'"
-                class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100"
-                :title="jobFor(deal) ? 'Open the job' : 'Create the job'"
-                @click.stop="openOrCreateJob(deal)"
-              >
-                {{ jobFor(deal) ? "Job →" : "+ Job" }}
-              </button>
-              <span
-                v-if="stageAge(deal) >= 1 && deal.stage !== 'Won' && deal.stage !== 'Lost'"
-                class="ml-auto text-xs tabular-nums"
-                :class="
-                  stageAge(deal) > STALE_DAYS
-                    ? 'rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800'
-                    : 'text-gray-400'
-                "
-                :title="`In ${deal.stage} for ${stageAge(deal)} ${stageAge(deal) === 1 ? 'day' : 'days'}`"
-              >
-                {{ stageAge(deal) }} {{ stageAge(deal) === 1 ? "day" : "days" }}
-              </span>
+                Nothing here
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div v-else>
-      <div class="mb-2 flex justify-end">
-        <details class="relative">
-          <summary
-            class="cursor-pointer select-none rounded-md border bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            Columns
-          </summary>
-          <div
-            class="absolute right-0 z-10 mt-1 w-48 rounded-md border bg-white p-2 shadow-lg"
-          >
-            <label
-              v-for="col in COLUMNS"
-              :key="col.key"
-              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50"
-            >
-              <input
-                type="checkbox"
-                :checked="visibleColumnKeys.includes(col.key)"
-                :disabled="col.required"
-                @change="toggleColumn(col.key)"
-              />
-              {{ col.label }}
-            </label>
-          </div>
-        </details>
-      </div>
-
-      <div class="overflow-x-auto rounded-lg border">
-        <table class="w-full text-sm">
-        <thead>
-          <tr class="border-b bg-gray-50 text-left text-xs text-gray-600">
-            <th
-              v-for="col in visibleColumns"
-              :key="col.key"
-              class="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-medium hover:text-gray-900"
-              :class="col.align === 'right' ? 'text-right' : ''"
-              @click="sortBy(col.key)"
-            >
-              {{ col.label }}
-              <span v-if="sortKey === col.key">
-                {{ sortDir === "asc" ? "↑" : "↓" }}
-              </span>
-            </th>
-            <th class="sticky right-0 w-px bg-gray-50 px-3 py-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="border-b bg-gray-50/70 align-top">
-            <td
-              v-for="col in visibleColumns"
-              :key="col.key"
-              class="min-w-32 px-2 py-1.5"
-            >
-              <select
-                v-if="col.editable && col.type === 'select'"
-                v-model="newDeal[col.key]"
-                class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
-              >
-                <option
-                  v-for="option in optionsFor(col.key)"
-                  :key="option.value"
-                  :value="option.value"
+      <!-- Table -->
+      <template v-else>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-sm">
+            <thead>
+              <tr class="border-b border-hairline bg-canvas/60">
+                <th
+                  v-for="col in visibleColumns"
+                  :key="col.key"
+                  class="aura-eyebrow cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left font-medium hover:text-carbon"
+                  :class="col.align === 'right' ? 'text-right' : ''"
+                  @click="sortBy(col.key)"
                 >
-                  {{ option.label }}
-                </option>
-              </select>
-              <VndInput
-                v-else-if="col.editable && col.type === 'number'"
-                v-model="newDeal[col.key]"
-                :placeholder="col.label"
-                class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums"
-                @enter="createFromTable"
-              />
-              <input
-                v-else-if="col.editable"
-                v-model="newDeal[col.key]"
-                type="text"
-                :placeholder="col.key === 'tags' ? 'tag, tag' : col.label"
-                class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
-                @keydown.enter="createFromTable"
-              />
-              <span v-else class="text-gray-300">-</span>
-            </td>
-            <td class="sticky right-0 whitespace-nowrap bg-gray-50 px-2 py-1.5">
-              <Button
-                variant="solid"
-                :loading="createTableRow.loading"
-                @click="createFromTable"
-              >
-                Add
-              </Button>
-            </td>
-          </tr>
-          <tr
-            v-for="deal in sortedDeals"
-            :key="deal.name"
-            class="group border-b last:border-b-0 hover:bg-gray-50"
-          >
-            <td
-              v-for="col in visibleColumns"
-              :key="col.key"
-              class="px-3 py-2 text-gray-700"
-              :class="[
-                col.key === 'title' ? 'min-w-56' : 'min-w-32',
-                col.align === 'right' ? 'text-right' : '',
-                col.editable && col.key !== 'title'
-                  ? 'cursor-text hover:bg-blue-50/50'
-                  : '',
-              ]"
-              @click="startEditing(deal, col)"
-            >
-              <template v-if="isEditing(deal, col)">
-                <select
-                  v-if="col.type === 'select'"
-                  v-model="editing.value"
-                  class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-sm"
-                  autofocus
-                  @click.stop
-                  @change="saveInline"
-                  @keydown.esc="cancelEditing"
-                >
-                  <option
-                    v-for="option in optionsFor(col.key)"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-                <VndInput
-                  v-else-if="col.type === 'number'"
-                  v-model="editing.value"
-                  class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-right text-sm tabular-nums"
-                  autofocus
-                  @click.stop
-                  @enter="$event.target.blur()"
-                  @esc="cancelEditing"
-                  @blur="saveInline"
-                />
-                <input
-                  v-else
-                  v-model="editing.value"
-                  type="text"
-                  class="w-full rounded border border-blue-400 bg-white px-2 py-1 text-sm"
-                  autofocus
-                  @click.stop
-                  @change="saveInline"
-                  @keydown.enter.prevent="$event.target.blur()"
-                  @keydown.esc="cancelEditing"
-                />
-              </template>
-              <template v-else-if="col.key === 'title'">
-                <div class="group flex items-center gap-1.5">
-                  <button
-                    class="text-left font-medium text-blue-700 hover:underline"
-                    :title="deal.name"
-                    @click.stop="openEdit(deal)"
-                  >
-                    {{ deal.title }}
-                  </button>
-                  <span class="shrink-0 tabular-nums text-[10px] text-gray-400">
-                    {{ deal.name }}
+                  {{ col.label }}
+                  <span v-if="sortKey === col.key" class="text-accent">
+                    {{ sortDir === "asc" ? "↑" : "↓" }}
                   </span>
-                  <button
-                    class="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100"
-                    title="Edit title inline"
-                    @click.stop="startEditing(deal, col, true)"
+                </th>
+                <th class="sticky right-0 w-px bg-canvas px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- The blank row: a deal starts by being typed, not by opening a form. -->
+              <tr class="border-b border-hairline bg-canvas/40 align-top">
+                <td
+                  v-for="col in visibleColumns"
+                  :key="col.key"
+                  class="min-w-32 px-2 py-1.5"
+                >
+                  <select
+                    v-if="col.editable && col.type === 'select'"
+                    v-model="newDeal[col.key]"
+                    class="w-full rounded-[8px] border border-hairline bg-paper px-2 py-1.5 text-sm text-carbon focus:border-carbon/30 focus:ring-0"
                   >
-                    <FeatherIcon name="edit-2" class="h-3 w-3" />
-                  </button>
-                </div>
-              </template>
-              <span
-                v-else-if="col.key === 'stage'"
-                class="whitespace-nowrap rounded-full px-2 py-0.5 text-xs"
-                :class="stageClass(deal.stage)"
+                    <option
+                      v-for="option in optionsFor(col.key)"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                  <VndInput
+                    v-else-if="col.editable && col.type === 'number'"
+                    v-model="newDeal[col.key]"
+                    :placeholder="col.label"
+                    class="aura-num w-full rounded-[8px] border border-hairline bg-paper px-2 py-1.5 text-right text-sm placeholder-faint focus:border-carbon/30 focus:ring-0"
+                    @enter="createFromTable"
+                  />
+                  <input
+                    v-else-if="col.editable"
+                    v-model="newDeal[col.key]"
+                    type="text"
+                    :placeholder="col.key === 'tags' ? 'tag, tag' : col.label"
+                    class="w-full rounded-[8px] border border-hairline bg-paper px-2 py-1.5 text-sm text-carbon placeholder-faint focus:border-carbon/30 focus:ring-0"
+                    @keydown.enter="createFromTable"
+                  />
+                  <span v-else class="text-faint">-</span>
+                </td>
+                <td class="sticky right-0 whitespace-nowrap bg-canvas px-2 py-1.5">
+                  <Button
+                    variant="solid"
+                    :loading="createTableRow.loading"
+                    @click="createFromTable"
+                  >
+                    Add
+                  </Button>
+                </td>
+              </tr>
+              <tr
+                v-for="deal in sortedDeals"
+                :key="deal.name"
+                class="group border-b border-hairline last:border-b-0 hover:bg-canvas"
               >
-                {{ deal.stage }}
-              </span>
-              <template v-else-if="col.key === 'tags'">
-                <span
-                  v-for="tag in tagsFor(deal)"
-                  :key="tag"
-                  class="mr-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+                <td
+                  v-for="col in visibleColumns"
+                  :key="col.key"
+                  class="px-3 py-2.5 align-middle text-carbon"
+                  :class="[
+                    col.key === 'title' ? 'min-w-56' : 'min-w-32',
+                    col.align === 'right' ? 'text-right' : '',
+                    col.editable && col.key !== 'title'
+                      ? 'cursor-text hover:bg-accent-soft'
+                      : '',
+                  ]"
+                  @click="startEditing(deal, col)"
                 >
-                  {{ tag }}
-                </span>
-              </template>
-              <template v-else-if="col.key === 'quote_status'">
-                {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
-                <span
-                  v-if="silentDeals[deal.name]"
-                  class="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-                >
-                  <FeatherIcon name="clock" class="h-3 w-3" />
-                  Silent
-                </span>
-              </template>
-              <span v-else-if="col.key === 'company'">
-                {{ companyNames[deal.company] || deal.company }}
-              </span>
-              <span v-else-if="col.key === 'deal_owner'">
-                {{ ownerLabel(deal.deal_owner) }}
-              </span>
-              <span v-else-if="col.key === 'estimated_budget'" class="tabular-nums">
-                {{ formatBudget(deal.estimated_budget) }}
-              </span>
-              <span
-                v-else-if="col.key === 'modified'"
-                class="whitespace-nowrap tabular-nums text-gray-500"
-                :title="deal.modified?.slice(0, 16)"
-              >
-                {{ ago(deal.modified) }}
-              </span>
-              <span v-else>{{ deal[col.key] }}</span>
-            </td>
-            <td class="sticky right-0 bg-white px-3 py-2 group-hover:bg-gray-50"></td>
-          </tr>
-          <tr v-if="!sortedDeals.length">
-            <td
-              :colspan="visibleColumns.length + 1"
-              class="px-3 py-6 text-center text-gray-400"
-            >
-              {{
-                query || ownerFilter
-                  ? "No deals match your search."
-                  : "No deals yet - add one in the row above."
-              }}
-            </td>
-          </tr>
-        </tbody>
-        </table>
-      </div>
-      <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
-        <span>Click any cell to edit it in place - Enter saves, Esc cancels.</span>
-        <span v-if="tableBudgetTotal" class="tabular-nums">
-          {{ sortedDeals.length }} deals · {{ vnd(tableBudgetTotal) }} ₫
-        </span>
-      </div>
+                  <template v-if="isEditing(deal, col)">
+                    <select
+                      v-if="col.type === 'select'"
+                      v-model="editing.value"
+                      class="w-full rounded-[8px] border border-accent bg-paper px-2 py-1 text-sm text-carbon focus:ring-0"
+                      autofocus
+                      @click.stop
+                      @change="saveInline"
+                      @keydown.esc="cancelEditing"
+                    >
+                      <option
+                        v-for="option in optionsFor(col.key)"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <VndInput
+                      v-else-if="col.type === 'number'"
+                      v-model="editing.value"
+                      class="aura-num w-full rounded-[8px] border border-accent bg-paper px-2 py-1 text-right text-sm focus:ring-0"
+                      autofocus
+                      @click.stop
+                      @enter="$event.target.blur()"
+                      @esc="cancelEditing"
+                      @blur="saveInline"
+                    />
+                    <input
+                      v-else
+                      v-model="editing.value"
+                      type="text"
+                      class="w-full rounded-[8px] border border-accent bg-paper px-2 py-1 text-sm text-carbon focus:ring-0"
+                      autofocus
+                      @click.stop
+                      @change="saveInline"
+                      @keydown.enter.prevent="$event.target.blur()"
+                      @keydown.esc="cancelEditing"
+                    />
+                  </template>
+                  <template v-else-if="col.key === 'title'">
+                    <div class="group flex items-center gap-1.5">
+                      <button
+                        class="text-left font-medium text-carbon hover:text-accent"
+                        :title="deal.name"
+                        @click.stop="openEdit(deal)"
+                      >
+                        {{ deal.title }}
+                      </button>
+                      <span class="aura-num shrink-0 text-[10px] text-faint">
+                        {{ deal.name }}
+                      </span>
+                      <button
+                        class="shrink-0 rounded-[6px] p-0.5 text-faint opacity-0 transition-opacity hover:bg-canvas hover:text-carbon group-hover:opacity-100"
+                        title="Edit title inline"
+                        @click.stop="startEditing(deal, col, true)"
+                      >
+                        <FeatherIcon name="edit-2" class="h-3 w-3" />
+                      </button>
+                    </div>
+                  </template>
+                  <StatusPill
+                    v-else-if="col.key === 'stage'"
+                    :tone="stageTone(deal.stage)"
+                    :label="deal.stage"
+                  />
+                  <template v-else-if="col.key === 'tags'">
+                    <span
+                      v-for="tag in tagsFor(deal)"
+                      :key="tag"
+                      class="mr-1 inline-block rounded-pill border border-hairline bg-canvas px-2 py-0.5 text-[11px] text-muted"
+                    >
+                      {{ tag }}
+                    </span>
+                  </template>
+                  <template v-else-if="col.key === 'quote_status'">
+                    {{ deal.quote_status === "Not Sent" ? "" : deal.quote_status }}
+                    <StatusPill v-if="silentDeals[deal.name]" tone="warn" class="ml-1">
+                      <FeatherIcon name="clock" class="mr-1 h-3 w-3" />
+                      Silent
+                    </StatusPill>
+                  </template>
+                  <span v-else-if="col.key === 'company'">
+                    {{ companyNames[deal.company] || deal.company }}
+                  </span>
+                  <span v-else-if="col.key === 'deal_owner'" class="text-muted">
+                    {{ ownerLabel(deal.deal_owner) }}
+                  </span>
+                  <span v-else-if="col.key === 'estimated_budget'" class="aura-num">
+                    {{ formatBudget(deal.estimated_budget) }}
+                  </span>
+                  <span
+                    v-else-if="col.key === 'modified'"
+                    class="aura-num whitespace-nowrap text-muted"
+                    :title="deal.modified?.slice(0, 16)"
+                  >
+                    {{ ago(deal.modified) }}
+                  </span>
+                  <span v-else class="text-muted">{{ deal[col.key] }}</span>
+                </td>
+                <td
+                  class="sticky right-0 bg-paper px-3 py-2.5 group-hover:bg-canvas"
+                ></td>
+              </tr>
+              <tr v-if="!sortedDeals.length">
+                <td :colspan="visibleColumns.length + 1" class="px-3 py-2">
+                  <EmptyState
+                    :title="
+                      query || ownerFilter
+                        ? 'No deals match your search.'
+                        : 'No deals yet - add one in the row above.'
+                    "
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="border-t border-hairline px-4 py-2 text-xs text-faint">
+          Click any cell to edit it in place - Enter saves, Esc cancels.
+        </div>
+      </template>
     </div>
 
-    <ErrorMessage class="mt-2" :message="moveError || tableError" />
+    <ErrorMessage :message="moveError || tableError" />
 
     <DealFormDialog
       v-model="dialogOpen"
@@ -458,8 +485,13 @@
       v-model="jobOfferOpen"
       :options="{ title: `“${pendingJob?.title || ''}” is won` }"
     >
+      <template #body-title>
+        <h3 class="font-display text-base font-semibold tracking-tight text-carbon">
+          “{{ pendingJob?.title || "" }}” is won
+        </h3>
+      </template>
       <template #body-content>
-        <p class="text-sm text-gray-700">
+        <p class="text-sm text-muted">
           Create the job now? It carries the breakdown, packages and links
           across, so nothing is re-entered.
         </p>
@@ -494,14 +526,17 @@ import {
 import DealFormDialog from "../components/DealFormDialog.vue"
 import LostReasonDialog from "../components/LostReasonDialog.vue"
 import VndInput from "../components/VndInput.vue"
+import StatusPill from "../components/StatusPill.vue"
+import MoneyValue from "../components/MoneyValue.vue"
+import EmptyState from "../components/EmptyState.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd, vndShort } from "../utils/money"
 import { ago, daysSince } from "../utils/time"
-import { STAGES, stageClass } from "../utils/stages"
+import { STAGES } from "../utils/stages"
 import { currentUser } from "../utils/user"
 
 // The founder's weekly ritual: which deal has sat still for over a
-// week? Past this many days in one stage, the age badge turns amber.
+// week? Past this many days in one stage, the age badge turns ember.
 const STALE_DAYS = 7
 
 const deals = createListResource({
@@ -550,6 +585,8 @@ const silentDeals = computed(() => {
   for (const deal of silence.data?.deals || []) map[deal.name] = deal
   return map
 })
+
+const silentQuotes = computed(() => silence.data?.deals?.length || 0)
 
 // The link to hand a client, straight off the card (T6 walkthrough).
 const quoteLinkMap = createResource({
@@ -955,11 +992,24 @@ function formatBudget(value) {
   return value ? vnd(value) : ""
 }
 
+// Stage tone: the pipeline reads quiet until a stage asks for a human -
+// quote out (watch), negotiation (act), won (settled). Lost stays grey.
+const STAGE_TONES = {
+  Breakdown: "ink",
+  "Quote Sent": "warn",
+  Negotiation: "accent",
+  Won: "ok",
+}
+
+function stageTone(stage) {
+  return STAGE_TONES[stage] || "neutral"
+}
+
 // Tier badges: quiet for the daily bread, louder as it climbs.
-function tierClass(tier) {
-  if (tier === "Tier 3") return "bg-violet-50 font-medium text-violet-700"
-  if (tier === "Tier 2") return "bg-blue-50 text-blue-700"
-  return "bg-gray-100 text-gray-600"
+function tierTone(tier) {
+  if (tier === "Tier 3") return "ink"
+  if (tier === "Tier 2") return "accent"
+  return "neutral"
 }
 
 const dealsByStage = computed(() => {

@@ -6,34 +6,43 @@
   >
     <template #body-content>
       <div v-if="modelValue">
+        <!-- Gaps are the one thing that needs a human here, so they read
+             in the accent, both in this counter and in the document. -->
         <p
           v-if="gapCount"
-          class="mb-2 flex items-center gap-1.5 text-xs text-amber-700"
+          class="mb-3 flex items-center gap-1.5 rounded-[10px] border border-accent/30 bg-accent-soft px-3 py-2 text-xs text-accent-ink"
         >
-          <FeatherIcon name="alert-triangle" class="h-3.5 w-3.5" />
-          {{ gapCount }} gap{{ gapCount > 1 ? "s" : "" }} highlighted - fill
-          the record, or type over them here.
+          <FeatherIcon name="alert-triangle" class="h-3.5 w-3.5 shrink-0" />
+          <span>
+            {{ gapCount }} gap{{ gapCount > 1 ? "s" : "" }} highlighted - fill
+            the record, or type over them here.
+          </span>
         </p>
 
         <!-- Reading first, editing on request (founder, A5 round 5):
              the window opens as the document; Edit swaps in the same
-             rich editor everything else uses. -->
+             rich editor everything else uses. The reading view sits the
+             page on the canvas, the way it will come out of the printer. -->
         <div
           v-if="mode === 'view'"
-          class="aura-paper prose prose-sm max-h-[55vh] min-h-[16rem] max-w-none overflow-y-auto rounded border border-gray-200 px-6 py-4"
-          v-html="html"
-        ></div>
+          class="max-h-[55vh] min-h-[16rem] overflow-y-auto rounded-card border border-hairline bg-canvas p-3 sm:p-5"
+        >
+          <article
+            class="aura-paper prose prose-sm mx-auto max-w-[46rem] rounded-[10px] border border-hairline bg-paper px-8 py-9 shadow-card"
+            v-html="html"
+          ></article>
+        </div>
         <TextEditor
           v-else
           :content="html"
           :fixed-menu="true"
-          editor-class="aura-paper prose prose-sm min-h-[16rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b border border-t-0 border-gray-200 px-6 py-4 focus:outline-none"
+          editor-class="aura-paper prose prose-sm min-h-[16rem] max-h-[55vh] max-w-none overflow-y-auto rounded-b-[10px] border border-t-0 border-hairline bg-paper px-6 py-4 focus:outline-none"
           @change="(edited) => (html = edited)"
         />
       </div>
     </template>
     <template #actions>
-      <div class="flex flex-wrap items-center justify-end gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-3">
         <Button v-if="mode === 'view' && editable" @click="edit">
           {{ editInline ? "Edit" : "Edit template" }}
         </Button>
@@ -125,19 +134,23 @@ defineExpose({ currentHtml: () => html.value, edited: () => mode.value === "edit
 </script>
 
 <style>
+/* Screen only - the print window keeps its own contract stylesheet.
+   Hex values are the design tokens: accent #e85d3a, accent-soft #fdf0ec,
+   accent-ink #b8431f, canvas #fbfbfa, hairline #e8e8e7, muted #6b6b6b. */
 .aura-paper mark[data-gap] {
-  background-color: #fde68a;
-  color: #92400e;
-  padding: 0 2px;
-  border-radius: 2px;
+  background-color: #fdf0ec;
+  color: #b8431f;
+  padding: 0 3px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(232, 93, 58, 0.3);
 }
 .aura-paper span.mention {
-  font-family: ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 0.85em;
-  background: #eff6ff;
-  color: #1d4ed8;
-  padding: 0 3px;
-  border-radius: 3px;
+  background: #fdf0ec;
+  color: #b8431f;
+  padding: 0 4px;
+  border-radius: 4px;
 }
 </style>
 
@@ -150,7 +163,7 @@ defineExpose({ currentHtml: () => html.value, edited: () => mode.value === "edit
 }
 .aura-paper td,
 .aura-paper th {
-  border: 1px solid #d1d5db;
+  border: 1px solid #d8d8d6;
   padding: 0.35rem 0.6rem;
   vertical-align: top;
 }

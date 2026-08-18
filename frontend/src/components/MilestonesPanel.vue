@@ -1,15 +1,15 @@
 <template>
-  <div class="rounded-lg border bg-white p-3">
-    <div class="mb-2 flex flex-wrap items-center gap-2">
-      <h2 class="text-sm font-semibold text-gray-800">Payment milestones</h2>
-      <span
+  <div class="overflow-hidden rounded-card border border-hairline bg-paper shadow-card">
+    <div class="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
+      <h2 class="font-display text-sm font-semibold text-carbon">
+        Payment milestones
+      </h2>
+      <StatusPill
         v-if="overdueCount"
-        class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-800"
+        tone="accent"
+        :label="`${overdueCount} overdue`"
         :title="`Uncollected more than ${termsDays} days after falling due`"
-      >
-        <FeatherIcon name="alert-circle" class="h-3 w-3" />
-        {{ overdueCount }} overdue
-      </span>
+      />
       <span class="ml-auto text-xs" :class="planClass">
         {{ plannedPct }}% of the quote planned
       </span>
@@ -19,164 +19,173 @@
          on the row ("Not requested - chưa yêu cầu") and an auto layout
          gave the width to the amounts, clipping it mid-word. -->
     <div class="overflow-x-auto">
-    <table v-if="rows.length" class="w-full min-w-[40rem] table-fixed text-sm">
-      <thead class="text-left text-xs text-gray-600">
-        <tr>
-          <th class="w-1/6 py-1 font-medium">Milestone</th>
-          <th class="w-16 py-1 font-medium">% of quote</th>
-          <th class="w-1/6 py-1 font-medium">Trigger stage</th>
-          <th class="w-1/6 py-1 text-right font-medium">Amount (VND)</th>
-          <th class="py-1 font-medium">Collection</th>
-          <th class="w-28"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="(row, index) in rows"
-          :key="row.key"
-          class="border-t align-top"
-          :class="row.overdue ? 'bg-red-50' : ''"
-        >
-          <td class="py-1 pr-2">
-            <input
-              v-model="row.title"
-              class="w-full rounded border-gray-200 px-1 py-0.5 text-sm"
-              placeholder="Deposit"
-            />
-          </td>
-          <td class="py-1 pr-2">
-            <input
-              :value="row.pct"
-              type="number"
-              min="0"
-              step="5"
-              class="w-16 rounded border-gray-200 px-1 py-0.5 text-right text-sm tabular-nums"
-              @input="
-                ((row.pct = $event.target.valueAsNumber || 0),
-                rebalance(row))
-              "
-            />
-          </td>
-          <td class="py-1 pr-2">
-            <select
-              v-model="row.trigger_stage"
-              class="w-full rounded border-gray-200 py-0.5 pl-1 pr-6 text-sm"
-            >
-              <option v-for="stage in STAGES" :key="stage" :value="stage">
-                {{ stage }}
-              </option>
-            </select>
-          </td>
-          <td class="py-1 pr-2 text-right tabular-nums text-gray-800">
-            {{ vnd(row.amount) }}
-            <div v-if="row.overdue" class="whitespace-nowrap text-xs text-red-700">
-              {{ overdueLabel(row.days_overdue) }}
-            </div>
-            <div
-              v-else-if="row.due_on"
-              class="whitespace-nowrap text-xs text-gray-500"
-            >
-              due since {{ row.due_on.slice(0, 10) }}
-            </div>
-            <div v-else class="text-xs text-gray-400">not due yet</div>
-          </td>
-          <td class="py-1 pr-2">
-            <select
-              :value="row.status"
-              :disabled="!row.name"
-              class="w-full rounded border-gray-200 py-0.5 pl-1 pr-6 text-sm"
-              :class="row.status === PAID ? 'text-green-700' : ''"
-              @change="setStatus(row, $event.target.value)"
-            >
-              <option
-                v-for="option in COLLECTION_STATUSES"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.value }} - {{ option.vi }}
-              </option>
-            </select>
-            <div v-if="row.name" class="mt-0.5 text-xs text-gray-500">
-              {{ stampFor(row) }}
-            </div>
-          </td>
-          <td class="py-1 whitespace-nowrap text-right">
-            <button
-              v-if="row.name"
-              class="rounded border px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
-              title="Copy the invoice request for the accountant, ready to paste into Zalo"
-              @click="copyInvoiceRequest(row)"
-            >
-              Invoice request
-            </button>
-            <button
-              class="ml-1 rounded border p-1 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
-              title="Remove this milestone"
-              @click="rows.splice(index, 1)"
-            >
-              <FeatherIcon name="x" class="h-3 w-3" />
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    </div>
-    <p v-if="!rows.length" class="py-2 text-sm text-gray-400">
-      No payment milestones - this job has nothing chasing the client.
-    </p>
-    <p
-      v-if="plannedPct !== 100 && lockedPct"
-      class="mt-1 text-xs text-amber-700"
-    >
-      {{ lockedPct }}% of the plan is already invoiced or paid and cannot
-      rebalance itself - adjust the open rows to bring the total to 100%.
-    </p>
-
-    <div class="mt-3 flex flex-wrap items-center gap-2">
-      <Button @click="addRow">Add milestone</Button>
-      <Button
-        variant="solid"
-        :disabled="!dirty"
-        :loading="saver.loading"
-        @click="savePlan"
+      <table
+        v-if="rows.length"
+        class="w-full min-w-[46rem] table-fixed border-collapse text-sm"
       >
-        Save plan
-      </Button>
-      <span v-if="dirty" class="text-xs text-amber-700">
-        Unsaved changes - amounts refresh from the quote on save.
-      </span>
+        <thead>
+          <tr class="border-b border-hairline bg-canvas/60">
+            <th class="aura-eyebrow w-1/6 px-4 py-2 text-left font-medium">Milestone</th>
+            <th class="aura-eyebrow w-20 px-2 py-2 text-left font-medium">% of quote</th>
+            <th class="aura-eyebrow w-1/6 px-2 py-2 text-left font-medium">Trigger stage</th>
+            <th class="aura-eyebrow w-1/6 px-2 py-2 text-right font-medium">Amount (VND)</th>
+            <th class="aura-eyebrow px-2 py-2 text-left font-medium">Collection</th>
+            <th class="w-32 px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="(row, index) in rows"
+            :key="row.key"
+            class="border-b border-hairline align-top last:border-0"
+            :class="row.overdue ? 'bg-accent-soft' : ''"
+          >
+            <td class="px-4 py-2">
+              <input
+                v-model="row.title"
+                class="w-full rounded-[8px] border border-hairline bg-paper px-2 py-1 text-sm text-carbon placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent/30"
+                placeholder="Deposit"
+              />
+            </td>
+            <td class="px-2 py-2">
+              <input
+                :value="row.pct"
+                type="number"
+                min="0"
+                step="5"
+                class="aura-num w-16 rounded-[8px] border border-hairline bg-paper px-2 py-1 text-right text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30"
+                @input="
+                  ((row.pct = $event.target.valueAsNumber || 0),
+                  rebalance(row))
+                "
+              />
+            </td>
+            <td class="px-2 py-2">
+              <select
+                v-model="row.trigger_stage"
+                class="w-full rounded-[8px] border border-hairline bg-paper py-1 pl-2 pr-7 text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30"
+              >
+                <option v-for="stage in STAGES" :key="stage" :value="stage">
+                  {{ stage }}
+                </option>
+              </select>
+            </td>
+            <td class="px-2 py-2 text-right">
+              <MoneyValue :amount="row.amount" />
+              <div v-if="row.overdue" class="whitespace-nowrap text-xs text-accent">
+                {{ overdueLabel(row.days_overdue) }}
+              </div>
+              <div
+                v-else-if="row.due_on"
+                class="whitespace-nowrap text-xs text-muted"
+              >
+                due since {{ row.due_on.slice(0, 10) }}
+              </div>
+              <div v-else class="text-xs text-faint">not due yet</div>
+            </td>
+            <td class="px-2 py-2">
+              <!-- Sans, not mono: the second half of every option is
+                   Vietnamese and the ledger face has no diacritics. -->
+              <select
+                :value="row.status"
+                :disabled="!row.name"
+                class="w-full rounded-[8px] border border-hairline bg-paper py-1 pl-2 pr-7 font-sans text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:text-faint"
+                :class="row.status === PAID ? 'text-ok' : 'text-carbon'"
+                @change="setStatus(row, $event.target.value)"
+              >
+                <option
+                  v-for="option in COLLECTION_STATUSES"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.value }} - {{ option.vi }}
+                </option>
+              </select>
+              <div v-if="row.name" class="aura-num mt-1 text-xs text-faint">
+                {{ stampFor(row) }}
+              </div>
+            </td>
+            <td class="whitespace-nowrap px-4 py-2 text-right">
+              <button
+                v-if="row.name"
+                class="rounded-[8px] border border-hairline px-2 py-1 text-xs text-muted transition-colors hover:border-accent/40 hover:text-accent-ink"
+                title="Copy the invoice request for the accountant, ready to paste into Zalo"
+                @click="copyInvoiceRequest(row)"
+              >
+                Invoice request
+              </button>
+              <button
+                class="ml-1 rounded-[8px] border border-hairline p-1 text-faint transition-colors hover:border-accent/40 hover:text-accent"
+                title="Remove this milestone"
+                @click="rows.splice(index, 1)"
+              >
+                <FeatherIcon name="x" class="h-3 w-3" />
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- Beside the buttons, not at the foot of the panel: with the
-         invoice request open, a message down there is off the bottom of
-         what the founder is looking at. -->
-    <ErrorMessage class="mt-2" :message="error" />
+    <EmptyState
+      v-if="!rows.length"
+      title="No payment milestones."
+      detail="This job has nothing chasing the client."
+    />
 
-    <!-- The invoice request: copied by the button above, shown here so
-         the founder can read what they are about to paste. -->
-    <div v-if="invoiceText" class="mt-3 rounded-md border bg-gray-50 p-3">
-      <div class="mb-1 flex items-center gap-2">
-        <span class="text-xs font-semibold text-gray-700">
-          {{ copied ? "Copied - paste into Zalo" : "Invoice request for the accountant" }}
-        </span>
-        <button
-          class="ml-auto rounded border bg-white px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
-          @click="copyInvoiceText"
-        >
-          {{ copied ? "Copy again" : "Copy" }}
-        </button>
-        <button
-          class="rounded border bg-white px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
-          @click="invoiceText = ''"
-        >
-          Close
-        </button>
-      </div>
-      <pre class="whitespace-pre-wrap font-sans text-sm text-gray-800">{{ invoiceText }}</pre>
-      <p class="mt-1 text-xs text-gray-500">
-        Copying does not change the milestone - mark it
-        <em>Requested</em> once you have actually sent it.
+    <div class="space-y-2 border-t border-hairline px-4 py-3">
+      <p v-if="plannedPct !== 100 && lockedPct" class="text-xs text-warn">
+        {{ lockedPct }}% of the plan is already invoiced or paid and cannot
+        rebalance itself - adjust the open rows to bring the total to 100%.
       </p>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <Button @click="addRow">Add milestone</Button>
+        <Button
+          variant="solid"
+          :disabled="!dirty"
+          :loading="saver.loading"
+          @click="savePlan"
+        >
+          Save plan
+        </Button>
+        <span v-if="dirty" class="text-xs text-warn">
+          Unsaved changes - amounts refresh from the quote on save.
+        </span>
+      </div>
+
+      <!-- Beside the buttons, not at the foot of the panel: with the
+           invoice request open, a message down there is off the bottom of
+           what the founder is looking at. -->
+      <ErrorMessage :message="error" />
+
+      <!-- The invoice request: copied by the button above, shown here so
+           the founder can read what they are about to paste. -->
+      <div v-if="invoiceText" class="rounded-card border border-hairline bg-canvas p-3">
+        <div class="mb-2 flex items-center gap-2">
+          <span class="aura-eyebrow">
+            {{ copied ? "Copied - paste into Zalo" : "Invoice request for the accountant" }}
+          </span>
+          <button
+            class="ml-auto rounded-[8px] border border-hairline bg-paper px-2 py-0.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-accent-ink"
+            @click="copyInvoiceText"
+          >
+            {{ copied ? "Copy again" : "Copy" }}
+          </button>
+          <button
+            class="rounded-[8px] border border-hairline bg-paper px-2 py-0.5 text-xs text-faint transition-colors hover:text-carbon"
+            @click="invoiceText = ''"
+          >
+            Close
+          </button>
+        </div>
+        <!-- Sans: the request is Vietnamese prose, not a ledger column. -->
+        <pre class="whitespace-pre-wrap font-sans text-sm text-carbon">{{ invoiceText }}</pre>
+        <p class="mt-2 text-xs text-faint">
+          Copying does not change the milestone - mark it
+          <em>Requested</em> once you have actually sent it.
+        </p>
+      </div>
     </div>
   </div>
 </template>
@@ -184,8 +193,10 @@
 <script setup>
 import { ref, computed, watch } from "vue"
 import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
+import StatusPill from "./StatusPill.vue"
+import MoneyValue from "./MoneyValue.vue"
+import EmptyState from "./EmptyState.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd } from "../utils/money"
 import { STAGES } from "../data/jobStages"
 import { COLLECTION_STATUSES, PAID, overdueLabel } from "../data/milestones"
 
@@ -231,8 +242,8 @@ const plannedPct = computed(() =>
 )
 
 const planClass = computed(() => {
-  if (plannedPct.value > 100) return "text-red-700"
-  return plannedPct.value === 100 ? "text-gray-500" : "text-amber-700"
+  if (plannedPct.value > 100) return "text-accent"
+  return plannedPct.value === 100 ? "text-faint" : "text-warn"
 })
 
 const overdueCount = computed(

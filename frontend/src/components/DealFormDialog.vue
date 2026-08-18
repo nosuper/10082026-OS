@@ -4,8 +4,18 @@
     @update:modelValue="$emit('update:modelValue', $event)"
     :options="{ title: name ? `Edit Deal · ${name}` : 'New Deal', size: 'xl' }"
   >
+    <template #body-title>
+      <div class="min-w-0">
+        <h3 class="font-display text-base font-semibold tracking-tight text-carbon">
+          {{ name ? `Edit Deal · ${name}` : "New Deal" }}
+        </h3>
+        <p class="mt-0.5 text-xs text-muted">
+          The deal record. Pricing lives in Breakdown &amp; Quote.
+        </p>
+      </div>
+    </template>
     <template #body-content>
-      <div v-if="loading" class="py-8 text-center text-sm text-gray-500">
+      <div v-if="loading" class="py-8 text-center text-sm text-muted">
         Loading…
       </div>
       <div v-else class="space-y-4">
@@ -48,13 +58,13 @@
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <div class="mb-1.5 text-xs text-gray-600">
+            <div class="mb-1.5 text-xs text-muted">
               Est. Client Budget (VND)
             </div>
             <VndInput
               v-model="form.estimated_budget"
               placeholder="0"
-              class="w-full rounded border-gray-300 py-1.5 text-right text-sm tabular-nums placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+              class="aura-num w-full rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-right text-sm placeholder-faint focus:border-carbon/30 focus:ring-0"
             />
           </div>
           <FormControl
@@ -81,40 +91,39 @@
               href="/aura/sop/deals"
               target="_blank"
               rel="noopener noreferrer"
-              class="mt-1 inline-block text-xs text-blue-600 underline"
+              class="mt-1 inline-block text-xs text-accent-ink underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
             >
               SOP: cách đánh giá &amp; phân loại deal
             </a>
           </div>
           <div>
-            <div class="mb-1.5 text-xs text-gray-600">Tier (auto)</div>
+            <div class="mb-1.5 text-xs text-muted">Tier (auto)</div>
             <div class="flex flex-wrap items-center gap-2 py-1.5">
-              <span
-                v-if="displayTier"
-                class="rounded-full px-2 py-0.5 text-xs"
-                :class="tierChipClass"
-              >
-                {{ displayTier }} - {{ TIER_HINTS[displayTier] }}
-              </span>
-              <span v-else class="text-xs text-gray-400">
+              <!-- Pill carries the tier, the hint stays prose: Vietnamese
+                   never goes into the uppercase, letter-spaced face. -->
+              <template v-if="displayTier">
+                <StatusPill :tone="tierTone(displayTier)" :label="displayTier" />
+                <span class="text-xs text-muted">{{ TIER_HINTS[displayTier] }}</span>
+              </template>
+              <span v-else class="text-xs text-faint">
                 follows positioning &amp; budget
               </span>
-              <span v-if="form.tier_is_manual" class="text-xs text-amber-700">
+              <span v-if="form.tier_is_manual" class="text-xs text-warn">
                 pinned by hand - clear Tier in the table to go back to auto
               </span>
             </div>
           </div>
           <div>
-            <div class="mb-1.5 text-xs text-gray-600">Tags</div>
+            <div class="mb-1.5 text-xs text-muted">Tags</div>
             <div class="flex flex-wrap items-center gap-1.5">
               <span
                 v-for="(row, i) in form.deal_tags || []"
                 :key="row.deal_tag"
-                class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+                class="inline-flex items-center gap-1 rounded-pill border border-hairline bg-canvas px-2 py-0.5 text-[11px] text-muted"
               >
                 {{ row.deal_tag }}
                 <button
-                  class="text-gray-400 hover:text-gray-700"
+                  class="text-faint hover:text-carbon"
                   title="Remove tag"
                   @click="form.deal_tags.splice(i, 1)"
                 >
@@ -127,7 +136,7 @@
                 v-model="tagInput"
                 list="deal-tag-options"
                 placeholder="Add tag"
-                class="w-full rounded border-gray-300 py-1.5 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+                class="w-full rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-sm text-carbon placeholder-faint focus:border-carbon/30 focus:ring-0"
                 @keydown.enter.prevent="addTag"
               />
               <datalist id="deal-tag-options">
@@ -144,8 +153,8 @@
         </div>
 
         <!-- Links -->
-        <div class="border-t pt-3">
-          <div class="mb-2 text-xs font-medium text-gray-700">Links</div>
+        <div class="border-t border-hairline pt-3">
+          <div class="aura-eyebrow mb-2">Links</div>
           <div
             v-for="(row, i) in form.deal_links || []"
             :key="`${row.url}-${i}`"
@@ -155,13 +164,13 @@
               :href="row.url"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-blue-600 underline"
+              class="text-accent-ink underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
             >
               {{ row.label }}
             </a>
-            <span class="truncate text-xs text-gray-400">{{ row.url }}</span>
+            <span class="truncate text-xs text-faint">{{ row.url }}</span>
             <button
-              class="ml-auto text-gray-400 hover:text-gray-700"
+              class="ml-auto text-faint hover:text-carbon"
               title="Remove link"
               @click="form.deal_links.splice(i, 1)"
             >
@@ -172,12 +181,12 @@
             <input
               v-model="linkLabel"
               placeholder="Label (e.g. Drive folder)"
-              class="w-2/5 rounded border-gray-300 py-1.5 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+              class="w-2/5 rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-sm text-carbon placeholder-faint focus:border-carbon/30 focus:ring-0"
             />
             <input
               v-model="linkUrl"
               placeholder="https://…"
-              class="w-3/5 rounded border-gray-300 py-1.5 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+              class="w-3/5 rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-sm text-carbon placeholder-faint focus:border-carbon/30 focus:ring-0"
               @keydown.enter.prevent="addLink"
             />
             <Button @click="addLink">Add</Button>
@@ -186,8 +195,8 @@
         </div>
 
         <!-- Attachments (existing deals only - files attach to a saved doc) -->
-        <div v-if="name" class="border-t pt-3">
-          <div class="mb-2 flex items-center text-xs font-medium text-gray-700">
+        <div v-if="name" class="border-t border-hairline pt-3">
+          <div class="aura-eyebrow mb-2 flex items-center">
             Attachments
             <FileUploader
               class="ml-auto"
@@ -210,41 +219,41 @@
               :href="file.file_url"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-blue-600 underline"
+              class="text-accent-ink underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
             >
               {{ file.file_name || file.file_url }}
             </a>
-            <span class="text-xs text-gray-400">
+            <span class="aura-num text-xs text-faint">
               {{ formatSize(file.file_size) }}
             </span>
           </div>
           <div
             v-if="!(attachments.data || []).length"
-            class="text-xs text-gray-400"
+            class="text-xs text-faint"
           >
             No files yet.
           </div>
         </div>
 
         <!-- Comments (existing deals only) -->
-        <div v-if="name" class="border-t pt-3">
-          <div class="mb-2 text-xs font-medium text-gray-700">Comments</div>
+        <div v-if="name" class="border-t border-hairline pt-3">
+          <div class="aura-eyebrow mb-2">Comments</div>
           <div class="space-y-2">
             <div
               v-for="comment in comments.data || []"
               :key="comment.name"
-              class="rounded-md bg-gray-50 px-3 py-2"
+              class="rounded-[10px] border border-hairline bg-canvas px-3 py-2"
             >
-              <div class="flex gap-2 text-xs text-gray-500">
-                <span class="font-medium text-gray-700">
+              <div class="flex gap-2 text-xs text-muted">
+                <span class="font-medium text-carbon">
                   {{ comment.comment_by || comment.comment_email }}
                 </span>
-                <span class="tabular-nums">
+                <span class="aura-num text-faint">
                   {{ comment.creation?.slice(0, 16) }}
                 </span>
               </div>
               <!-- Comment content is server-sanitized HTML; render as text -->
-              <div class="mt-0.5 whitespace-pre-line text-sm text-gray-800">
+              <div class="mt-0.5 whitespace-pre-line text-sm text-carbon">
                 {{ stripHtml(comment.content) }}
               </div>
             </div>
@@ -253,7 +262,7 @@
             <input
               v-model="commentInput"
               placeholder="Write a comment"
-              class="w-full rounded border-gray-300 py-1.5 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+              class="w-full rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-sm text-carbon placeholder-faint focus:border-carbon/30 focus:ring-0"
               @keydown.enter.prevent="postComment"
             />
             <Button
@@ -268,22 +277,22 @@
         </div>
 
         <div v-if="stageHistory.length">
-          <div class="mb-2 border-t pt-3 text-xs font-medium text-gray-700">
+          <div class="aura-eyebrow mb-2 border-t border-hairline pt-3">
             Stage History
           </div>
           <div class="space-y-1">
             <div
               v-for="entry in stageHistory"
               :key="entry.name"
-              class="flex gap-2 text-xs text-gray-600"
+              class="flex gap-2 text-xs text-muted"
             >
-              <span class="w-36 shrink-0 tabular-nums">
+              <span class="aura-num w-36 shrink-0 text-faint">
                 {{ entry.changed_on?.slice(0, 16) }}
               </span>
               <span>
                 {{ entry.from_stage ? `${entry.from_stage} → ` : "" }}
-                <span class="font-medium text-gray-800">{{ entry.to_stage }}</span>
-                <span class="text-gray-400"> - {{ entry.changed_by }}</span>
+                <span class="font-medium text-carbon">{{ entry.to_stage }}</span>
+                <span class="text-faint"> - {{ entry.changed_by }}</span>
               </span>
             </div>
           </div>
@@ -324,6 +333,7 @@ import {
 } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import VndInput from "./VndInput.vue"
+import StatusPill from "./StatusPill.vue"
 
 const props = defineProps({
   modelValue: Boolean,
@@ -407,12 +417,13 @@ const displayTier = computed(() =>
   form.value.tier_is_manual ? form.value.tier : previewedTier.value
 )
 
-// Same palette as the board chips (DealsPage.tierClass).
-const tierChipClass = computed(() => {
-  if (displayTier.value === "Tier 3") return "bg-violet-50 font-medium text-violet-700"
-  if (displayTier.value === "Tier 2") return "bg-blue-50 text-blue-700"
-  return "bg-gray-100 text-gray-600"
-})
+// Same tones as the board chips (DealsPage.tierTone): quiet for the
+// daily bread, louder as it climbs.
+function tierTone(tier) {
+  if (tier === "Tier 3") return "ink"
+  if (tier === "Tier 2") return "accent"
+  return "neutral"
+}
 
 const POSITIONING_OPTIONS = computed(() => [
   { label: "", value: "" },

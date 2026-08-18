@@ -13,7 +13,7 @@ const props = defineProps({
   short: { type: Boolean, default: false },
   size: { type: String, default: "md" },
   tone: { type: String, default: "ink" },
-  placeholder: { type: String, default: "—" },
+  placeholder: { type: String, default: "-" },
 })
 
 const SIZES = {

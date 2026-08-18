@@ -1,10 +1,10 @@
 <template>
-  <div class="space-y-4">
+  <div class="space-y-3">
     <!-- Advances as a history, floats and settlement -->
-    <div class="rounded-lg border bg-white p-3">
-      <div class="mb-2 flex flex-wrap items-baseline gap-2">
-        <h2 class="text-sm font-semibold text-gray-800">Cash advanced</h2>
-        <span class="text-xs text-gray-500">
+    <div class="overflow-hidden rounded-card border border-hairline bg-paper shadow-card">
+      <div class="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
+        <h2 class="font-display text-sm font-semibold text-carbon">Cash advanced</h2>
+        <span class="text-xs text-faint">
           {{ vnd(money.data?.spent_total || 0) }} spent of
           {{ vnd(money.data?.quoted_total || 0) }} quoted ·
           {{ vnd(money.data?.advanced_total || 0) }} advanced
@@ -22,104 +22,117 @@
            sum (founder, A4 round 3). The per-holder float below stays:
            settlement closes a person's float, not a single line. -->
       <div class="overflow-x-auto">
-      <table v-if="advanceRows.length" class="w-full min-w-[28rem] text-sm">
-        <thead class="text-left text-xs text-gray-600">
-          <tr>
-            <th class="py-1 font-medium">Date</th>
-            <th class="py-1 font-medium">To</th>
-            <th class="py-1 text-right font-medium">Amount</th>
-            <th class="py-1 pl-3 font-medium">Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in advanceRows" :key="row.name" class="border-t">
-            <td class="whitespace-nowrap py-1 pr-2 tabular-nums text-gray-600">
-              {{ row.transferred_on }}
-            </td>
-            <td class="py-1 pr-2 text-gray-900">{{ row.recipient }}</td>
-            <td class="py-1 text-right tabular-nums">{{ vnd(row.amount) }}</td>
-            <td class="py-1 pl-3 text-gray-500">{{ row.note }}</td>
-          </tr>
-        </tbody>
-      </table>
+        <table
+          v-if="advanceRows.length"
+          class="w-full min-w-[28rem] border-collapse text-sm"
+        >
+          <thead>
+            <tr class="border-b border-hairline bg-canvas/60">
+              <th class="aura-eyebrow px-4 py-2 text-left font-medium">Date</th>
+              <th class="aura-eyebrow px-2 py-2 text-left font-medium">To</th>
+              <th class="aura-eyebrow px-2 py-2 text-right font-medium">Amount</th>
+              <th class="aura-eyebrow px-4 py-2 text-left font-medium">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in advanceRows"
+              :key="row.name"
+              class="border-b border-hairline last:border-0"
+            >
+              <td class="aura-num whitespace-nowrap px-4 py-2 text-xs text-muted">
+                {{ row.transferred_on }}
+              </td>
+              <td class="px-2 py-2 text-carbon">{{ row.recipient }}</td>
+              <td class="px-2 py-2 text-right"><MoneyValue :amount="row.amount" /></td>
+              <td class="px-4 py-2 text-muted">{{ row.note }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <p v-if="!advanceRows.length" class="py-2 text-sm text-gray-400">
-        No cash advanced on this job yet.
-      </p>
+      <EmptyState v-if="!advanceRows.length" title="No cash advanced on this job yet." />
 
-      <h3
-        v-if="floats.length"
-        class="mt-3 border-t pt-3 text-xs font-semibold uppercase text-gray-500"
-      >
-        Currently holding
-      </h3>
-      <div v-if="floats.length" class="overflow-x-auto">
-      <table class="w-full min-w-[32rem] text-sm">
-        <thead class="text-left text-xs text-gray-600">
-          <tr>
-            <th class="py-1 font-medium">Holding</th>
-            <th class="py-1 text-right font-medium">Advanced</th>
-            <th class="py-1 text-right font-medium">Spent</th>
-            <th class="py-1 text-right font-medium">Float</th>
-            <th class="py-1 pl-3 font-medium">Settle</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="held in floats" :key="held.holder" class="border-t">
-            <td class="py-1.5 pr-2 text-gray-900">{{ held.holder }}</td>
-            <td class="py-1.5 pr-2 text-right tabular-nums text-gray-600">
-              {{ vnd(held.advanced) }}
-            </td>
-            <td class="py-1.5 pr-2 text-right tabular-nums text-gray-600">
-              {{ vnd(held.spent) }}
-            </td>
-            <td class="py-1.5 pr-2 text-right font-medium tabular-nums">
-              {{ vnd(Math.abs(held.amount)) }}
-            </td>
-            <td class="py-1.5 pl-3">
-              <span v-if="held.direction === EVEN" class="text-xs text-gray-400">
-                Settled
-              </span>
-              <template v-else-if="confirming === held.holder">
-                <span class="text-xs text-gray-700">{{ settleWording(held) }}?</span>
-                <Button
-                  class="ml-1"
-                  variant="solid"
-                  :loading="settle.loading"
-                  @click="doSettle(held)"
-                >
-                  Confirm
-                </Button>
-                <Button class="ml-1" @click="confirming = null">Cancel</Button>
-              </template>
-              <template v-else>
-                <span class="text-xs text-gray-700">{{ settleWording(held) }}</span>
-                <Button
-                  v-if="money.data?.may_settle"
-                  class="ml-2"
-                  @click="confirming = held.holder"
-                >
-                  Settle
-                </Button>
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      </div>
-      <p v-if="settled" class="mt-1 text-xs text-blue-700">{{ settled }}</p>
+      <template v-if="floats.length">
+        <div class="border-t border-hairline px-4 pb-1 pt-3">
+          <span class="aura-eyebrow">Currently holding</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[34rem] border-collapse text-sm">
+            <thead>
+              <tr class="border-b border-hairline">
+                <th class="aura-eyebrow px-4 py-2 text-left font-medium">Holding</th>
+                <th class="aura-eyebrow px-2 py-2 text-right font-medium">Advanced</th>
+                <th class="aura-eyebrow px-2 py-2 text-right font-medium">Spent</th>
+                <th class="aura-eyebrow px-2 py-2 text-right font-medium">Float</th>
+                <th class="aura-eyebrow px-4 py-2 text-left font-medium">Settle</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="held in floats"
+                :key="held.holder"
+                class="border-b border-hairline last:border-0"
+              >
+                <td class="px-4 py-2 text-carbon">{{ held.holder }}</td>
+                <td class="px-2 py-2 text-right">
+                  <MoneyValue :amount="held.advanced" tone="muted" />
+                </td>
+                <td class="px-2 py-2 text-right">
+                  <MoneyValue :amount="held.spent" tone="muted" />
+                </td>
+                <td class="px-2 py-2 text-right">
+                  <span class="aura-num text-sm font-medium text-carbon">
+                    {{ vnd(Math.abs(held.amount)) }}
+                  </span>
+                </td>
+                <td class="px-4 py-2">
+                  <span v-if="held.direction === EVEN" class="text-xs text-faint">
+                    Settled
+                  </span>
+                  <template v-else-if="confirming === held.holder">
+                    <span class="text-xs text-carbon">{{ settleWording(held) }}?</span>
+                    <Button
+                      class="ml-1"
+                      variant="solid"
+                      :loading="settle.loading"
+                      @click="doSettle(held)"
+                    >
+                      Confirm
+                    </Button>
+                    <Button class="ml-1" @click="confirming = null">Cancel</Button>
+                  </template>
+                  <template v-else>
+                    <span class="text-xs text-muted">{{ settleWording(held) }}</span>
+                    <Button
+                      v-if="money.data?.may_settle"
+                      class="ml-2"
+                      @click="confirming = held.holder"
+                    >
+                      Settle
+                    </Button>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <p v-if="settled" class="border-t border-hairline px-4 py-2 text-xs text-ok">
+        {{ settled }}
+      </p>
 
       <!-- Recording an advance is the founder's move; the form stays
            out of sight until asked for (founder, A4 round 4: too much
            on this page). -->
       <div
         v-if="money.data?.may_advance && showAdvanceForm"
-        class="mt-3 grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center"
+        class="grid gap-2 border-t border-hairline bg-canvas/60 px-4 py-3 sm:flex sm:flex-wrap sm:items-center"
       >
-        <span class="text-xs font-medium text-gray-700">Advance</span>
+        <span class="aura-eyebrow">Advance</span>
         <select
           v-model="advanceForm.recipient"
-          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
+          class="w-full rounded-[10px] border border-hairline bg-paper py-2 pl-2 pr-8 text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-auto sm:py-1.5"
         >
           <option value="">Who receives it…</option>
           <option v-for="user in users.data || []" :key="user.name" :value="user.name">
@@ -129,12 +142,12 @@
         <VndInput
           v-model="advanceForm.amount"
           placeholder="Amount"
-          class="w-full rounded border-gray-200 px-3 py-2.5 text-right text-xl tabular-nums sm:w-36 sm:px-2 sm:py-1 sm:text-sm"
+          class="aura-num w-full rounded-[10px] border border-hairline bg-paper px-3 py-2.5 text-right text-xl text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-36 sm:px-2 sm:py-1.5 sm:text-sm"
         />
         <input
           v-model="advanceForm.note"
           placeholder="Note (optional)"
-          class="w-full min-w-0 rounded border-gray-200 px-2 py-2 text-sm sm:flex-1 sm:py-1"
+          class="w-full min-w-0 rounded-[10px] border border-hairline bg-paper px-2.5 py-2 text-sm text-carbon placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent/30 sm:flex-1 sm:py-1.5"
         />
         <Button
           class="w-full sm:w-auto"
@@ -149,10 +162,10 @@
     </div>
 
     <!-- The ledger, plus the full-control entry form -->
-    <div class="rounded-lg border bg-white p-3">
-      <div class="mb-2 flex flex-wrap items-baseline gap-2">
-        <h2 class="text-sm font-semibold text-gray-800">Expenses</h2>
-        <span v-if="expenses.length" class="text-xs text-gray-500">
+    <div class="overflow-hidden rounded-card border border-hairline bg-paper shadow-card">
+      <div class="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
+        <h2 class="font-display text-sm font-semibold text-carbon">Expenses</h2>
+        <span v-if="expenses.length" class="text-xs text-faint">
           {{ expenses.length }} · {{ vnd(money.data?.spent_total || 0) }}
         </span>
         <Button
@@ -165,53 +178,58 @@
       </div>
 
       <div class="overflow-x-auto">
-      <table v-if="expenses.length" class="w-full min-w-[32rem] text-sm">
-        <thead class="text-left text-xs text-gray-600">
-          <tr>
-            <th class="py-1 font-medium">Date</th>
-            <th class="py-1 font-medium">Category</th>
-            <th class="py-1 font-medium">What</th>
-            <th class="py-1 font-medium">Paid by</th>
-            <th class="py-1 text-right font-medium">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in expenses" :key="row.name" class="border-t">
-            <td class="py-1 pr-2 whitespace-nowrap tabular-nums text-gray-600">
-              {{ row.spent_on }}
-            </td>
-            <td class="py-1 pr-2 text-gray-800">
-              {{ row.category || "-" }}
-            </td>
-            <td class="py-1 pr-2 text-gray-700">
-              {{ row.description }}
-              <a
-                v-if="row.photo"
-                :href="row.photo"
-                target="_blank"
-                rel="noopener"
-                class="inline-flex items-center gap-1 text-blue-700 hover:underline"
-              >
-                <FeatherIcon name="paperclip" class="h-3 w-3" />
-                receipt
-              </a>
-            </td>
-            <td class="py-1 pr-2 whitespace-nowrap text-gray-500">
-              {{ row.paid_by }}
-              <span
-                v-if="row.paid_from === FROM_COMPANY"
-                class="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600"
-                title="Paid by the company directly - settles no float"
-              >
-                company
-              </span>
-            </td>
-            <td class="py-1 text-right tabular-nums">{{ vnd(row.amount) }}</td>
-          </tr>
-        </tbody>
-      </table>
+        <table
+          v-if="expenses.length"
+          class="w-full min-w-[34rem] border-collapse text-sm"
+        >
+          <thead>
+            <tr class="border-b border-hairline bg-canvas/60">
+              <th class="aura-eyebrow px-4 py-2 text-left font-medium">Date</th>
+              <th class="aura-eyebrow px-2 py-2 text-left font-medium">Category</th>
+              <th class="aura-eyebrow px-2 py-2 text-left font-medium">What</th>
+              <th class="aura-eyebrow px-2 py-2 text-left font-medium">Paid by</th>
+              <th class="aura-eyebrow px-4 py-2 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in expenses"
+              :key="row.name"
+              class="border-b border-hairline last:border-0"
+            >
+              <td class="aura-num whitespace-nowrap px-4 py-2 text-xs text-muted">
+                {{ row.spent_on }}
+              </td>
+              <td class="px-2 py-2 text-carbon">
+                {{ row.category || "-" }}
+              </td>
+              <td class="px-2 py-2 text-muted">
+                {{ row.description }}
+                <a
+                  v-if="row.photo"
+                  :href="row.photo"
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-1 text-accent-ink hover:underline"
+                >
+                  <FeatherIcon name="paperclip" class="h-3 w-3" />
+                  receipt
+                </a>
+              </td>
+              <td class="whitespace-nowrap px-2 py-2 text-muted">
+                {{ row.paid_by }}
+                <StatusPill
+                  v-if="row.paid_from === FROM_COMPANY"
+                  label="company"
+                  title="Paid by the company directly - settles no float"
+                />
+              </td>
+              <td class="px-4 py-2 text-right"><MoneyValue :amount="row.amount" /></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <p v-if="!expenses.length" class="py-2 text-sm text-gray-400">Nothing logged yet.</p>
+      <EmptyState v-if="!expenses.length" title="Nothing logged yet." />
 
       <!-- One form, two shapes: the inline desktop row becomes the
            big-thumb phone layout below `sm` on its own - no separate
@@ -219,16 +237,16 @@
            Hidden until asked for (round 4). -->
       <div
         v-if="showExpenseForm"
-        class="mt-3 grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center"
+        class="grid gap-2 border-t border-hairline bg-canvas/60 px-4 py-3 sm:flex sm:flex-wrap sm:items-center"
       >
         <VndInput
           v-model="expenseForm.amount"
           placeholder="Amount"
-          class="w-full rounded border-gray-200 px-3 py-2.5 text-right text-xl tabular-nums sm:w-32 sm:px-2 sm:py-1 sm:text-sm"
+          class="aura-num w-full rounded-[10px] border border-hairline bg-paper px-3 py-2.5 text-right text-xl text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-32 sm:px-2 sm:py-1.5 sm:text-sm"
         />
         <select
           v-model="expenseForm.category"
-          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
+          class="w-full rounded-[10px] border border-hairline bg-paper py-2 pl-2 pr-8 text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-auto sm:py-1.5"
         >
           <option value="">Uncategorised</option>
           <option
@@ -242,11 +260,11 @@
         <input
           v-model="expenseForm.description"
           placeholder="What was it for?"
-          class="w-full min-w-0 rounded border-gray-200 px-2 py-2 text-sm sm:flex-1 sm:py-1"
+          class="w-full min-w-0 rounded-[10px] border border-hairline bg-paper px-2.5 py-2 text-sm text-carbon placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent/30 sm:flex-1 sm:py-1.5"
         />
         <select
           v-model="expenseForm.paid_by"
-          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
+          class="w-full rounded-[10px] border border-hairline bg-paper py-2 pl-2 pr-8 text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-auto sm:py-1.5"
         >
           <option value="">paid by me</option>
           <option v-for="user in users.data || []" :key="user.name" :value="user.name">
@@ -255,8 +273,8 @@
         </select>
         <select
           v-model="expenseForm.paid_from"
-          class="w-full rounded border-gray-200 py-2 pl-2 pr-8 text-sm sm:w-auto sm:py-1"
-          :class="expenseForm.paid_from ? '' : 'border-amber-400'"
+          class="w-full rounded-[10px] bg-paper py-2 pl-2 pr-8 text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-auto sm:py-1.5"
+          :class="expenseForm.paid_from ? 'border border-hairline' : 'border border-warn/50'"
           title="Whose money was it? An advance settles with the person holding it; the company's settles with nobody."
         >
           <option value="">whose money?</option>
@@ -279,39 +297,41 @@
          categories are the quote's own entries. Bars, not a bare
          table: how far along each budget is should read at a glance
          (founder, A4 round 2 - "like the apps on the market"). -->
-    <div class="rounded-lg border bg-white p-3">
-      <h2 class="mb-3 text-sm font-semibold text-gray-800">
-        Where the money went
-      </h2>
+    <BentoCard
+      title="Where the money went"
+      subtitle="Actual against the quoted cost, per category."
+    >
       <div class="space-y-3">
         <div v-for="row in money.data?.categories || []" :key="row.title">
           <div class="flex items-baseline gap-2 text-sm">
-            <span class="font-medium text-gray-900">{{ row.title }}</span>
-            <span class="ml-auto tabular-nums text-gray-700">
+            <span class="font-medium text-carbon">{{ row.title }}</span>
+            <span class="aura-num ml-auto text-carbon">
               {{ vnd(row.actual) }}
-              <span class="text-gray-400">/ {{ vnd(row.quoted) }}</span>
+              <span class="text-faint">/ {{ vnd(row.quoted) }}</span>
             </span>
             <span
-              class="w-24 text-right text-xs tabular-nums"
-              :class="row.variance > 0 ? 'font-medium text-red-600' : 'text-gray-400'"
+              class="aura-num w-24 text-right text-xs"
+              :class="row.variance > 0 ? 'font-medium text-accent' : 'text-faint'"
             >
               {{ row.variance > 0 ? "+" : "" }}{{ vnd(row.variance) }}
             </span>
           </div>
-          <div class="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
+          <div class="mt-1.5 h-1.5 overflow-hidden rounded-pill bg-hairline">
             <div
-              class="h-full rounded-full transition-all"
+              class="h-full rounded-pill transition-all"
               :class="barClass(row)"
               :style="{ width: `${barWidth(row)}%` }"
             ></div>
           </div>
         </div>
       </div>
-      <p class="mt-2 text-xs text-gray-500">
-        Quoted cost is what the job expected to pay out for that category -
-        not what the client is charged for it.
-      </p>
-    </div>
+      <template #footer>
+        <p class="text-xs text-faint">
+          Quoted cost is what the job expected to pay out for that category -
+          not what the client is charged for it.
+        </p>
+      </template>
+    </BentoCard>
 
     <ErrorMessage :message="error" />
   </div>
@@ -320,6 +340,10 @@
 <script setup>
 import { computed, reactive, ref } from "vue"
 import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
+import BentoCard from "./BentoCard.vue"
+import StatusPill from "./StatusPill.vue"
+import MoneyValue from "./MoneyValue.vue"
+import EmptyState from "./EmptyState.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { parseVnd, vnd } from "../utils/money"
 import { EVEN, FROM_ADVANCE, FROM_COMPANY, RETURN } from "../data/money"
@@ -381,17 +405,16 @@ function reload() {
 }
 
 // Budget bars: fill toward the quoted cost; spending past it turns the
-// bar red. A category with no quoted cost (unplanned spend) is all red.
+// bar to the accent. A category with no quoted cost (unplanned spend)
+// is all accent.
 function barWidth(row) {
   if (!row.quoted) return row.actual ? 100 : 0
   return Math.min(100, Math.round((row.actual / row.quoted) * 100))
 }
 
 function barClass(row) {
-  if (!row.actual) return "bg-gray-200"
-  // green, not emerald - emerald is outside frappe-ui's palette and
-  // renders transparent.
-  return row.variance > 0 ? "bg-red-500" : "bg-green-500"
+  if (!row.actual) return "bg-hairline"
+  return row.variance > 0 ? "bg-accent" : "bg-ok"
 }
 
 function fail(err) {

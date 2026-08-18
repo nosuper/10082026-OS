@@ -1,151 +1,183 @@
 <template>
-  <div class="px-4 py-6">
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <h1 class="text-lg font-semibold text-gray-900">Jobs</h1>
-      <span class="text-sm tabular-nums text-gray-400">
-        {{ filteredJobs.length }}
-      </span>
-      <div class="relative ml-2">
+  <div class="space-y-4">
+    <!-- Page head: the board's scale in words before the columns. No "New job"
+         action - a job exists because a deal was won, never because a button
+         was pressed. -->
+    <div class="flex flex-wrap items-end gap-x-3 gap-y-2">
+      <div class="min-w-0">
+        <h1 class="text-xl font-semibold text-carbon">Jobs</h1>
+        <p class="mt-0.5 text-sm text-muted">
+          {{ filteredJobs.length }} job{{ filteredJobs.length === 1 ? "" : "s" }}
+          <template v-if="boardTotal">
+            · <span class="tabular-nums">{{ vndShort(boardTotal) }} ₫</span> in production
+          </template>
+        </p>
+        <p class="mt-0.5 text-xs text-faint">
+          Won deals in production - new jobs are created from the deal board.
+        </p>
+      </div>
+
+      <div class="relative ml-auto">
         <FeatherIcon
           name="search"
-          class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+          class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
         />
         <input
           v-model.trim="query"
           type="text"
           placeholder="Search jobs"
-          class="w-56 rounded-md border-gray-300 py-1.5 pl-8 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
+          class="w-56 rounded-[10px] border border-hairline bg-paper py-2 pl-9 pr-3 text-sm text-carbon placeholder-faint focus:border-accent/40 focus:outline-none focus:ring-0"
         />
       </div>
-      <span class="ml-auto text-sm text-gray-500">
-        Won deals in production - new jobs are created from the deal board.
-      </span>
     </div>
 
     <!-- Money owed past the company's payment terms. Unpaid milestones
          should chase the founder, not the reverse (spec #2, story 39);
-         this strip carries the nudge until T12 builds the dashboard. -->
-    <div
+         this strip carries the nudge until T12 builds the dashboard.
+         It is the loudest thing on the page: the ember band is used here
+         and nowhere else on the board. -->
+    <section
       v-if="overdue.length"
-      class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3"
+      class="overflow-hidden rounded-card border border-accent/30 bg-paper shadow-card"
     >
-      <div class="mb-1 flex flex-wrap items-baseline gap-2">
-        <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-red-900">
-          <FeatherIcon name="alert-circle" class="h-4 w-4" />
-          {{ vnd(overdueTotal) }} ₫ uncollected
-        </span>
-        <span class="text-xs text-red-800">
+      <div
+        class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-accent/20 bg-accent-soft px-4 py-3"
+      >
+        <FeatherIcon name="alert-circle" class="h-4 w-4 shrink-0 text-accent" />
+        <div class="min-w-0">
+          <div class="aura-eyebrow text-accent-ink">Uncollected</div>
+          <div class="mt-0.5 flex items-baseline gap-1">
+            <MoneyValue :amount="overdueTotal" size="lg" tone="accent" />
+            <span class="text-sm text-accent">₫</span>
+          </div>
+        </div>
+        <p class="text-xs text-accent-ink sm:ml-auto sm:text-right">
           {{ overdue.length }} milestone{{ overdue.length > 1 ? "s" : "" }}
           past the {{ nudges.data?.payment_terms_days }}-day payment terms
-        </span>
+        </p>
       </div>
-      <ul class="space-y-0.5 text-sm">
+
+      <ul class="divide-y divide-hairline px-4">
         <li
           v-for="row in overdue"
           :key="row.name"
-          class="flex flex-wrap items-baseline gap-2"
+          class="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2"
         >
           <router-link
             :to="`/jobs/${row.job}`"
-            class="font-medium text-red-900 hover:underline"
+            class="min-w-0 truncate text-sm font-medium text-carbon hover:text-accent"
           >
             {{ row.job_title || row.job }}
           </router-link>
-          <span class="text-red-800">{{ row.title }}</span>
-          <span class="tabular-nums text-red-900">{{ vnd(row.amount) }} ₫</span>
-          <span class="text-xs text-red-700">
-            {{ overdueLabel(row.days_overdue) }} · {{ row.status }}
-          </span>
+          <span class="min-w-0 truncate text-xs text-muted">{{ row.title }}</span>
+          <StatusPill
+            :label="overdueLabel(row.days_overdue)"
+            tone="accent"
+            class="shrink-0"
+          />
+          <span class="shrink-0 text-xs text-faint">{{ row.status }}</span>
+          <MoneyValue :amount="row.amount" class="ml-auto shrink-0 font-medium" />
         </li>
       </ul>
-    </div>
+    </section>
 
-    <div class="flex gap-3 overflow-x-auto pb-4">
+    <!-- The production flow, left to right. Columns are canvas, cards are
+         paper - the only depth on the board. -->
+    <div class="flex gap-3 overflow-x-auto pb-2">
       <div
         v-for="stage in STAGES"
         :key="stage"
-        class="flex w-72 shrink-0 flex-col rounded-lg transition-colors"
+        class="flex w-[272px] shrink-0 flex-col rounded-card border transition-colors"
         :class="
           dragOverStage === stage
-            ? 'bg-blue-50 ring-2 ring-inset ring-blue-300'
-            : 'bg-gray-100'
+            ? 'border-accent/40 bg-accent-soft'
+            : 'border-hairline bg-canvas'
         "
         @dragover.prevent="dragOverStage = stage"
         @dragleave="onDragLeave(stage, $event)"
         @drop="onDrop(stage)"
       >
-        <div class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-800">
-          <span class="h-2 w-2 shrink-0 rounded-full" :class="jobStageDot(stage)"></span>
-          {{ stage }}
-          <span class="text-xs font-normal text-gray-500">
+        <div class="flex items-center gap-2 border-b border-hairline px-3 py-2.5">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-pill" :class="jobStageDot(stage)"></span>
+          <span class="truncate text-xs font-medium text-carbon">{{ stage }}</span>
+          <span class="aura-num shrink-0 text-[11px] text-faint">
             {{ jobsByStage[stage]?.length || 0 }}
           </span>
+          <!-- Column money is sans, not the mono ledger face: vndShort spells
+               the unit in Vietnamese ("triệu", "tỷ") and the mono face has no
+               diacritics to spell it with. -->
           <span
             v-if="stageTotals[stage]"
-            class="ml-auto text-xs font-medium tabular-nums text-gray-600"
+            class="ml-auto shrink-0 text-[11px] font-medium tabular-nums text-muted"
             :title="`${vnd(stageTotals[stage])} ₫ quoted in ${stage}`"
           >
             {{ vndShort(stageTotals[stage]) }}
           </span>
         </div>
-        <div class="flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2">
+
+        <div class="flex min-h-24 flex-1 flex-col gap-2 p-2">
           <div
             v-for="job in jobsByStage[stage]"
             :key="job.name"
-            class="cursor-grab rounded-md border bg-white p-3 shadow-sm transition-shadow hover:border-gray-300 hover:shadow"
+            class="cursor-grab rounded-[10px] border border-hairline bg-paper p-3 shadow-card transition-colors hover:border-accent/40"
             :class="dragged === job ? 'opacity-50' : ''"
             draggable="true"
             @dragstart="dragged = job"
             @dragend="((dragged = null), (dragOverStage = null))"
             @click="open(job)"
           >
-            <div class="flex items-baseline gap-2">
-              <span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
+            <div class="flex items-start justify-between gap-2">
+              <span class="min-w-0 flex-1 truncate text-sm font-medium leading-snug text-carbon">
                 {{ job.title }}
               </span>
-              <span class="shrink-0 text-xs tabular-nums text-gray-400">
+              <span class="aura-num shrink-0 text-[11px] text-faint">
                 {{ job.name }}
               </span>
             </div>
-            <div v-if="job.company" class="mt-0.5 truncate text-xs text-gray-500">
+
+            <div v-if="job.company" class="mt-1 truncate text-xs text-muted">
               {{ companyNames[job.company] || job.company }}
             </div>
-            <div v-if="job.quote_total" class="mt-2 text-sm font-medium tabular-nums text-gray-800">
-              {{ vnd(job.quote_total) }}
+
+            <div v-if="job.quote_total" class="mt-2.5">
+              <MoneyValue :amount="job.quote_total" class="font-medium" />
             </div>
-            <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span
+
+            <div
+              v-if="job.change_order_due || job.revision_rounds || !job.files_location"
+              class="mt-2 flex flex-wrap items-center gap-1 border-t border-hairline pt-2"
+            >
+              <StatusPill
                 v-if="job.change_order_due"
-                class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+                tone="warn"
                 title="Revision rounds past the included ones - chargeable"
               >
-                <FeatherIcon name="alert-triangle" class="h-3 w-3" />
+                <FeatherIcon name="alert-triangle" class="mr-1 h-3 w-3" />
                 Change order · {{ job.revision_rounds }} rounds
-              </span>
-              <span
+              </StatusPill>
+              <StatusPill
                 v-else-if="job.revision_rounds"
-                class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
-              >
-                {{ job.revision_rounds }} revision{{
-                  job.revision_rounds > 1 ? "s" : ""
-                }}
-              </span>
-              <span
+                tone="neutral"
+                :label="`${job.revision_rounds} revision${job.revision_rounds > 1 ? 's' : ''}`"
+              />
+              <StatusPill
                 v-if="!job.files_location"
-                class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500"
+                tone="neutral"
+                label="no files location"
                 title="No shared folder recorded yet"
-              >
-                no files location
-              </span>
+              />
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <p v-if="!jobs.data?.length" class="py-8 text-center text-sm text-gray-400">
-      No jobs yet - mark a deal Won on the deal board to create one.
-    </p>
+    <div v-if="!jobs.data?.length" class="aura-card">
+      <EmptyState
+        icon="briefcase"
+        title="No jobs yet - mark a deal Won on the deal board to create one."
+      />
+    </div>
 
     <ErrorMessage class="mt-2" :message="moveError" />
   </div>
@@ -160,6 +192,9 @@ import {
   createResource,
   createListResource,
 } from "frappe-ui"
+import StatusPill from "../components/StatusPill.vue"
+import MoneyValue from "../components/MoneyValue.vue"
+import EmptyState from "../components/EmptyState.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd, vndShort } from "../utils/money"
 import { STAGES } from "../data/jobStages"
@@ -242,6 +277,11 @@ const stageTotals = computed(() => {
   }
   return totals
 })
+
+// The same figure across every visible column - the head's one number.
+const boardTotal = computed(() =>
+  filteredJobs.value.reduce((sum, job) => sum + (job.quote_total || 0), 0)
+)
 
 // -- drag & drop between stages (both roles may move a job) --
 

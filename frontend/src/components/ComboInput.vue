@@ -13,13 +13,13 @@
     />
     <div
       v-if="open && filtered.length"
-      class="absolute left-0 top-full z-30 mt-0.5 max-h-48 w-56 overflow-y-auto rounded-md border bg-white py-1 shadow-lg"
+      class="absolute left-0 top-full z-30 mt-1 max-h-48 w-56 overflow-y-auto rounded-card border border-hairline bg-paper py-1 shadow-card"
     >
       <button
         v-for="option in filtered"
         :key="option"
         type="button"
-        class="block w-full truncate px-3 py-1.5 text-left text-sm text-gray-800 hover:bg-gray-50"
+        class="block w-full truncate px-3 py-1.5 text-left text-sm text-carbon transition-colors hover:bg-canvas hover:text-accent-ink"
         @mousedown.prevent="pick(option)"
       >
         {{ option }}
@@ -42,7 +42,8 @@ const props = defineProps({
   placeholder: { type: String, default: "" },
   inputClass: {
     type: String,
-    default: "w-36 rounded border-gray-200 px-2 py-1 text-sm",
+    default:
+      "w-36 rounded-[8px] border border-hairline bg-paper px-2 py-1 text-sm text-carbon placeholder:text-faint focus:border-accent focus:ring-0",
   },
 })
 

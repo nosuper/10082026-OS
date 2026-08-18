@@ -1,337 +1,362 @@
 <template>
-  <div class="px-4 pb-6">
-    <!-- Sticky: this page is long and the founder sits on it for hours;
-         Save and the deal's identity must never scroll away. -->
+  <div class="space-y-4">
+    <!-- Sticky under the shell header: this page is long and the founder sits
+         on it for hours; Save and the deal's identity must never scroll away. -->
     <div
-      class="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b bg-gray-50/95 px-4 py-3 backdrop-blur"
+      class="sticky top-14 z-20 -mx-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline bg-canvas/90 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6"
     >
-      <router-link to="/deals" class="text-sm text-gray-500 hover:text-gray-800">
-        ← Deals
-      </router-link>
-      <h1 class="text-lg font-semibold text-gray-900">
-        {{ deal.data?.title || name }}
-      </h1>
-      <span class="text-sm tabular-nums text-gray-400">{{ name }}</span>
-      <span
-        v-if="deal.data"
-        class="rounded-full px-2 py-0.5 text-xs"
-        :class="stageClass(deal.data.stage)"
+      <router-link
+        to="/deals"
+        class="inline-flex shrink-0 items-center gap-1 text-sm text-muted hover:text-accent"
       >
-        {{ deal.data.stage }}
-      </span>
+        <FeatherIcon name="chevron-left" class="h-3.5 w-3.5" />
+        Deals
+      </router-link>
+
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <h1 class="min-w-0 truncate text-xl font-semibold text-carbon">
+          {{ deal.data?.title || name }}
+        </h1>
+        <span class="aura-num text-xs text-faint">{{ name }}</span>
+        <StatusPill
+          v-if="deal.data"
+          :label="deal.data.stage"
+          :tone="stageTone(deal.data.stage)"
+        />
+      </div>
+
       <div class="ml-auto flex items-center gap-3">
-        <span v-if="saving" class="text-xs text-gray-500">Saving…</span>
-        <span v-else-if="dirty && !allLinesComplete" class="text-xs text-red-600">
+        <span v-if="saving" class="text-xs text-muted">Saving…</span>
+        <span
+          v-else-if="dirty && !allLinesComplete"
+          class="text-xs font-medium text-accent-ink"
+        >
           A line is missing its description - autosave is waiting
         </span>
-        <span v-else-if="dirty" class="text-xs text-amber-700">
+        <span v-else-if="dirty" class="text-xs text-warn">
           Unsaved changes - autosaves in a moment, Ctrl+S saves now
         </span>
-        <span v-else-if="baseline" class="text-xs text-gray-400">
+        <span v-else-if="baseline" class="text-xs text-faint">
           All changes saved
         </span>
-        <Button variant="solid" :loading="saving" @click="save">Save</Button>
+        <button
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] bg-accent px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-ink disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="saving"
+          @click="save"
+        >
+          <FeatherIcon
+            v-if="saving"
+            name="loader"
+            class="h-3.5 w-3.5 animate-spin"
+          />
+          Save
+        </button>
       </div>
     </div>
 
+    <!-- The floor warning is the one loud thing on the page. -->
     <div
       v-if="live?.floor_breached"
-      class="mb-4 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+      class="flex items-center gap-2 rounded-card border border-accent/30 bg-accent-soft px-3 py-2.5 text-sm text-accent-ink"
     >
       <FeatherIcon name="alert-triangle" class="h-4 w-4 shrink-0" />
       Margin is below the company floor - this quote is flagged as
       unprofitable.
     </div>
 
-    <div v-if="deal.loading" class="py-12 text-center text-sm text-gray-500">
+    <div v-if="deal.loading" class="py-12 text-center text-sm text-muted">
       Loading…
     </div>
 
     <template v-else-if="deal.data">
-      <!-- Cost lines -->
-      <div class="mb-2 flex items-center gap-2">
-        <h2 class="text-sm font-semibold text-gray-800">Cost lines</h2>
-        <details class="relative ml-auto">
-          <summary
-            class="cursor-pointer select-none rounded-md border bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            Detail columns
-          </summary>
-          <div
-            class="absolute right-0 z-20 mt-1 w-52 rounded-md border bg-white p-2 shadow-lg"
-          >
-            <label
-              v-for="col in META_COLUMNS"
-              :key="col.key"
-              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50"
-            >
-              <input
-                type="checkbox"
-                :checked="visibleMeta.includes(col.key)"
-                @change="toggleMeta(col.key)"
-              />
-              {{ col.label }}
-            </label>
-            <p class="mt-1 border-t px-2 pt-1.5 text-xs text-gray-400">
-              Money columns are always shown.
-            </p>
-          </div>
-        </details>
-        <Button @click="addLine">Add line</Button>
-      </div>
-      <div class="overflow-x-auto rounded-lg border">
-        <table class="w-full text-sm" :class="visibleMeta.length ? 'min-w-[1700px]' : 'min-w-[1100px]'">
-          <thead class="bg-gray-50 text-left text-xs text-gray-600">
-            <tr>
-              <th class="px-2 py-2 font-medium">Description</th>
-              <th v-if="metaVisible('item_category')" class="px-2 py-2 font-medium">Item Category</th>
-              <th v-if="metaVisible('cost_phase')" class="px-2 py-2 font-medium">Cost Phase</th>
-              <th v-if="metaVisible('source_type')" class="px-2 py-2 font-medium">Source Type</th>
-              <th v-if="metaVisible('source_contact')" class="px-2 py-2 font-medium">Source Contact</th>
-              <th class="px-2 py-2 font-medium">Package</th>
-              <th class="px-2 py-2 text-right font-medium">Qty 1</th>
-              <th class="px-2 py-2 font-medium">Unit 1</th>
-              <th class="px-2 py-2 text-right font-medium">Qty 2</th>
-              <th class="px-2 py-2 font-medium">Unit 2</th>
-              <th class="px-2 py-2 text-right font-medium">Unit Price</th>
-              <th class="px-2 py-2 font-medium">Tax Type</th>
-              <th class="px-2 py-2 text-right font-medium">Vendor MF %</th>
-              <th class="px-2 py-2 text-right font-medium">Markup %</th>
-              <th class="border-l bg-gray-100/60 px-2 py-2 text-right font-medium">Subtotal</th>
-              <th class="bg-gray-100/60 px-2 py-2 text-right font-medium">Quote Price</th>
-              <th class="bg-gray-100/60 px-2 py-2 text-right font-medium">Margin</th>
-              <th class="px-2 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(line, i) in state.lines"
-              :key="i"
-              class="border-t align-middle"
-            >
-              <td class="px-1 py-1">
-                <input
-                  v-model="line.description"
-                  class="w-44 rounded px-2 py-1 text-sm"
-                  :class="
-                    line.description?.trim()
-                      ? 'border-gray-200'
-                      : 'border-red-300 bg-red-50/40'
-                  "
-                  placeholder="Description"
-                  title="A line needs a description before it can save"
-                />
-              </td>
-              <td v-if="metaVisible('item_category')" class="px-1 py-1">
-                <ComboInput
-                  v-model="line.item_category"
-                  :options="(categories.data || []).map((row) => row.name)"
-                  placeholder="Select or add"
-                  @commit="ensureItemCategory(line)"
-                />
-              </td>
-              <td v-if="metaVisible('cost_phase')" class="px-1 py-1">
-                <select
-                  v-model="line.cost_phase"
-                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
-                >
-                  <option value=""></option>
-                  <option
-                    v-for="phase in COST_PHASES"
-                    :key="phase"
-                    :value="phase"
-                  >
-                    {{ phase }}
-                  </option>
-                </select>
-              </td>
-              <td v-if="metaVisible('source_type')" class="px-1 py-1">
-                <select
-                  v-model="line.source_type"
-                  class="w-28 rounded border-gray-200 px-2 py-1 text-sm"
-                >
-                  <option value=""></option>
-                  <option v-for="type in SOURCE_TYPES" :key="type" :value="type">
-                    {{ type }}
-                  </option>
-                </select>
-              </td>
-              <td v-if="metaVisible('source_contact')" class="px-1 py-1">
-                <select
-                  v-model="line.source_contact"
-                  class="w-40 rounded border-gray-200 px-2 py-1 text-sm"
-                >
-                  <option value=""></option>
-                  <option
-                    v-for="contact in contacts.data || []"
-                    :key="contact.name"
-                    :value="contact.name"
-                  >
-                    {{ contact.full_name }}
-                  </option>
-                </select>
-              </td>
-              <td class="px-1 py-1">
-                <ComboInput
-                  v-model="line.package"
-                  :options="state.packages.map((pkg) => pkg.title)"
-                  placeholder="No package"
-                  @commit="ensurePackage(line.package)"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <input
-                  v-model.number="line.qty1"
-                  type="number"
-                  min="0"
-                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <input
-                  v-model="line.qty1_unit"
-                  class="w-20 rounded border-gray-200 px-2 py-1 text-sm"
-                  placeholder="người"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <input
-                  v-model.number="line.qty2"
-                  type="number"
-                  min="0"
-                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <input
-                  v-model="line.qty2_unit"
-                  class="w-20 rounded border-gray-200 px-2 py-1 text-sm"
-                  placeholder="ngày"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <VndInput
-                  :model-value="line.unit_price"
-                  class="ml-auto block w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
-                  @update:model-value="line.unit_price = $event === '' ? 0 : $event"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <select
-                  v-model="line.tax_type"
-                  class="w-36 rounded border-gray-200 px-2 py-1 text-sm"
-                >
-                  <option v-for="t in TAX_TYPES" :key="t" :value="t">
-                    {{ t }}
-                  </option>
-                </select>
-              </td>
-              <td class="px-1 py-1">
-                <input
-                  v-model.number="line.vendor_mf_pct"
-                  type="number"
-                  min="0"
-                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
-                />
-              </td>
-              <td class="px-1 py-1">
-                <input
-                  v-model.number="line.markup_pct"
-                  type="number"
-                  min="0"
-                  class="ml-auto block w-16 rounded border-gray-200 px-2 py-1 text-right text-sm"
-                />
-              </td>
-              <td class="border-l bg-gray-50/70 px-2 py-1 text-right tabular-nums text-gray-700">
-                {{ vnd(live?.lines?.[i]?.subtotal) }}
-              </td>
-              <td class="bg-gray-50/70 px-2 py-1 text-right font-medium tabular-nums">
-                {{ vnd(live?.lines?.[i]?.quote_price) }}
-              </td>
-              <td class="bg-gray-50/70 px-2 py-1 text-right tabular-nums text-gray-700">
-                {{ vnd(live?.lines?.[i]?.margin) }}
-              </td>
-              <td class="whitespace-nowrap px-1 py-1 text-gray-400">
-                <button
-                  class="rounded p-1 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-30"
-                  :disabled="i === 0"
-                  title="Move up"
-                  @click="moveLine(i, -1)"
-                >
-                  <FeatherIcon name="chevron-up" class="h-3.5 w-3.5" />
-                </button>
-                <button
-                  class="rounded p-1 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-30"
-                  :disabled="i === state.lines.length - 1"
-                  title="Move down"
-                  @click="moveLine(i, 1)"
-                >
-                  <FeatherIcon name="chevron-down" class="h-3.5 w-3.5" />
-                </button>
-                <button
-                  class="rounded p-1 hover:bg-red-50 hover:text-red-600"
-                  title="Remove line"
-                  @click="state.lines.splice(i, 1)"
-                >
-                  <FeatherIcon name="x" class="h-3.5 w-3.5" />
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!state.lines.length">
-              <td :colspan="14 + visibleMeta.length" class="px-3 py-6 text-center text-gray-400">
-                No cost lines yet - add the first one.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- Cost lines: the widest thing in the app. It keeps its own
+           horizontal scroll, the description column freezes to the left so a
+           row never loses its name, and the three computed money columns sit
+           in a tinted band on the right. -->
+      <section class="aura-card">
+        <div class="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
+          <h2 class="font-display text-sm font-semibold text-carbon">Cost lines</h2>
+          <span class="aura-num text-xs text-faint">{{ state.lines.length }}</span>
 
-      <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <!-- Packages -->
-        <div class="lg:col-span-2">
-          <div class="mb-2 flex items-center gap-2">
-            <h2 class="text-sm font-semibold text-gray-800">
+          <details class="relative ml-auto">
+            <summary
+              class="flex cursor-pointer select-none list-none items-center gap-1.5 rounded-[8px] border border-hairline bg-paper px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-accent/40 hover:text-carbon"
+            >
+              Detail columns
+              <FeatherIcon name="chevron-down" class="h-3 w-3" />
+            </summary>
+            <div
+              class="absolute right-0 z-30 mt-1.5 w-56 rounded-card border border-hairline bg-paper p-2 shadow-card"
+            >
+              <label
+                v-for="col in META_COLUMNS"
+                :key="col.key"
+                class="flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1.5 text-sm text-carbon hover:bg-canvas"
+              >
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5 rounded border-hairline text-accent focus:ring-0"
+                  :checked="visibleMeta.includes(col.key)"
+                  @change="toggleMeta(col.key)"
+                />
+                {{ col.label }}
+              </label>
+              <p class="mt-1 border-t border-hairline px-2 pt-1.5 text-[11px] text-faint">
+                Money columns are always shown.
+              </p>
+            </div>
+          </details>
+
+          <button type="button" :class="ghostButton" @click="addLine">
+            <FeatherIcon name="plus" class="h-3 w-3" />
+            Add line
+          </button>
+        </div>
+
+        <div class="overflow-x-auto rounded-b-card">
+          <table
+            class="w-full border-collapse text-sm"
+            :class="visibleMeta.length ? 'min-w-[1700px]' : 'min-w-[1100px]'"
+          >
+            <thead class="bg-canvas">
+              <tr class="border-b border-hairline">
+                <th :class="[headCell, stickyHead]">Description</th>
+                <th v-if="metaVisible('item_category')" :class="headCell">Item Category</th>
+                <th v-if="metaVisible('cost_phase')" :class="headCell">Cost Phase</th>
+                <th v-if="metaVisible('source_type')" :class="headCell">Source Type</th>
+                <th v-if="metaVisible('source_contact')" :class="headCell">Source Contact</th>
+                <th :class="headCell">Package</th>
+                <th :class="[headCell, 'text-right']">Qty 1</th>
+                <th :class="headCell">Unit 1</th>
+                <th :class="[headCell, 'text-right']">Qty 2</th>
+                <th :class="headCell">Unit 2</th>
+                <th :class="[headCell, 'text-right']">Unit Price</th>
+                <th :class="headCell">Tax Type</th>
+                <th :class="[headCell, 'text-right']">Vendor MF %</th>
+                <th :class="[headCell, 'text-right']">Markup %</th>
+                <th :class="[headCell, 'border-l border-hairline text-right']">Subtotal</th>
+                <th :class="[headCell, 'text-right']">Quote Price</th>
+                <th :class="[headCell, 'text-right']">Margin</th>
+                <th :class="headCell"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(line, i) in state.lines"
+                :key="i"
+                class="group border-b border-hairline align-middle last:border-0 hover:bg-canvas"
+              >
+                <td :class="[bodyCell, stickyBody]">
+                  <input
+                    v-model="line.description"
+                    class="w-44 rounded-[8px] border px-2 py-1 text-sm text-carbon placeholder:text-faint focus:border-accent focus:ring-0"
+                    :class="
+                      line.description?.trim()
+                        ? 'border-hairline bg-paper'
+                        : 'border-accent/50 bg-accent-soft'
+                    "
+                    placeholder="Description"
+                    title="A line needs a description before it can save"
+                  />
+                </td>
+                <td v-if="metaVisible('item_category')" :class="bodyCell">
+                  <ComboInput
+                    v-model="line.item_category"
+                    :options="(categories.data || []).map((row) => row.name)"
+                    placeholder="Select or add"
+                    @commit="ensureItemCategory(line)"
+                  />
+                </td>
+                <td v-if="metaVisible('cost_phase')" :class="bodyCell">
+                  <select v-model="line.cost_phase" :class="[cellSelect, 'w-36']">
+                    <option value=""></option>
+                    <option
+                      v-for="phase in COST_PHASES"
+                      :key="phase"
+                      :value="phase"
+                    >
+                      {{ phase }}
+                    </option>
+                  </select>
+                </td>
+                <td v-if="metaVisible('source_type')" :class="bodyCell">
+                  <select v-model="line.source_type" :class="[cellSelect, 'w-28']">
+                    <option value=""></option>
+                    <option v-for="type in SOURCE_TYPES" :key="type" :value="type">
+                      {{ type }}
+                    </option>
+                  </select>
+                </td>
+                <td v-if="metaVisible('source_contact')" :class="bodyCell">
+                  <select v-model="line.source_contact" :class="[cellSelect, 'w-40']">
+                    <option value=""></option>
+                    <option
+                      v-for="contact in contacts.data || []"
+                      :key="contact.name"
+                      :value="contact.name"
+                    >
+                      {{ contact.full_name }}
+                    </option>
+                  </select>
+                </td>
+                <td :class="bodyCell">
+                  <ComboInput
+                    v-model="line.package"
+                    :options="state.packages.map((pkg) => pkg.title)"
+                    placeholder="No package"
+                    @commit="ensurePackage(line.package)"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <input
+                    v-model.number="line.qty1"
+                    type="number"
+                    min="0"
+                    :class="[cellNum, 'ml-auto block w-16']"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <input
+                    v-model="line.qty1_unit"
+                    :class="[cellInput, 'w-20']"
+                    placeholder="người"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <input
+                    v-model.number="line.qty2"
+                    type="number"
+                    min="0"
+                    :class="[cellNum, 'ml-auto block w-16']"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <input
+                    v-model="line.qty2_unit"
+                    :class="[cellInput, 'w-20']"
+                    placeholder="ngày"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <VndInput
+                    :model-value="line.unit_price"
+                    :class="[cellNum, 'ml-auto block w-32 font-medium']"
+                    @update:model-value="line.unit_price = $event === '' ? 0 : $event"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <select v-model="line.tax_type" :class="[cellSelect, 'w-36']">
+                    <option v-for="t in TAX_TYPES" :key="t" :value="t">
+                      {{ t }}
+                    </option>
+                  </select>
+                </td>
+                <td :class="bodyCell">
+                  <input
+                    v-model.number="line.vendor_mf_pct"
+                    type="number"
+                    min="0"
+                    :class="[cellNum, 'ml-auto block w-16']"
+                  />
+                </td>
+                <td :class="bodyCell">
+                  <input
+                    v-model.number="line.markup_pct"
+                    type="number"
+                    min="0"
+                    :class="[cellNum, 'ml-auto block w-16']"
+                  />
+                </td>
+                <td :class="[computedCell, 'border-l border-hairline']">
+                  <MoneyValue :amount="live?.lines?.[i]?.subtotal" tone="muted" />
+                </td>
+                <td :class="computedCell">
+                  <MoneyValue
+                    :amount="live?.lines?.[i]?.quote_price"
+                    class="font-medium"
+                  />
+                </td>
+                <td :class="computedCell">
+                  <MoneyValue :amount="live?.lines?.[i]?.margin" tone="muted" />
+                </td>
+                <td class="whitespace-nowrap px-2 py-1.5 text-right">
+                  <button :class="rowIcon" :disabled="i === 0" title="Move up" @click="moveLine(i, -1)">
+                    <FeatherIcon name="chevron-up" class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    :class="rowIcon"
+                    :disabled="i === state.lines.length - 1"
+                    title="Move down"
+                    @click="moveLine(i, 1)"
+                  >
+                    <FeatherIcon name="chevron-down" class="h-3.5 w-3.5" />
+                  </button>
+                  <button :class="rowIcon" title="Remove line" @click="state.lines.splice(i, 1)">
+                    <FeatherIcon name="x" class="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!state.lines.length">
+                <td :colspan="14 + visibleMeta.length">
+                  <EmptyState title="No cost lines yet - add the first one." />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <!-- Packages: what the client actually reads. -->
+        <section class="aura-card lg:col-span-2">
+          <div class="flex items-center gap-2 border-b border-hairline px-4 py-3">
+            <h2 class="font-display text-sm font-semibold text-carbon">
               Client-facing packages
             </h2>
-            <Button class="ml-auto" @click="addPackage">Add package</Button>
+            <span class="aura-num text-xs text-faint">{{ state.packages.length }}</span>
+            <button type="button" :class="[ghostButton, 'ml-auto']" @click="addPackage">
+              <FeatherIcon name="plus" class="h-3 w-3" />
+              Add package
+            </button>
           </div>
-          <div class="overflow-x-auto rounded-lg border">
-            <table class="w-full min-w-[640px] text-sm">
-              <thead class="bg-gray-50 text-left text-xs text-gray-600">
-                <tr>
-                  <th class="px-2 py-2 font-medium">Title</th>
-                  <th class="px-2 py-2 font-medium">Description</th>
-                  <th class="px-2 py-2 text-right font-medium">Override</th>
-                  <th class="px-2 py-2 text-right font-medium">Member Sum</th>
-                  <th class="px-2 py-2 text-right font-medium">Price</th>
-                  <th class="px-2 py-2 text-right font-medium">Variance</th>
-                  <th class="px-2 py-2"></th>
+          <div class="overflow-x-auto rounded-b-card">
+            <table class="w-full min-w-[640px] border-collapse text-sm">
+              <thead class="bg-canvas">
+                <tr class="border-b border-hairline">
+                  <th :class="headCell">Title</th>
+                  <th :class="headCell">Description</th>
+                  <th :class="[headCell, 'text-right']">Override</th>
+                  <th :class="[headCell, 'text-right']">Member Sum</th>
+                  <th :class="[headCell, 'text-right']">Price</th>
+                  <th :class="[headCell, 'text-right']">Variance</th>
+                  <th :class="headCell"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr
                   v-for="(pkg, i) in state.packages"
                   :key="i"
-                  class="border-t align-middle"
+                  class="border-b border-hairline align-middle last:border-0 hover:bg-canvas"
                 >
-                  <td class="px-1 py-1">
+                  <td :class="bodyCell">
                     <input
                       v-model="pkg.title"
-                      class="w-40 rounded border-gray-200 px-2 py-1 text-sm"
+                      :class="[cellInput, 'w-40 font-medium']"
                       placeholder="Human resources"
                     />
                   </td>
-                  <td class="px-1 py-1">
+                  <td :class="bodyCell">
                     <input
                       v-model="pkg.description"
-                      class="w-full min-w-40 rounded border-gray-200 px-2 py-1 text-sm"
+                      :class="[cellInput, 'w-full min-w-40']"
                       placeholder="What the client reads"
                     />
                   </td>
-                  <td class="px-1 py-1">
+                  <td :class="bodyCell">
                     <VndInput
                       :model-value="pkg.has_price_override ? pkg.price_override : ''"
-                      class="ml-auto block w-32 rounded border-gray-200 px-2 py-1 text-right text-sm tabular-nums"
+                      :class="[cellNum, 'ml-auto block w-32']"
                       placeholder="auto"
                       :title="
                         pkg.has_price_override && !pkg.price_override
@@ -341,176 +366,200 @@
                       @update:model-value="setOverride(pkg, $event)"
                     />
                   </td>
-                  <td class="px-2 py-1 text-right tabular-nums text-gray-700">
-                    {{ vnd(livePackage(pkg.title)?.default_price) }}
+                  <td :class="computedCell">
+                    <MoneyValue :amount="livePackage(pkg.title)?.default_price" tone="muted" />
                   </td>
-                  <td class="px-2 py-1 text-right font-medium tabular-nums">
-                    {{ vnd(livePackage(pkg.title)?.price) }}
+                  <td :class="computedCell">
+                    <MoneyValue :amount="livePackage(pkg.title)?.price" class="font-medium" />
                   </td>
-                  <td
-                    class="px-2 py-1 text-right tabular-nums"
-                    :class="
-                      livePackage(pkg.title)?.variance
-                        ? 'font-medium text-amber-700'
-                        : 'text-gray-400'
-                    "
-                  >
-                    {{ vnd(livePackage(pkg.title)?.variance) }}
+                  <td :class="computedCell">
+                    <span v-if="livePackage(pkg.title)?.variance" class="aura-num text-sm font-medium text-warn">
+                      {{ vnd(livePackage(pkg.title)?.variance) }}
+                    </span>
+                    <span v-else class="aura-num text-sm text-faint">
+                      {{ vnd(livePackage(pkg.title)?.variance) }}
+                    </span>
                   </td>
-                  <td class="px-1 py-1 text-gray-400">
-                    <button
-                      class="rounded p-1 hover:bg-red-50 hover:text-red-600"
-                      title="Remove package"
-                      @click="removePackage(i)"
-                    >
+                  <td class="whitespace-nowrap px-2 py-1.5 text-right">
+                    <button :class="rowIcon" title="Remove package" @click="removePackage(i)">
                       <FeatherIcon name="x" class="h-3.5 w-3.5" />
                     </button>
                   </td>
                 </tr>
                 <tr v-if="!state.packages.length">
-                  <td colspan="7" class="px-3 py-6 text-center text-gray-400">
-                    No packages - the client would see raw lines.
+                  <td colspan="7">
+                    <EmptyState title="No packages - the client would see raw lines." />
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        <!-- Totals & founder block -->
+        <!-- Right rail: what the numbers add up to, then who may see what. -->
         <div class="space-y-4">
-          <div class="rounded-lg border p-4">
+          <BentoCard title="Quote totals">
             <div class="mb-3 flex items-center gap-4">
-              <label class="text-xs text-gray-600">
+              <label class="text-xs text-muted">
                 Quote MF %
                 <input
                   v-model.number="state.quote_mf_pct"
                   type="number"
                   min="0"
-                  class="mt-1 w-20 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                  :class="[cellNum, 'mt-1 block w-20']"
                 />
               </label>
-              <label class="text-xs text-gray-600">
+              <label class="text-xs text-muted">
                 VAT %
                 <input
                   v-model.number="state.vat_pct"
                   type="number"
                   min="0"
-                  class="mt-1 w-20 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                  :class="[cellNum, 'mt-1 block w-20']"
                 />
               </label>
             </div>
-            <dl class="space-y-1 text-sm">
-              <div class="flex justify-between">
-                <dt class="text-gray-600">Subtotal</dt>
-                <dd class="tabular-nums">{{ vnd(live?.subtotal) }}</dd>
+            <dl class="space-y-1.5 text-sm">
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-muted">Subtotal</dt>
+                <dd><MoneyValue :amount="live?.subtotal" /></dd>
               </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-600">
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-muted">
                   Management fee ({{ state.quote_mf_pct }}%)
                 </dt>
-                <dd class="tabular-nums">{{ vnd(live?.management_fee) }}</dd>
+                <dd><MoneyValue :amount="live?.management_fee" /></dd>
               </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-600">VAT ({{ state.vat_pct }}%)</dt>
-                <dd class="tabular-nums">{{ vnd(live?.vat) }}</dd>
-              </div>
-              <div class="flex justify-between border-t pt-1 font-semibold">
-                <dt>Total</dt>
-                <dd class="tabular-nums">{{ vnd(live?.total) }}</dd>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-muted">VAT ({{ state.vat_pct }}%)</dt>
+                <dd><MoneyValue :amount="live?.vat" /></dd>
               </div>
               <div
-                class="flex justify-between pt-2"
-                :class="live?.floor_breached ? 'text-red-700' : 'text-green-700'"
+                class="flex items-baseline justify-between gap-3 border-t border-hairline pt-2"
               >
-                <dt>
+                <dt class="font-display text-sm font-semibold text-carbon">Total</dt>
+                <dd><MoneyValue :amount="live?.total" size="lg" /></dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3 pt-1">
+                <dt class="flex items-baseline gap-1.5 text-muted">
                   Margin
-                  <span v-if="live?.margin_pct != null">
-                    ({{ live.margin_pct.toFixed(1) }}%)
+                  <span
+                    v-if="live?.margin_pct != null"
+                    class="aura-num text-xs font-medium"
+                    :class="live?.floor_breached ? 'text-accent' : 'text-ok'"
+                  >
+                    {{ live.margin_pct.toFixed(1) }}%
                   </span>
                 </dt>
-                <dd class="font-medium tabular-nums">{{ vnd(live?.margin) }}</dd>
+                <dd>
+                  <MoneyValue
+                    :amount="live?.margin"
+                    :tone="live?.floor_breached ? 'accent' : 'ink'"
+                    class="font-medium"
+                  />
+                </dd>
               </div>
             </dl>
-          </div>
+            <template v-if="live?.floor_breached" #footer>
+              <StatusPill label="Below floor" tone="accent" />
+            </template>
+          </BentoCard>
 
-          <div v-if="live?.founder" class="rounded-lg border p-4">
-            <h3 class="mb-3 text-xs font-semibold uppercase text-gray-500">
-              Founder only
-            </h3>
-            <label class="text-xs text-gray-600">
+          <!-- Founder-only: server-gated, inverted surface so commission and
+               net profit never sit in the producer-safe register. -->
+          <BentoCard v-if="live?.founder" founder title="Founder only">
+            <label class="block text-xs text-white/60">
               Commission %
               <input
                 v-model.number="state.commission_pct"
                 type="number"
                 min="0"
-                class="mt-1 w-20 rounded border-gray-200 px-2 py-1 text-right text-sm"
+                class="aura-num mt-1 block w-20 rounded-[8px] border border-white/15 bg-white/10 px-2 py-1 text-right text-sm text-white focus:border-white/40 focus:ring-0"
               />
             </label>
-            <dl class="mt-3 space-y-1 text-sm">
-              <div class="flex justify-between">
-                <dt class="text-gray-600">Commission (CMF)</dt>
-                <dd class="tabular-nums">
-                  {{ vnd(live.founder.total_commission) }}
+            <dl class="mt-3 space-y-1.5 text-sm">
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-white/60">Commission (CMF)</dt>
+                <dd><MoneyValue :amount="live.founder.total_commission" tone="inverse" /></dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-white/60">CM (after commission)</dt>
+                <dd><MoneyValue :amount="live.founder.cm" tone="inverse" /></dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-white/60">Lợi nhuận trước thuế</dt>
+                <dd><MoneyValue :amount="live.founder.profit_before_tax" tone="inverse" /></dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-white/60">TNDN (20%)</dt>
+                <dd><MoneyValue :amount="live.founder.tndn" tone="inverse" /></dd>
+              </div>
+              <div
+                class="flex items-baseline justify-between gap-3 border-t border-white/10 pt-2"
+              >
+                <dt class="font-medium text-white">Net profit</dt>
+                <dd>
+                  <MoneyValue :amount="live.founder.net_profit" tone="inverse" class="font-medium" />
                 </dd>
               </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-600">CM (after commission)</dt>
-                <dd class="tabular-nums">{{ vnd(live.founder.cm) }}</dd>
-              </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-600">Lợi nhuận trước thuế</dt>
-                <dd class="tabular-nums">
-                  {{ vnd(live.founder.profit_before_tax) }}
-                </dd>
-              </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-600">TNDN (20%)</dt>
-                <dd class="tabular-nums">{{ vnd(live.founder.tndn) }}</dd>
-              </div>
-              <div class="flex justify-between font-medium">
-                <dt>Net profit</dt>
-                <dd class="tabular-nums">{{ vnd(live.founder.net_profit) }}</dd>
-              </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-600">VAT phải nộp</dt>
-                <dd class="tabular-nums">{{ vnd(live.founder.vat_payable) }}</dd>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="text-white/60">VAT phải nộp</dt>
+                <dd><MoneyValue :amount="live.founder.vat_payable" tone="inverse" /></dd>
               </div>
             </dl>
-            <div class="mt-4 flex items-center justify-between border-t pt-3 text-xs text-gray-600">
-              <span>
-                Margin floor:
-                {{ live.founder.margin_floor_pct || "off" }}{{ live.founder.margin_floor_pct ? "%" : "" }}
-              </span>
-              <router-link to="/settings" class="text-blue-700 hover:underline">
-                Edit in Settings →
-              </router-link>
-            </div>
-          </div>
+            <template #footer>
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <span class="text-white/60">
+                  Margin floor:
+                  {{ live.founder.margin_floor_pct || "off" }}{{ live.founder.margin_floor_pct ? "%" : "" }}
+                </span>
+                <router-link to="/settings" class="text-white/70 hover:text-white">
+                  Edit in Settings →
+                </router-link>
+              </div>
+            </template>
+          </BentoCard>
 
-          <div class="rounded-lg border p-4">
-            <h3 class="mb-1 text-xs font-semibold uppercase text-gray-500">
-              Quote detail level
-            </h3>
-            <p class="mb-2 text-xs text-gray-500">
-              How much of the build the client's page and PDF show - the
-              next published version uses this.
-            </p>
-            <select
-              v-model="state.quote_detail_level"
-              class="w-full rounded border-gray-300 py-1.5 text-sm text-gray-800 focus:border-gray-500 focus:ring-0"
-            >
-              <option value="Package totals">
-                Package totals - one price per package
-              </option>
-              <option value="Line by line">
-                Line by line - every item with quantities (AICP-style)
-              </option>
-              <option value="Lump sum">
-                Lump sum - a single figure for the whole job
-              </option>
-            </select>
-          </div>
+          <BentoCard
+            title="Quote detail level"
+            subtitle="How much of the build the client's page and PDF show - the next published version uses this."
+          >
+            <div class="space-y-1.5">
+              <button
+                v-for="level in DETAIL_LEVELS"
+                :key="level.value"
+                type="button"
+                class="flex w-full flex-col items-start rounded-[10px] border px-3 py-2 text-left transition-colors"
+                :class="
+                  state.quote_detail_level === level.value
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-hairline hover:border-accent/40 hover:bg-canvas'
+                "
+                @click="state.quote_detail_level = level.value"
+              >
+                <span
+                  class="text-sm font-medium"
+                  :class="
+                    state.quote_detail_level === level.value
+                      ? 'text-accent-ink'
+                      : 'text-carbon'
+                  "
+                >
+                  {{ level.value }}
+                </span>
+                <span
+                  class="text-xs"
+                  :class="
+                    state.quote_detail_level === level.value
+                      ? 'text-accent-ink/70'
+                      : 'text-faint'
+                  "
+                >
+                  {{ level.hint }}
+                </span>
+              </button>
+            </div>
+          </BentoCard>
 
           <QuotePanel
             :deal="name"
@@ -521,7 +570,7 @@
       </div>
     </template>
 
-    <ErrorMessage class="mt-3" :message="error" />
+    <ErrorMessage :message="error" />
   </div>
 </template>
 
@@ -529,18 +578,51 @@
 import { reactive, ref, computed, watch, onMounted, onUnmounted } from "vue"
 import { useRoute } from "vue-router"
 import {
-  Button,
   ErrorMessage,
   FeatherIcon,
   createListResource,
   createResource,
 } from "frappe-ui"
+import BentoCard from "../components/BentoCard.vue"
 import ComboInput from "../components/ComboInput.vue"
+import EmptyState from "../components/EmptyState.vue"
+import MoneyValue from "../components/MoneyValue.vue"
 import QuotePanel from "../components/QuotePanel.vue"
+import StatusPill from "../components/StatusPill.vue"
 import VndInput from "../components/VndInput.vue"
 import { vnd } from "../utils/money"
-import { stageClass } from "../utils/stages"
 import { currentUser } from "../utils/user"
+
+// -- the look: one definition per shape, so 18 columns stay consistent --
+
+const headCell =
+  "aura-eyebrow whitespace-nowrap px-2 py-2 text-left font-medium"
+const bodyCell = "px-2 py-1.5"
+const computedCell = "bg-canvas/60 px-2 py-1.5 text-right"
+// The description column freezes to the left: a wide table must never leave a
+// row without its name. bg-paper keeps the scrolled-under cells hidden.
+const stickyHead = "sticky left-0 border-r border-hairline bg-canvas"
+const stickyBody =
+  "sticky left-0 border-r border-hairline bg-paper group-hover:bg-canvas"
+
+const cellInput =
+  "rounded-[8px] border border-hairline bg-paper px-2 py-1 text-sm text-carbon placeholder:text-faint focus:border-accent focus:ring-0"
+// Numerals read as a ledger; Vietnamese unit and tax fields stay in the sans face.
+const cellNum = `${cellInput} aura-num text-right`
+const cellSelect =
+  "rounded-[8px] border border-hairline bg-paper py-1 pl-2 pr-7 text-sm text-carbon focus:border-accent focus:ring-0"
+const ghostButton =
+  "inline-flex shrink-0 items-center gap-1.5 rounded-[8px] border border-hairline bg-paper px-2.5 py-1.5 text-xs font-medium text-carbon transition-colors hover:border-accent/40 hover:text-accent-ink"
+const rowIcon =
+  "rounded-[6px] p-1 text-faint transition-colors hover:bg-canvas hover:text-accent-ink disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-faint"
+
+// Deal stages onto the four pill tones: act-on-this in the accent, settled in ok.
+function stageTone(stage) {
+  if (stage === "Won") return "ok"
+  if (stage === "Lost") return "warn"
+  if (stage === "Quote Sent" || stage === "Negotiation") return "accent"
+  return "neutral"
+}
 
 // Must match the Deal Cost Line tax_type options. Internal work carries
 // no invoice - Không hoá đơn.
@@ -552,6 +634,14 @@ const COST_PHASES = [
   "Appendix",
 ]
 const SOURCE_TYPES = ["Internal", "Freelancer", "Vendor"]
+
+// The three Quote Detail Level values, with what each one means to the
+// client. The value strings are the doctype's - only the chrome is new.
+const DETAIL_LEVELS = [
+  { value: "Package totals", hint: "One price per package" },
+  { value: "Line by line", hint: "Every item with quantities (AICP-style)" },
+  { value: "Lump sum", hint: "A single figure for the whole job" },
+]
 
 // T5.1 metadata - real, but not what pricing a job needs on screen.
 // Hidden by default so the table fits a laptop without sideways
@@ -628,7 +718,7 @@ function snapshot() {
 const dirty = computed(() => Boolean(baseline.value) && snapshot() !== baseline.value)
 
 // Autosave holds off while a line has no description - the save would
-// only bounce off server validation; the red border says why.
+// only bounce off server validation; the accent border says why.
 const allLinesComplete = computed(() =>
   state.lines.every((line) => (line.description || "").trim())
 )

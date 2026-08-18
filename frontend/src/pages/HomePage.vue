@@ -48,7 +48,7 @@
         </span>
         <template #footer>
           <span class="text-xs" :class="silent.length ? 'text-accent' : 'text-faint'">
-            past {{ silenceDays || "—" }} days
+            past {{ silenceDays || "-" }} days
           </span>
         </template>
       </BentoCard>
@@ -84,7 +84,7 @@
       <BentoCard v-if="isFounder" founder title="Margin · open pipeline">
         <div class="flex items-baseline gap-2">
           <span class="aura-num text-3xl font-medium text-white">
-            {{ marginFloor !== null ? marginFloor + "%" : "—" }}
+            {{ marginFloor !== null ? marginFloor + "%" : "-" }}
           </span>
           <span class="text-xs text-white/50">floor</span>
         </div>

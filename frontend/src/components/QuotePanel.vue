@@ -1,70 +1,58 @@
 <template>
-  <div class="rounded-lg border p-4">
-    <h3 class="mb-1 text-xs font-semibold uppercase text-gray-500">
-      Client-facing quote
-    </h3>
-    <p class="text-xs text-gray-500">
-      Publishing freezes the packages and totals above into a new version
-      at its own link. Published versions never change - send a new one
-      instead.
-    </p>
-
+  <BentoCard
+    title="Client-facing quote"
+    subtitle="Publishing freezes the packages and totals above into a new version at its own link. Published versions never change - send a new one instead."
+  >
     <textarea
       v-model="notes"
       rows="2"
-      class="mt-3 w-full rounded border-gray-200 px-2 py-1 text-sm"
+      class="w-full rounded-[10px] border border-hairline bg-paper px-2.5 py-2 text-sm text-carbon placeholder:text-faint focus:border-accent focus:ring-0"
       placeholder="Note for the client (validity, payment terms…)"
     />
-    <Button class="mt-2" variant="solid" :loading="publishing" @click="publish">
+    <button
+      type="button"
+      class="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-[10px] bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-ink disabled:cursor-not-allowed disabled:opacity-60"
+      :disabled="publishing"
+      @click="publish"
+    >
+      <FeatherIcon
+        :name="publishing ? 'loader' : 'send'"
+        class="h-3.5 w-3.5"
+        :class="publishing ? 'animate-spin' : ''"
+      />
       Publish version {{ (quotes.data?.[0]?.version || 0) + 1 }}
-    </Button>
+    </button>
 
-    <div v-if="quotes.data?.length" class="mt-4 space-y-3">
-      <div
-        v-for="quote in quotes.data"
-        :key="quote.name"
-        class="rounded-md border p-3 text-sm"
-      >
+    <ul v-if="quotes.data?.length" class="mt-4 divide-y divide-hairline">
+      <li v-for="quote in quotes.data" :key="quote.name" class="py-3 first:pt-0">
         <div class="flex items-center gap-2">
-          <span class="font-medium">v{{ quote.version }}</span>
-          <span
-            class="rounded-full px-2 py-0.5 text-xs"
-            :class="STATUS_CLASS[quote.status] || 'bg-gray-100 text-gray-700'"
-          >
-            {{ quote.status }}
+          <span class="aura-num text-sm font-semibold text-carbon">
+            v{{ quote.version }}
           </span>
-          <span class="ml-auto tabular-nums text-gray-600">
-            {{ vnd(quote.total) }}
-          </span>
+          <StatusPill :label="quote.status" :tone="statusTone(quote.status)" />
+          <MoneyValue :amount="quote.total" class="ml-auto" />
         </div>
 
-        <div class="mt-2 flex items-center gap-2 text-xs">
+        <div class="mt-2 flex items-center gap-1.5 text-xs">
           <a
             :href="quote.url"
             target="_blank"
             rel="noopener"
-            class="truncate text-blue-700 hover:underline"
+            class="aura-num min-w-0 truncate text-muted hover:text-accent"
           >
             {{ quote.url }}
           </a>
-          <button
-            class="shrink-0 rounded border px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
-            @click="copy(quote.url)"
-          >
+          <button type="button" :class="chip" @click="copy(quote.url)">
             {{ copied === quote.url ? "Copied" : "Copy" }}
           </button>
-          <a
-            :href="quote.pdf_url"
-            class="shrink-0 rounded border px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
-          >
-            PDF
-          </a>
+          <a :href="quote.pdf_url" :class="chip">PDF</a>
         </div>
 
-        <div class="mt-2 flex items-center gap-2 text-xs text-gray-600">
+        <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
           <button
+            type="button"
             class="underline-offset-2 hover:underline"
-            :class="quote.opens ? 'text-green-700' : ''"
+            :class="quote.opens ? 'font-medium text-ok' : ''"
             @click="toggleOpens(quote)"
           >
             {{ quote.opens }} open{{ quote.opens === 1 ? "" : "s" }}
@@ -75,21 +63,25 @@
               · last {{ day(quote.last_open) }}
             </template>
           </button>
-          <span v-if="quote.sent_on">· sent {{ day(quote.sent_on) }}</span>
-          <span v-if="quote.confirmed_on">
+          <span v-if="quote.sent_on" class="text-faint">
+            · sent {{ day(quote.sent_on) }}
+          </span>
+          <span v-if="quote.confirmed_on" class="text-faint">
             · confirmed {{ day(quote.confirmed_on) }}
           </span>
-          <span class="ml-auto flex gap-1">
+          <span class="ml-auto flex shrink-0 gap-1">
             <button
               v-if="quote.status !== 'Sent'"
-              class="rounded border px-1.5 py-0.5 hover:bg-gray-50"
+              type="button"
+              :class="chip"
               @click="mark(quote, 'sent')"
             >
               {{ quote.status === "Confirmed" ? "Undo confirm" : "Mark sent" }}
             </button>
             <button
               v-if="quote.status !== 'Confirmed'"
-              class="rounded border px-1.5 py-0.5 hover:bg-gray-50"
+              type="button"
+              :class="chip"
               @click="mark(quote, 'confirmed')"
             >
               Mark confirmed
@@ -100,28 +92,31 @@
         <!-- Story 22: *when* it was opened is what decides follow-up timing. -->
         <ul
           v-if="openLog[quote.name]"
-          class="mt-2 border-t pt-2 text-xs text-gray-500"
+          class="mt-2 border-t border-hairline pt-2 text-xs text-faint"
         >
-          <li v-for="(event, i) in openLog[quote.name]" :key="i">
+          <li v-for="(event, i) in openLog[quote.name]" :key="i" class="aura-num">
             {{ event.opened_on?.slice(0, 16) }} · {{ event.via }}
           </li>
-          <li v-if="!openLog[quote.name].length">No opens yet.</li>
+          <li v-if="!openLog[quote.name].length" class="text-muted">
+            No opens yet.
+          </li>
         </ul>
-      </div>
-    </div>
-    <p v-else class="mt-4 text-xs text-gray-400">
-      No quote published yet.
-    </p>
+      </li>
+    </ul>
+    <EmptyState v-else title="No quote published yet." />
 
     <ErrorMessage class="mt-2" :message="error" />
-  </div>
+  </BentoCard>
 </template>
 
 <script setup>
 import { ref } from "vue"
-import { Button, ErrorMessage, createResource } from "frappe-ui"
+import { ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
+import BentoCard from "./BentoCard.vue"
+import EmptyState from "./EmptyState.vue"
+import MoneyValue from "./MoneyValue.vue"
+import StatusPill from "./StatusPill.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd } from "../utils/money"
 
 const props = defineProps({
   deal: { type: String, required: true },
@@ -131,10 +126,15 @@ const props = defineProps({
 })
 const emit = defineEmits(["changed"])
 
-const STATUS_CLASS = {
-  Published: "bg-gray-100 text-gray-700",
-  Sent: "bg-blue-50 text-blue-700",
-  Confirmed: "bg-green-50 text-green-700",
+// Quiet chrome for the secondary actions - the ember belongs to Publish.
+const chip =
+  "shrink-0 rounded-[6px] border border-hairline bg-paper px-1.5 py-0.5 text-muted transition-colors hover:border-accent/40 hover:text-accent-ink"
+
+// Published is a fact, Sent is in flight, Confirmed is settled.
+function statusTone(status) {
+  if (status === "Confirmed") return "ok"
+  if (status === "Sent") return "accent"
+  return "neutral"
 }
 
 const notes = ref("")

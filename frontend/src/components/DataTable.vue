@@ -36,7 +36,7 @@
               :class="col.align === 'right' ? 'text-right' : ''"
             >
               <slot :name="`cell-${col.key}`" :row="row" :value="row[col.key]">
-                <span class="text-carbon">{{ row[col.key] ?? "—" }}</span>
+                <span class="text-carbon">{{ row[col.key] ?? "-" }}</span>
               </slot>
             </td>
           </tr>

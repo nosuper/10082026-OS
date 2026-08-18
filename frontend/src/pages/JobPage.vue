@@ -1,157 +1,139 @@
 <template>
-  <div class="px-4 pb-6">
-    <!-- Sticky, like the breakdown editor: the job's identity and stage
-         never scroll away. -->
-    <div
-      class="sticky top-0 z-10 -mx-4 mb-4 border-b bg-gray-50/95 px-4 py-3 backdrop-blur"
-    >
-      <div class="flex flex-wrap items-center gap-3">
-        <router-link to="/jobs" class="text-sm text-gray-500 hover:text-gray-800">
-          ← Jobs
-        </router-link>
-        <h1 class="text-lg font-semibold text-gray-900">
-          {{ doc?.title || name }}
-        </h1>
-        <span class="text-xs tabular-nums text-gray-400">{{ name }}</span>
-        <span v-if="companyName" class="text-sm text-gray-500">
-          · {{ companyName }}
-        </span>
-        <div v-if="doc" class="ml-auto flex items-center gap-2">
-          <span class="h-2 w-2 rounded-full" :class="jobStageDot(stage)"></span>
-          <select
-            v-model="stage"
-            class="rounded border-gray-200 py-1 pl-2 pr-8 text-sm"
-            @change="saveStage"
-          >
-            <option v-for="option in STAGES" :key="option" :value="option">
-              {{ option }}
-            </option>
-          </select>
-        </div>
+  <div class="space-y-4">
+    <!-- Page head: the job's identity, then the one control that moves it.
+         The app shell's header is already sticky, so this reads as a title
+         block, not a second bar. -->
+    <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
+      <router-link to="/jobs" class="text-sm text-muted hover:text-accent">
+        ← Jobs
+      </router-link>
+      <h1 class="text-xl font-semibold text-carbon">
+        {{ doc?.title || name }}
+      </h1>
+      <span class="aura-num text-xs text-faint">{{ name }}</span>
+      <span v-if="companyName" class="text-sm text-muted">
+        · {{ companyName }}
+      </span>
+      <div v-if="doc" class="ml-auto flex items-center gap-2">
+        <span
+          class="h-1.5 w-1.5 rounded-pill"
+          :class="stage === 'Complete' ? 'bg-ok' : 'bg-accent'"
+        ></span>
+        <select
+          v-model="stage"
+          class="rounded-[10px] border border-hairline bg-paper py-1.5 pl-2 pr-8 text-sm text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30"
+          @change="saveStage"
+        >
+          <option v-for="option in STAGES" :key="option" :value="option">
+            {{ option }}
+          </option>
+        </select>
       </div>
     </div>
 
-    <div v-if="job.loading" class="py-12 text-center text-sm text-gray-500">
+    <div v-if="job.loading" class="aura-card p-10 text-center text-sm text-muted">
       Loading…
     </div>
 
     <template v-else-if="doc">
-      <!-- Production progress, market-app style: the pipeline as a
-           stepper, one click to move the job. -->
-      <div class="mb-4 flex gap-1">
-        <button
-          v-for="(option, index) in STAGES"
-          :key="option"
-          class="group min-w-0 flex-1"
-          :title="`Move to ${option}`"
-          @click="setStageTo(option)"
-        >
-          <span
-            class="block h-1.5 rounded-full transition-colors"
-            :class="
-              index <= stageIndex
-                ? jobStageDot(doc.stage)
-                : 'bg-gray-200 group-hover:bg-gray-300'
-            "
-          ></span>
-          <span
-            class="mt-1 block truncate text-center text-[11px] leading-tight"
-            :class="
-              option === doc.stage
-                ? 'font-semibold text-gray-900'
-                : 'text-gray-400 group-hover:text-gray-600'
-            "
+      <!-- Production progress as a chip trail: where the job is, and one
+           click to move it. -->
+      <div class="aura-card flex flex-wrap items-center gap-1 p-2">
+        <template v-for="(option, index) in STAGES" :key="option">
+          <button
+            class="rounded-[8px] border px-2.5 py-1 text-xs transition-colors"
+            :class="stageChipClass(index)"
+            :title="`Move to ${option}`"
+            @click="setStageTo(option)"
           >
             {{ option }}
-          </span>
-        </button>
+          </button>
+          <FeatherIcon
+            v-if="index < STAGES.length - 1"
+            name="chevron-right"
+            class="h-3 w-3 shrink-0 text-faint/60"
+          />
+        </template>
       </div>
 
       <!-- The job's money at a glance - collected against quoted is the
            number the founder chases (spec #2, story 39). -->
-      <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div class="rounded-lg border bg-white p-3">
-          <div class="text-xs text-gray-500">Quoted</div>
-          <div class="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">
-            {{ vnd(doc.quote_total) }}
-          </div>
-        </div>
-        <div class="rounded-lg border bg-white p-3">
-          <div class="text-xs text-gray-500">Collected</div>
-          <div class="mt-0.5 text-lg font-semibold tabular-nums text-green-700">
-            {{ vnd(collected) }}
-          </div>
-          <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <BentoCard title="Quoted">
+          <MoneyValue :amount="doc.quote_total" short size="lg" />
+        </BentoCard>
+
+        <BentoCard title="Collected">
+          <span class="aura-num text-2xl font-medium text-ok">
+            {{ vndShort(collected) }}
+          </span>
+          <div class="mt-2 h-1.5 overflow-hidden rounded-pill bg-hairline">
             <div
-              class="h-full rounded-full bg-green-500"
+              class="h-full rounded-pill bg-ok transition-all"
               :style="{ width: `${collectedPct}%` }"
             ></div>
           </div>
-        </div>
-        <div class="rounded-lg border bg-white p-3">
-          <div class="flex items-center gap-1.5 text-xs text-gray-500">
-            Uncollected
-            <span
-              v-if="overdueCount"
-              class="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
-            >
-              <FeatherIcon name="alert-circle" class="h-3 w-3" />
-              {{ overdueCount }} overdue
+          <template #footer>
+            <span class="text-xs text-faint">{{ collectedPct }}% of the quote</span>
+          </template>
+        </BentoCard>
+
+        <BentoCard title="Uncollected" :attention="overdueCount > 0">
+          <template v-if="overdueCount" #action>
+            <StatusPill tone="accent" :label="`${overdueCount} overdue`" />
+          </template>
+          <MoneyValue
+            :amount="uncollected"
+            short
+            size="lg"
+            :tone="overdueCount ? 'accent' : 'ink'"
+          />
+        </BentoCard>
+
+        <BentoCard title="Spent">
+          <MoneyValue :amount="moneySummary.data?.spent_total || 0" short size="lg" />
+          <template #footer>
+            <span class="text-xs text-faint">
+              of {{ vnd(moneySummary.data?.quoted_total || 0) }} quoted costs ·
+              {{ vnd(moneySummary.data?.advanced_total || 0) }} advanced
             </span>
-          </div>
-          <div
-            class="mt-0.5 text-lg font-semibold tabular-nums"
-            :class="overdueCount ? 'text-red-700' : 'text-gray-900'"
-          >
-            {{ vnd(uncollected) }}
-          </div>
-        </div>
-        <div class="rounded-lg border bg-white p-3">
-          <div class="text-xs text-gray-500">Spent</div>
-          <div class="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">
-            {{ vnd(moneySummary.data?.spent_total || 0) }}
-          </div>
-          <div class="mt-0.5 text-xs text-gray-500">
-            of {{ vnd(moneySummary.data?.quoted_total || 0) }} quoted costs ·
-            {{ vnd(moneySummary.data?.advanced_total || 0) }} advanced
-          </div>
-        </div>
+          </template>
+        </BentoCard>
       </div>
 
       <!-- Tabs: production work, money, paperwork - the market pattern
            for a record this deep. v-show, not v-if: panels keep their
            state and their reload handles while hidden. -->
-      <div class="mb-4 flex items-center gap-1 border-b">
+      <div class="flex items-center gap-1 border-b border-hairline">
         <button
           v-for="tab in TABS"
           :key="tab"
           class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors"
           :class="
             activeTab === tab
-              ? 'border-gray-900 text-gray-900'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
+              ? 'border-accent text-carbon'
+              : 'border-transparent text-muted hover:text-carbon'
           "
           @click="activeTab = tab"
         >
           {{ tab }}
           <span
             v-if="tab === 'Money' && overdueCount"
-            class="ml-1 inline-block h-2 w-2 rounded-full bg-red-500"
+            class="ml-1 inline-block h-1.5 w-1.5 rounded-pill bg-accent align-middle"
             title="Overdue payments"
           ></span>
         </button>
       </div>
 
       <div v-show="activeTab === 'Production'">
-        <div class="grid gap-4 lg:grid-cols-3">
-          <div class="space-y-4 lg:col-span-2">
+        <div class="grid gap-3 lg:grid-cols-3">
+          <div class="space-y-3 lg:col-span-2">
             <!-- Files location: the answer to "where does this job live?" -->
-            <div class="rounded-lg border bg-white p-3">
+            <BentoCard title="Files">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-semibold text-gray-800">Files</span>
                 <input
                   v-model="filesLocation"
-                  class="min-w-0 flex-1 rounded border-gray-200 px-2 py-1 text-sm"
+                  class="min-w-0 flex-1 rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-sm text-carbon placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent/30"
                   :placeholder="`Shared folder for this job code - e.g. //nas/jobs/${name}`"
                 />
                 <Button
@@ -161,230 +143,192 @@
                   Save
                 </Button>
               </div>
-              <p v-if="!doc.files_location" class="mt-1 text-xs text-amber-700">
+              <p v-if="!doc.files_location" class="mt-2 text-xs text-warn">
                 No folder recorded yet - files still live on someone's personal
                 drive.
               </p>
-            </div>
+            </BentoCard>
 
             <!-- Revisions -->
-            <div class="rounded-lg border bg-white p-3">
-              <div class="mb-2 flex flex-wrap items-center gap-2">
-                <h2 class="text-sm font-semibold text-gray-800">Revisions</h2>
-                <span
-                  v-if="doc.change_order_due"
-                  class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
-                >
-                  <FeatherIcon name="alert-triangle" class="h-3 w-3" />
-                  Round {{ doc.revision_rounds }} - chargeable change order
-                </span>
-                <span v-else class="text-xs text-gray-500">
-                  {{ doc.revision_rounds || 0 }} of
-                  {{ includedRounds }} included rounds used
-                </span>
-
-                <label
-                  class="ml-auto flex items-center gap-1 text-xs text-gray-500"
-                >
-                  Included rounds
-                  <input
-                    v-model.number="includedRounds"
-                    type="number"
-                    min="0"
-                    class="w-14 rounded border-gray-200 px-1 py-0.5 text-xs tabular-nums"
-                    @change="saveIncludedRounds"
+            <DataTable
+              title="Revisions"
+              :count="doc.revisions?.length || 0"
+              :columns="revisionColumns"
+              :rows="doc.revisions || []"
+              empty-title="No revision rounds logged."
+            >
+              <template #action>
+                <div class="flex flex-wrap items-center justify-end gap-3">
+                  <StatusPill
+                    v-if="doc.change_order_due"
+                    tone="warn"
+                    :label="`Round ${doc.revision_rounds} · chargeable change order`"
                   />
-                </label>
-              </div>
+                  <span v-else class="text-xs text-muted">
+                    {{ doc.revision_rounds || 0 }} of
+                    {{ includedRounds }} included rounds used
+                  </span>
+                  <label class="flex items-center gap-1.5 text-xs text-muted">
+                    Included rounds
+                    <input
+                      v-model.number="includedRounds"
+                      type="number"
+                      min="0"
+                      class="aura-num w-12 rounded-[8px] border border-hairline bg-paper px-1.5 py-0.5 text-right text-xs text-carbon focus:outline-none focus:ring-2 focus:ring-accent/30"
+                      @change="saveIncludedRounds"
+                    />
+                  </label>
+                </div>
+              </template>
 
-              <table v-if="doc.revisions?.length" class="w-full text-sm">
-                <thead class="text-left text-xs text-gray-600">
-                  <tr>
-                    <th class="py-1 font-medium">#</th>
-                    <th class="py-1 font-medium">Requested</th>
-                    <th class="py-1 font-medium">What the client asked for</th>
-                    <th class="py-1 font-medium">By</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="row in doc.revisions"
-                    :key="row.name"
-                    class="border-t"
-                    :class="row.chargeable ? 'bg-amber-50' : ''"
-                  >
-                    <td class="py-1 pr-2 tabular-nums">
-                      <span class="inline-flex items-center gap-1">
-                        {{ row.round }}
-                        <FeatherIcon
-                          v-if="row.chargeable"
-                          name="alert-triangle"
-                          class="h-3 w-3 text-amber-700"
-                          title="Chargeable"
-                        />
-                      </span>
-                    </td>
-                    <td
-                      class="whitespace-nowrap py-1 pr-2 tabular-nums text-gray-600"
+              <template #cell-round="{ row }">
+                <span class="inline-flex items-center gap-1.5">
+                  <span class="aura-num text-sm text-carbon">{{ row.round }}</span>
+                  <FeatherIcon
+                    v-if="row.chargeable"
+                    name="alert-triangle"
+                    class="h-3 w-3 text-warn"
+                    title="Chargeable"
+                  />
+                </span>
+              </template>
+              <template #cell-requested_on="{ row }">
+                <span class="aura-num whitespace-nowrap text-xs text-muted">
+                  {{ row.requested_on?.slice(0, 16) }}
+                </span>
+              </template>
+              <template #cell-note="{ row }">
+                <span class="text-sm text-carbon">{{ row.note }}</span>
+              </template>
+              <template #cell-logged_by="{ row }">
+                <span class="whitespace-nowrap text-xs text-faint">{{ row.logged_by }}</span>
+              </template>
+
+              <template #footer>
+                <div class="space-y-1.5 py-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <input
+                      v-model="revisionNote"
+                      class="min-w-0 flex-1 rounded-[10px] border border-hairline bg-paper px-2.5 py-1.5 text-sm text-carbon placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent/30"
+                      placeholder="What did the client ask for?"
+                      @keyup.enter="logRevision"
+                    />
+                    <Button
+                      variant="solid"
+                      :disabled="!revisionNote.trim()"
+                      :loading="revision.loading"
+                      @click="logRevision"
                     >
-                      {{ row.requested_on?.slice(0, 16) }}
-                    </td>
-                    <td class="py-1 pr-2 text-gray-800">{{ row.note }}</td>
-                    <td class="whitespace-nowrap py-1 text-gray-500">
-                      {{ row.logged_by }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p v-else class="py-2 text-sm text-gray-400">
-                No revision rounds logged.
-              </p>
-
-              <div class="mt-3 flex flex-wrap items-center gap-2">
-                <input
-                  v-model="revisionNote"
-                  class="min-w-0 flex-1 rounded border-gray-200 px-2 py-1 text-sm"
-                  placeholder="What did the client ask for?"
-                  @keyup.enter="logRevision"
-                />
-                <Button
-                  variant="solid"
-                  :disabled="!revisionNote.trim()"
-                  :loading="revision.loading"
-                  @click="logRevision"
-                >
-                  Log revision
-                </Button>
-              </div>
-              <p v-if="redoNotice" class="mt-1 text-xs text-blue-700">
-                {{ redoNotice }}
-              </p>
-              <p v-if="nextIsChargeable" class="mt-1 text-xs text-amber-700">
-                The next round is past the included ones - it will be flagged
-                as a chargeable change order.
-              </p>
-              <p v-if="redoOnLog" class="mt-1 text-xs text-gray-500">
-                Logging a revision sends this job back to {{ REDO_STAGE }}.
-              </p>
-            </div>
+                      Log revision
+                    </Button>
+                  </div>
+                  <p v-if="redoNotice" class="text-xs text-accent-ink">
+                    {{ redoNotice }}
+                  </p>
+                  <p v-if="nextIsChargeable" class="text-xs text-warn">
+                    The next round is past the included ones - it will be flagged
+                    as a chargeable change order.
+                  </p>
+                  <p v-if="redoOnLog" class="text-xs text-faint">
+                    Logging a revision sends this job back to {{ REDO_STAGE }}.
+                  </p>
+                </div>
+              </template>
+            </DataTable>
 
             <!-- Carried packages -->
-            <div class="rounded-lg border bg-white p-3">
-              <h2 class="mb-2 text-sm font-semibold text-gray-800">
-                Packages (carried from the deal)
-              </h2>
-              <table v-if="doc.packages?.length" class="w-full text-sm">
-                <thead class="text-left text-xs text-gray-600">
-                  <tr>
-                    <th class="py-1 font-medium">Package</th>
-                    <th class="py-1 font-medium">Description</th>
-                    <th class="py-1 text-right font-medium">Price (VND)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="row in doc.packages"
-                    :key="row.name"
-                    class="border-t"
-                  >
-                    <td class="py-1 pr-2 font-medium text-gray-900">
-                      {{ row.title }}
-                    </td>
-                    <td class="py-1 pr-2 text-gray-600">
-                      {{ row.description }}
-                    </td>
-                    <td class="py-1 text-right tabular-nums">
-                      {{ vnd(row.price) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p v-else class="py-2 text-sm text-gray-400">
-                The deal had no packages.
-              </p>
-            </div>
+            <DataTable
+              title="Packages"
+              :count="doc.packages?.length || 0"
+              :columns="packageColumns"
+              :rows="doc.packages || []"
+              empty-title="The deal had no packages."
+            >
+              <template #action>
+                <span class="text-xs text-faint">carried from the deal</span>
+              </template>
+              <template #cell-title="{ row }">
+                <span class="text-sm font-medium text-carbon">{{ row.title }}</span>
+              </template>
+              <template #cell-description="{ row }">
+                <span class="text-sm text-muted">{{ row.description }}</span>
+              </template>
+              <template #cell-price="{ row }">
+                <MoneyValue :amount="row.price" />
+              </template>
+            </DataTable>
           </div>
 
           <!-- Client, links, totals -->
-          <div class="space-y-4">
-            <div class="rounded-lg border bg-white p-3 text-sm">
-              <h2 class="mb-2 text-sm font-semibold text-gray-800">Client</h2>
-              <dl class="space-y-1 text-gray-700">
-                <div class="flex justify-between gap-2">
-                  <dt class="text-gray-500">Company</dt>
-                  <dd>{{ companyName || doc.company }}</dd>
+          <div class="space-y-3">
+            <BentoCard title="Client">
+              <dl class="space-y-1.5 text-sm">
+                <div class="flex justify-between gap-3">
+                  <dt class="text-muted">Company</dt>
+                  <dd class="text-carbon">{{ companyName || doc.company }}</dd>
                 </div>
-                <div v-if="doc.contact" class="flex justify-between gap-2">
-                  <dt class="text-gray-500">Contact</dt>
-                  <dd>{{ doc.contact }}</dd>
+                <div v-if="doc.contact" class="flex justify-between gap-3">
+                  <dt class="text-muted">Contact</dt>
+                  <dd class="text-carbon">{{ doc.contact }}</dd>
                 </div>
-                <div class="flex justify-between gap-2">
-                  <dt class="text-gray-500">Owner</dt>
-                  <dd>{{ doc.job_owner }}</dd>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-muted">Owner</dt>
+                  <dd class="text-carbon">{{ doc.job_owner }}</dd>
                 </div>
-                <div v-if="doc.deal" class="flex justify-between gap-2">
-                  <dt class="text-gray-500">From deal</dt>
+                <div v-if="doc.deal" class="flex justify-between gap-3">
+                  <dt class="text-muted">From deal</dt>
                   <dd>
                     <router-link
                       :to="`/deals/${doc.deal}/breakdown`"
-                      class="text-blue-700 hover:underline"
+                      class="aura-num text-accent-ink hover:underline"
                     >
                       {{ doc.deal }}
                     </router-link>
                   </dd>
                 </div>
               </dl>
-            </div>
+            </BentoCard>
 
-            <div
-              v-if="doc.job_links?.length"
-              class="rounded-lg border bg-white p-3"
-            >
-              <h2 class="mb-2 text-sm font-semibold text-gray-800">Links</h2>
-              <ul class="space-y-1 text-sm">
+            <BentoCard v-if="doc.job_links?.length" title="Links">
+              <ul class="space-y-1.5 text-sm">
                 <li v-for="row in doc.job_links" :key="row.name">
                   <a
                     :href="row.url"
                     target="_blank"
                     rel="noopener"
-                    class="text-blue-700 hover:underline"
+                    class="text-accent-ink hover:underline"
                   >
                     {{ row.label }}
                   </a>
                 </li>
               </ul>
-            </div>
+            </BentoCard>
 
-            <div class="rounded-lg border bg-white p-3 text-sm">
-              <h2 class="mb-2 text-sm font-semibold text-gray-800">
-                Quoted (at conversion)
-              </h2>
-              <dl class="space-y-1 text-gray-700">
-                <div class="flex justify-between gap-2">
-                  <dt class="text-gray-500">Subtotal</dt>
-                  <dd class="tabular-nums">{{ vnd(doc.quote_subtotal) }}</dd>
+            <BentoCard title="Quoted" subtitle="At conversion">
+              <dl class="space-y-1.5 text-sm">
+                <div class="flex justify-between gap-3">
+                  <dt class="text-muted">Subtotal</dt>
+                  <dd><MoneyValue :amount="doc.quote_subtotal" /></dd>
                 </div>
-                <div class="flex justify-between gap-2">
-                  <dt class="text-gray-500">Management fee</dt>
-                  <dd class="tabular-nums">{{ vnd(doc.quote_mf_amount) }}</dd>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-muted">Management fee</dt>
+                  <dd><MoneyValue :amount="doc.quote_mf_amount" /></dd>
                 </div>
-                <div class="flex justify-between gap-2">
-                  <dt class="text-gray-500">VAT</dt>
-                  <dd class="tabular-nums">{{ vnd(doc.quote_vat_amount) }}</dd>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-muted">VAT</dt>
+                  <dd><MoneyValue :amount="doc.quote_vat_amount" /></dd>
                 </div>
-                <div
-                  class="flex justify-between gap-2 border-t pt-1 font-medium"
-                >
-                  <dt>Total</dt>
-                  <dd class="tabular-nums">{{ vnd(doc.quote_total) }}</dd>
+                <div class="flex justify-between gap-3 border-t border-hairline pt-1.5">
+                  <dt class="font-medium text-carbon">Total</dt>
+                  <dd><MoneyValue :amount="doc.quote_total" /></dd>
                 </div>
               </dl>
-            </div>
+            </BentoCard>
           </div>
         </div>
       </div>
 
-      <div v-show="activeTab === 'Money'" class="space-y-4">
+      <div v-show="activeTab === 'Money'" class="space-y-3">
         <!-- Money in: what the client owes, and where it has got to -->
         <MilestonesPanel ref="milestones" :job="name" @changed="moneyChanged" />
 
@@ -406,9 +350,12 @@ import { ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
 import PaperworkPanel from "../components/PaperworkPanel.vue"
+import BentoCard from "../components/BentoCard.vue"
+import DataTable from "../components/DataTable.vue"
+import StatusPill from "../components/StatusPill.vue"
+import MoneyValue from "../components/MoneyValue.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
-import { vnd } from "../utils/money"
-import { jobStageDot } from "../utils/stages"
+import { vnd, vndShort } from "../utils/money"
 import JobMoneyPanel from "../components/JobMoneyPanel.vue"
 import MilestonesPanel from "../components/MilestonesPanel.vue"
 import { PAID } from "../data/milestones"
@@ -434,6 +381,19 @@ const redoNotice = ref("")
 // starts with, and the server is the authority on both.
 const includedRounds = ref(INCLUDED_REVISION_ROUNDS)
 
+const revisionColumns = [
+  { key: "round", label: "#", width: "56px" },
+  { key: "requested_on", label: "Requested", width: "150px" },
+  { key: "note", label: "What the client asked for" },
+  { key: "logged_by", label: "By", width: "160px" },
+]
+
+const packageColumns = [
+  { key: "title", label: "Package", width: "220px" },
+  { key: "description", label: "Description" },
+  { key: "price", label: "Price (VND)", align: "right", width: "160px" },
+]
+
 const job = createResource({
   url: "frappe.client.get",
   makeParams: () => ({ doctype: "Job", name }),
@@ -453,6 +413,14 @@ const job = createResource({
 const doc = computed(() => job.data)
 
 const stageIndex = computed(() => STAGES.indexOf(doc.value?.stage))
+
+// The chip trail: done stages sit on the canvas, the current one carries
+// the accent, the rest stay quiet until hovered.
+function stageChipClass(index) {
+  if (index === stageIndex.value) return "border-accent bg-accent text-white"
+  if (index < stageIndex.value) return "border-hairline bg-canvas text-carbon"
+  return "border-transparent text-faint hover:border-hairline hover:text-muted"
+}
 
 // -- the stat strip: the same numbers the panels read, fetched here so
 //    the summary shows before either tab is opened --

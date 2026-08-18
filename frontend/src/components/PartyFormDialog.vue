@@ -4,95 +4,167 @@
     @update:modelValue="$emit('update:modelValue', $event)"
     :options="{ title: title, size: 'xl' }"
   >
+    <!-- Own title block: the app's display face, with a line saying what this
+         record is for, so the form is not a bare grid of boxes. The dialog's
+         own close button and title semantics are kept. -->
+    <template #body-title>
+      <div class="min-w-0">
+        <div class="aura-eyebrow">{{ isContact ? "Person" : "Company" }}</div>
+        <h3 class="mt-0.5 font-display text-lg font-semibold text-carbon">
+          {{ title }}
+        </h3>
+        <p class="mt-1 text-xs font-normal text-muted">{{ subtitle }}</p>
+      </div>
+    </template>
+
     <template #body-content>
-      <div v-if="loading" class="py-8 text-center text-sm text-gray-500">
+      <div v-if="loading" class="py-10 text-center text-sm text-muted">
         Loading…
       </div>
-      <div v-else class="space-y-4">
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormControl
-            v-for="field in fields"
-            :key="field.fieldname"
-            :type="field.type || 'text'"
-            :label="field.label"
-            v-model="form[field.fieldname]"
-            :required="field.required"
-          />
+      <div v-else class="space-y-5">
+        <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+          <div v-for="field in fields" :key="field.fieldname" class="space-y-1.5">
+            <label class="aura-eyebrow block" :for="`party-${field.fieldname}`">
+              {{ field.label }}
+              <span v-if="field.required" class="text-accent">*</span>
+            </label>
+            <FormControl
+              :id="`party-${field.fieldname}`"
+              :type="field.type || 'text'"
+              size="md"
+              variant="outline"
+              v-model="form[field.fieldname]"
+              :required="field.required"
+            />
+          </div>
+
+          <div v-if="isContact" class="space-y-1.5 sm:col-span-2">
+            <label class="aura-eyebrow block" for="party-company">Company</label>
+            <FormControl
+              id="party-company"
+              type="autocomplete"
+              size="md"
+              variant="outline"
+              :options="companyOptions"
+              v-model="companySelection"
+              placeholder="No company"
+            />
+          </div>
         </div>
 
-        <div v-if="isContact">
-          <FormControl
-            type="autocomplete"
-            label="Company"
-            :options="companyOptions"
-            v-model="companySelection"
-            placeholder="No company"
-          />
-        </div>
-
-        <div>
-          <div class="mb-1.5 text-xs text-gray-600">Role Tags</div>
-          <div class="flex gap-4">
-            <Checkbox
+        <!-- Role tags drive what the rest of the form asks for, so they sit
+             above the conditional sections, not buried at the bottom. -->
+        <div class="border-t border-hairline pt-4">
+          <div class="aura-eyebrow">Role Tags</div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <div
               v-for="role in availableRoles"
               :key="role"
-              :label="role"
-              :modelValue="selectedRoles.includes(role)"
-              @update:modelValue="toggleRole(role, $event)"
-            />
+              class="flex items-center rounded-pill border px-3 py-1.5 transition-colors"
+              :class="
+                selectedRoles.includes(role)
+                  ? 'border-carbon bg-canvas'
+                  : 'border-hairline bg-paper'
+              "
+            >
+              <Checkbox
+                :label="role"
+                :modelValue="selectedRoles.includes(role)"
+                @update:modelValue="toggleRole(role, $event)"
+              />
+            </div>
+            <p v-if="!availableRoles.length" class="text-xs text-faint">
+              No roles defined yet.
+            </p>
           </div>
         </div>
 
-        <div v-if="showFreelancerPaperwork">
-          <div class="mb-2 border-t pt-3 text-xs font-medium text-gray-700">
-            Freelancer Paperwork
+        <div v-if="showFreelancerPaperwork" class="border-t border-hairline pt-4">
+          <div class="flex flex-wrap items-baseline gap-2">
+            <div class="aura-eyebrow">Freelancer Paperwork</div>
+            <span class="text-xs text-faint">
+              Blank fields print as gaps on the contract.
+            </span>
           </div>
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormControl
+          <div class="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div
               v-for="field in FREELANCER_FIELDS"
               :key="field.fieldname"
-              :type="field.type || 'text'"
-              :label="field.label"
-              v-model="form[field.fieldname]"
-            />
+              class="space-y-1.5"
+            >
+              <label class="aura-eyebrow block" :for="`party-${field.fieldname}`">
+                {{ field.label }}
+              </label>
+              <FormControl
+                :id="`party-${field.fieldname}`"
+                :type="field.type || 'text'"
+                size="md"
+                variant="outline"
+                v-model="form[field.fieldname]"
+              />
+            </div>
           </div>
         </div>
 
-        <div>
-          <div class="mb-2 border-t pt-3 text-xs font-medium text-gray-700">
-            Bank
-          </div>
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormControl
-              type="select"
-              label="Bank Name"
-              :options="bankOptions"
-              v-model="form.bank_name"
-            />
-            <FormControl
-              type="text"
-              label="Bank Account Number"
-              v-model="form.bank_account_number"
-            />
-            <FormControl
-              type="text"
-              label="Bank Account Name"
-              v-model="form.bank_account_name"
-            />
+        <div class="border-t border-hairline pt-4">
+          <div class="aura-eyebrow">Bank</div>
+          <div class="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div class="space-y-1.5">
+              <label class="aura-eyebrow block" for="party-bank_name">Bank Name</label>
+              <FormControl
+                id="party-bank_name"
+                type="select"
+                size="md"
+                variant="outline"
+                :options="bankOptions"
+                v-model="form.bank_name"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="aura-eyebrow block" for="party-bank_account_number">
+                Bank Account Number
+              </label>
+              <FormControl
+                id="party-bank_account_number"
+                type="text"
+                size="md"
+                variant="outline"
+                class="aura-num"
+                v-model="form.bank_account_number"
+              />
+            </div>
+            <div class="space-y-1.5 sm:col-span-2">
+              <label class="aura-eyebrow block" for="party-bank_account_name">
+                Bank Account Name
+              </label>
+              <FormControl
+                id="party-bank_account_name"
+                type="text"
+                size="md"
+                variant="outline"
+                v-model="form.bank_account_name"
+              />
+            </div>
           </div>
         </div>
 
-        <FormControl
-          type="textarea"
-          label="Notes"
-          v-model="form.notes"
-        />
+        <div class="space-y-1.5 border-t border-hairline pt-4">
+          <label class="aura-eyebrow block" for="party-notes">Notes</label>
+          <FormControl
+            id="party-notes"
+            type="textarea"
+            size="md"
+            variant="outline"
+            v-model="form.notes"
+          />
+        </div>
 
         <ErrorMessage :message="saveError" />
       </div>
     </template>
+
     <template #actions>
-      <div class="flex justify-end gap-2">
+      <div class="flex items-center justify-end gap-2 border-t border-hairline pt-4">
         <Button @click="$emit('update:modelValue', false)">Cancel</Button>
         <Button variant="solid" :loading="saving" @click="save">
           {{ name ? "Save" : "Create" }}
@@ -129,6 +201,13 @@ const title = computed(() => {
   const noun = isContact.value ? "Person" : "Company"
   return props.name ? `Edit ${noun}` : `New ${noun}`
 })
+
+// One line under the title, saying why the fields below matter.
+const subtitle = computed(() =>
+  isContact.value
+    ? "People carry their own paperwork: CCCD, tax code and bank."
+    : "Companies hold tax code, address and bank details for contracts."
+)
 
 const COMPANY_FIELDS = [
   { fieldname: "company_name", label: "Company Name", required: true },
