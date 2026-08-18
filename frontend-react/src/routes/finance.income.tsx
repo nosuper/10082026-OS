@@ -1,25 +1,47 @@
+// Money in, on real data.
+//
+// One read: auraos.api.finance_income(date_from, date_to). It answers the
+// whole screen - months, a per-client breakdown inside each month, and the
+// range total - so there is nothing here to add up and nothing to derive.
+//
+// The basis is cash and the payload says so. A milestone counts on the day it
+// was recorded paid, never the day it fell due and never the day an invoice
+// was issued, and the banner at the top of this screen reads that claim off
+// `basis` rather than asserting it on its own authority.
+
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Banknote, CalendarRange, TrendingDown, TrendingUp } from "lucide-react";
+import { useState } from "react";
+
 import { AppShell } from "@/components/aura/AppShell";
+import { Bar, FinanceTabs } from "@/components/aura/FinanceTabs";
+import {
+  FinanceRangeBar,
+  MonthLabel,
+  rangeLabel,
+  scaleOf,
+  useFinanceRange,
+  type IncomeMonth,
+  type IncomeReport,
+} from "@/components/aura/FinanceRange";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
-import { FinanceTabs } from "@/components/aura/FinanceTabs";
-import { FormDialog, type FieldDef } from "@/components/aura/FormDialog";
-import { incomeRows as seedIncome, sum, type IncomeRow } from "@/data/finance";
+import { Figure, QueryState } from "@/components/aura/states";
+import { countLabel } from "@/lib/format";
+import { useMethod } from "@/lib/queries";
 
 export const Route = createFileRoute("/finance/income")({
   head: () => ({
     meta: [
-      { title: "Income & receivables — invoices and collections | AuraOS" },
+      { title: "Income - money collected, by month and by client | AuraOS" },
       {
         name: "description",
         content:
-          "Every client invoice with amount, VAT, due date and collection status, plus what is still outstanding.",
+          "Cash collected per calendar month, broken down by client. Cash basis: dated by the day the money was received.",
       },
-      { property: "og:title", content: "Income & receivables — AuraOS" },
+      { property: "og:title", content: "Income - AuraOS" },
       {
         property: "og:description",
-        content: "Invoices, VAT, due dates and collection status per deal.",
+        content: "Cash collected per month and per client, on a cash basis.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -28,156 +50,259 @@ export const Route = createFileRoute("/finance/income")({
   component: IncomePage,
 });
 
-const statusTone: Record<IncomeRow["status"], string> = {
-  "Đã thu": "positive",
-  "Chờ thu": "neutral",
-  "Quá hạn": "ember",
-};
+/** The month a founder is looking at: the latest one money actually arrived in. */
+function defaultMonth(months: IncomeMonth[]): IncomeMonth | null {
+  for (let i = months.length - 1; i >= 0; i -= 1) {
+    const month = months[i];
+    if (month && month.count > 0) return month;
+  }
+  return months[months.length - 1] ?? null;
+}
 
-const filters = ["All", "Đã thu", "Chờ thu", "Quá hạn"] as const;
+/** The fattest month in the range. A pick, not a calculation. */
+function bestMonth(months: IncomeMonth[]): IncomeMonth | null {
+  let best: IncomeMonth | null = null;
+  for (const month of months) {
+    if (month.count > 0 && (!best || month.total > best.total)) best = month;
+  }
+  return best;
+}
 
-const fields: FieldDef[] = [
-  { name: "client", label: "Client", type: "text", required: true },
-  { name: "deal", label: "Deal code", type: "text", placeholder: "DEAL-0182" },
-  { name: "invoice", label: "Invoice no.", type: "text", placeholder: "INV-0182-2" },
-  { name: "amount", label: "Amount (VND, excl. VAT)", type: "text", required: true },
-  { name: "vatPct", label: "VAT %", type: "select", options: ["10", "8", "0"] },
-  { name: "method", label: "Method", type: "select", options: ["Chuyển khoản", "Tiền mặt"] },
-  { name: "due", label: "Due date", type: "text", placeholder: "30 Sep 2026" },
-  { name: "status", label: "Status", type: "select", options: ["Chờ thu", "Đã thu", "Quá hạn"] },
-];
+/**
+ * Better or worse than the month before, as a direction and nothing else.
+ * The two figures are both printed on the screen; the app does not print a
+ * difference it worked out itself.
+ */
+function Direction({ months, at }: { months: IncomeMonth[]; at: number }) {
+  const here = months[at];
+  const before = months[at - 1];
+  if (!here || !before || here.total === before.total) return null;
+  const up = here.total > before.total;
+  const Icon = up ? TrendingUp : TrendingDown;
+  return (
+    <Icon
+      className={`inline-block size-3.5 ${up ? "text-positive" : "text-ember"}`}
+      strokeWidth={2}
+      aria-label={up ? `up on ${before.month}` : `down on ${before.month}`}
+    />
+  );
+}
 
 function IncomePage() {
-  const [rows, setRows] = useState<IncomeRow[]>(seedIncome);
-  const [filter, setFilter] = useState<(typeof filters)[number]>("All");
-  const [open, setOpen] = useState(false);
+  const [range, setRange] = useFinanceRange();
+  const [picked, setPicked] = useState<string | null>(null);
 
-  const visible = useMemo(
-    () => (filter === "All" ? rows : rows.filter((r) => r.status === filter)),
-    [rows, filter],
-  );
+  const income = useMethod<IncomeReport>("auraos.api.finance_income", {
+    date_from: range.from,
+    date_to: range.to,
+  });
 
-  const collected = sum(rows.filter((r) => r.status === "Đã thu").map((r) => r.amount));
-  const outstanding = sum(rows.filter((r) => r.status !== "Đã thu").map((r) => r.amount));
-  const overdue = sum(rows.filter((r) => r.status === "Quá hạn").map((r) => r.amount));
-
-  function create(values: Record<string, string>) {
-    const amount = Number((values["amount"] ?? "0").replace(/\D/g, "")) || 0;
-    const vatPct = Number(values["vatPct"] ?? "10") || 0;
-    const status = (values["status"] as IncomeRow["status"]) ?? "Chờ thu";
-    setRows((prev) => [
-      {
-        id: `IN-${2100 + prev.length}`,
-        date: status === "Đã thu" ? "18 Aug 2026" : "—",
-        client: values["client"] ?? "Khách mới",
-        deal: values["deal"] || "—",
-        invoice: values["invoice"] || "—",
-        amount,
-        vat: Math.round((amount * vatPct) / 100),
-        method: (values["method"] as IncomeRow["method"]) ?? "Chuyển khoản",
-        status,
-        due: values["due"] || "—",
-      },
-      ...prev,
-    ]);
-    setOpen(false);
-  }
+  const report = income.data;
+  const months = report?.months ?? [];
+  const selected = months.find((month) => month.month === picked) ?? defaultMonth(months);
+  const top = bestMonth(months);
+  const scale = scaleOf(months.map((month) => month.total));
+  const clientScale = scaleOf((selected?.clients ?? []).map((row) => row.total));
 
   return (
     <AppShell
       title="Income"
-      meta={`${rows.length} invoices · Jan–Aug 2026`}
+      meta={`Cash basis · ${rangeLabel(range)}`}
       actions={
-        <button
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          <Plus className="size-3.5" /> New invoice
-        </button>
+        report ? (
+          <Pill tone="ink">{report.basis === "cash" ? "Cash basis" : report.basis}</Pill>
+        ) : null
       }
     >
       <div className="space-y-5">
         <FinanceTabs />
 
+        <FinanceRangeBar range={range} onChange={setRange} />
+
+        <p className="flex items-start gap-2 rounded-xl border border-border bg-secondary/40 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <Banknote className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
+          <span>
+            <strong className="font-medium text-foreground">
+              {report && report.basis !== "cash" ? report.basis : "Cash basis"}.
+            </strong>{" "}
+            This is money actually collected, dated by the day it was received - not the day it was
+            invoiced and not the day it fell due. It is the only figure the studio can spend.
+          </span>
+        </p>
+
         <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Collected" value={<Money value={collected} />} sub="Cash in the bank" />
-          <Stat label="Outstanding" value={<Money value={outstanding} />} sub="Invoiced, not paid" />
-          <Stat label="Overdue" value={<Money value={overdue} />} sub="Past the due date" alert />
+          <Stat
+            label="Collected in range"
+            value={
+              <Figure query={income}>
+                <Money value={report?.total ?? 0} />
+              </Figure>
+            }
+            sub={income.isSuccess ? countLabel(report?.count ?? 0, "payment") : undefined}
+          />
+          <Stat
+            label="Best month"
+            value={
+              <Figure query={income}>
+                <Money value={top?.total ?? 0} />
+              </Figure>
+            }
+            sub={
+              income.isSuccess
+                ? top
+                  ? `${top.month} · ${countLabel(top.count, "payment")}`
+                  : "No money collected in this range"
+                : undefined
+            }
+          />
+          <Stat
+            label="Months in range"
+            value={
+              <Figure query={income} width="3rem">
+                <span className="num">{months.length}</span>
+              </Figure>
+            }
+            sub={
+              income.isSuccess
+                ? `${countLabel(months.filter((m) => m.count > 0).length, "month")} with money in`
+                : undefined
+            }
+          />
         </div>
 
         <Card
-          title="Invoices"
-          subtitle="Client billing and collection status"
+          title="Collected by month"
+          subtitle="Every month in the range, including the empty ones"
           action={
-            <div className="flex gap-1">
-              {filters.map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                    filter === f
-                      ? "border-transparent bg-primary text-primary-foreground"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
+            selected ? (
+              <span className="label-caps">Showing clients for {selected.month}</span>
+            ) : null
           }
         >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-border">
-                <tr>
-                  <Th>Invoice</Th>
-                  <Th>Client</Th>
-                  <Th>Deal</Th>
-                  <Th>Paid on</Th>
-                  <Th>Due</Th>
-                  <Th className="text-right">Amount</Th>
-                  <Th className="text-right">VAT</Th>
-                  <Th>Method</Th>
-                  <Th>Status</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {visible.map((r) => (
-                  <tr key={r.id} className="hover:bg-secondary/50">
-                    <Td className="font-medium">{r.invoice}</Td>
-                    <Td>{r.client}</Td>
-                    <Td className="text-muted-foreground">{r.deal}</Td>
-                    <Td className="text-muted-foreground">{r.date}</Td>
-                    <Td className={r.status === "Quá hạn" ? "text-ember" : "text-muted-foreground"}>
-                      {r.due}
-                    </Td>
-                    <Td className="text-right">
-                      <Money value={r.amount} />
-                    </Td>
-                    <Td className="text-right text-muted-foreground">
-                      <Money value={r.vat} />
-                    </Td>
-                    <Td className="text-muted-foreground">{r.method}</Td>
-                    <Td>
-                      <Pill tone={statusTone[r.status]}>{r.status}</Pill>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <QueryState
+            query={income}
+            loadingRows={6}
+            isEmpty={() => months.length === 0}
+            empty={{
+              title: "That range covers no months.",
+              detail: "Pick a range that ends on or after the day it starts.",
+              icon: <CalendarRange className="size-6" strokeWidth={1.5} />,
+            }}
+          >
+            {() => (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b border-border">
+                    <tr>
+                      <Th>Month</Th>
+                      <Th className="w-full">Collected</Th>
+                      <Th className="text-right">Payments</Th>
+                      <Th className="text-right">Total</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {months.map((month, index) => (
+                      <tr
+                        key={month.month}
+                        onClick={() => setPicked(month.month)}
+                        className={`cursor-pointer transition-colors hover:bg-secondary/50 ${
+                          selected?.month === month.month ? "bg-secondary/60" : ""
+                        }`}
+                      >
+                        <Td className="whitespace-nowrap">
+                          <MonthLabel month={month.month} />{" "}
+                          <Direction months={months} at={index} />
+                        </Td>
+                        <Td>
+                          <Bar value={month.total} max={scale} tone="ink" />
+                        </Td>
+                        <Td className="num text-right text-xs text-muted-foreground">
+                          {month.count}
+                        </Td>
+                        <Td className="text-right">
+                          <Money
+                            value={month.total}
+                            className={month.total === 0 ? "text-muted-foreground" : ""}
+                          />
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t border-border">
+                    <tr>
+                      <Td className="label-caps">Range</Td>
+                      <Td />
+                      <Td className="num text-right text-xs text-muted-foreground">
+                        {report?.count ?? 0}
+                      </Td>
+                      <Td className="text-right font-semibold">
+                        <Money value={report?.total ?? 0} />
+                      </Td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </QueryState>
+        </Card>
+
+        <Card
+          title={selected ? `Who paid us in ${selected.month}` : "Who paid us"}
+          subtitle="Collected per client, biggest first"
+        >
+          <QueryState
+            query={income}
+            loadingRows={4}
+            isEmpty={() => (selected?.clients.length ?? 0) === 0}
+            empty={{
+              title: selected
+                ? `No money was collected in ${selected.month}.`
+                : "Nothing collected in this range.",
+              detail: "Pick another month above, or widen the range.",
+            }}
+          >
+            {() => (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b border-border">
+                    <tr>
+                      <Th>Client</Th>
+                      <Th className="w-full">Share of the month</Th>
+                      <Th className="text-right">Payments</Th>
+                      <Th className="text-right">Collected</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(selected?.clients ?? []).map((row) => (
+                      <tr key={row.company ?? "unknown"} className="hover:bg-secondary/50">
+                        <Td className="whitespace-nowrap">
+                          <div className="font-medium">
+                            {row.company_name || row.company || "Unknown client"}
+                          </div>
+                          {row.company ? (
+                            <div className="num text-[11px] text-muted-foreground">
+                              {row.company}
+                            </div>
+                          ) : null}
+                        </Td>
+                        <Td>
+                          <Bar value={row.total} max={clientScale} tone="ink" />
+                        </Td>
+                        <Td className="num text-right text-xs text-muted-foreground">
+                          {row.count}
+                        </Td>
+                        <Td className="text-right">
+                          <Money value={row.total} />
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </QueryState>
         </Card>
       </div>
-
-      <FormDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        title="New invoice"
-        subtitle="Record a client billing and its due date"
-        submitLabel="Create invoice"
-        fields={fields}
-        onSubmit={create}
-      />
     </AppShell>
   );
 }
