@@ -9,11 +9,15 @@ from auraos.auraos.doctype.deal.deal import (
     margin_floor_pct,
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
+from auraos.auraos.doctype.job.job import STAGES as JOB_STAGES
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, paperwork, settlement
-from auraos.lib.money import round_vnd
+from auraos.lib import breakdown, finance, paperwork, settlement
+from auraos.lib import reporting
+# Imported by name: `milestones` is a parameter of save_job_milestones.
+from auraos.lib.milestones import PAID as MILESTONE_PAID
+from auraos.lib.money import round_vnd, to_decimal
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import COMPANY_FIELDS
 
@@ -380,20 +384,33 @@ def deal_quotes(deal):
         ],
         order_by="version desc",
     )
-    tracking = {}
-    if quotes:
-        for row in frappe.get_all(
-            "Deal Quote Open",
-            filters={"quote": ["in", [q.name for q in quotes]]},
-            fields=["quote", "via", "count(name) as events", "max(opened_on) as last_open"],
-            group_by="quote, via",
-        ):
-            counts = tracking.setdefault(row.quote, {})
-            counts[row.via] = row.events
-            counts["last_open"] = max(
-                filter(None, [counts.get("last_open"), row.last_open]), default=None
-            )
+    tracking = _quote_tracking([row.name for row in quotes])
     return [_quote_dict(quote, tracking.get(quote.name)) for quote in quotes]
+
+
+def _quote_tracking(names):
+    """Opens and downloads per quote, counted in the database.
+
+    Grouped rather than fetched row by row: the open log is the one
+    table that grows without bound, and the cross-deal list asks about
+    every version at once. The fold itself is lib/reporting's, so the
+    two lists cannot count the same events differently.
+    """
+    if not names:
+        return {}
+    return reporting.open_tracking(
+        frappe.get_all(
+            "Deal Quote Open",
+            filters={"quote": ["in", list(names)]},
+            fields=[
+                "quote",
+                "via",
+                "count(name) as events",
+                "max(opened_on) as last_open",
+            ],
+            group_by="quote, via",
+        )
+    )
 
 
 @frappe.whitelist()
@@ -420,6 +437,95 @@ def deal_quote_links():
             "url": deal_quote.page_url(row.token),
         }
     return links
+
+
+QUOTATION_LIST_FIELDS = [
+    "name",
+    "deal",
+    "version",
+    "status",
+    "total",
+    "token",
+    "published_on",
+    "sent_on",
+    "confirmed_on",
+]
+
+
+def _company_names(companies):
+    """Display names for a set of Party Company links.
+
+    Screens list clients by name; the records link by code. One query
+    for the whole page rather than one per row.
+    """
+    companies = {company for company in companies if company}
+    if not companies:
+        return {}
+    return {
+        row.name: row.company_name
+        for row in frappe.get_all(
+            "Party Company",
+            filters={"name": ["in", list(companies)]},
+            fields=["name", "company_name"],
+        )
+    }
+
+
+@frappe.whitelist()
+def quotation_list(status=None, search=None):
+    """Every quote version across every deal, newest first.
+
+    A deal has always been able to list its own versions
+    (`deal_quotes`); this is the same rows without a deal in front of
+    them, because "what is out with clients right now" cannot be
+    assembled one deal at a time.
+
+    Scoped to the deals this session may list, the way the board's
+    mappings are: Deal Quote rows are read with get_all, which skips
+    row-level permissions, so the scope is the entire authorization.
+
+    Open tracking comes back as counts and a timestamp, never as prose -
+    the screen decides whether that reads "3 opens, last 17 Aug" or
+    "not opened yet".
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    deals = {
+        row.name: row
+        for row in frappe.get_list(
+            "Deal", fields=["name", "title", "company"], limit_page_length=0
+        )
+    }
+    if not deals:
+        return []
+
+    filters = {"deal": ["in", list(deals)]}
+    if status:
+        filters["status"] = status
+    quotes = frappe.get_all(
+        "Deal Quote",
+        filters=filters,
+        fields=QUOTATION_LIST_FIELDS,
+        # Newest first is publish order, not version order: two deals'
+        # v1s are not the same age.
+        order_by="published_on desc, version desc",
+    )
+    tracking = _quote_tracking([row.name for row in quotes])
+    clients = _company_names(deal.company for deal in deals.values())
+    rows = [
+        reporting.quotation_row(
+            quote,
+            deal_title=deals[quote.deal].title,
+            company=deals[quote.deal].company,
+            client=clients.get(deals[quote.deal].company),
+            url=deal_quote.page_url(quote.token),
+            tracking=tracking.get(quote.name),
+        )
+        for quote in quotes
+    ]
+    # Searched after the rows are built, not in SQL: the client's name
+    # lives on a third document, and the founder types whichever of the
+    # two they remember.
+    return [row for row in rows if reporting.matches_search(row, search)]
 
 
 @frappe.whitelist()
@@ -883,6 +989,255 @@ def overdue_milestones():
         "payment_terms_days": job_payment_milestone.payment_terms_days(),
         "milestones": job_payment_milestone.overdue(),
     }
+
+
+# -- finance aggregates across every job --
+#
+# Money in, money out and money owed, rolled up for the finance screens.
+# The arithmetic is auraos.lib.finance; these three are the adapters that
+# fetch the rows.
+#
+# All three are producer-visible on purpose and by construction. They are
+# built from milestone amounts and job expenses, both of which a producer
+# already reads one job at a time (job_milestones, job_money); the
+# founder's numbers - commission, CM, profit before tax, TNDN, net profit
+# and VAT payable - live on the Deal behind permlevel 1 and are not part
+# of any of these answers.
+
+MILESTONE_INCOME_FIELDS = ["name", "parent", "title", "amount", "paid_on"]
+MILESTONE_RECEIVABLE_FIELDS = ["name", "parent", "title", "amount", "status", "due_on"]
+FINANCE_EXPENSE_FIELDS = ["name", "job", "spent_on", "amount", "category", "paid_from"]
+
+
+def _finance_range(date_from, date_to):
+    """The reporting window, refused rather than guessed.
+
+    frappe.utils.getdate turns a missing bound into today, which would
+    quietly report a different period than the caller asked for. A range
+    that ends before it starts is a different matter - it is empty, and
+    an empty report is the honest answer to it.
+    """
+    if not date_from or not date_to:
+        frappe.throw(
+            _("A finance report needs a date range"), frappe.ValidationError
+        )
+    return frappe.utils.getdate(date_from), frappe.utils.getdate(date_to)
+
+
+def _permitted_jobs():
+    """The jobs this session may list - the scope of every finance read.
+
+    The rows below are read with frappe.get_all, which skips row-level
+    permissions, so this list is the entire authorization: the same shape
+    job_payment_milestone.overdue() and the deal board's tag map use.
+    """
+    return frappe.get_list("Job", pluck="name", limit_page_length=0)
+
+
+def _job_clients(names):
+    """{job: {title, company, company_name}} for a set of jobs.
+
+    Read with get_all behind the caller's job scoping, exactly as
+    job_payment_milestone.overdue() reads the same three fields. The
+    client's own name is on every quote a producer sends, so nothing here
+    widens what they may see.
+    """
+    if not names:
+        return {}
+    jobs = frappe.get_all(
+        "Job",
+        filters={"name": ["in", list(names)]},
+        fields=["name", "title", "company"],
+    )
+    companies = {job.company for job in jobs if job.company}
+    labels = (
+        {
+            row.name: row.company_name
+            for row in frappe.get_all(
+                "Party Company",
+                filters={"name": ["in", list(companies)]},
+                fields=["name", "company_name"],
+            )
+        }
+        if companies
+        else {}
+    )
+    return {
+        job.name: {
+            "title": job.title,
+            "company": job.company,
+            "company_name": labels.get(job.company),
+        }
+        for job in jobs
+    }
+
+
+def _with_client(rows, clients):
+    """Hang each row's job, client and client name off the row."""
+    for row in rows:
+        client = clients.get(row.parent) or {}
+        row["job"] = row.parent
+        row["job_title"] = client.get("title")
+        row["company"] = client.get("company")
+        row["company_name"] = client.get("company_name")
+    return rows
+
+
+@frappe.whitelist()
+def finance_income(date_from, date_to):
+    """Money actually collected in a range, by month and by client.
+
+    Cash basis: a milestone counts on the day it was recorded paid, not
+    the day it fell due and not the day the accountant issued the
+    invoice. Money in the bank is the only number a studio can spend, and
+    the finance screens say "cash basis" on their face.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    start, end = _finance_range(date_from, date_to)
+    permitted = _permitted_jobs()
+    rows = []
+    if permitted:
+        rows = frappe.get_all(
+            "Job Payment Milestone",
+            filters={
+                "parenttype": "Job",
+                "parent": ["in", permitted],
+                "status": MILESTONE_PAID,
+                "paid_on": ["between", [start, end]],
+            },
+            fields=MILESTONE_INCOME_FIELDS,
+            order_by="paid_on asc",
+        )
+        rows = _with_client(rows, _job_clients({row.parent for row in rows}))
+    return finance.income_report(rows, start, end)
+
+
+@frappe.whitelist()
+def finance_expenses(date_from, date_to):
+    """Money spent in a range, by month, by category and by whose money.
+
+    Every expense on every job this session may list - overhead has no
+    home in the model yet, so this is job spend and says so by carrying
+    the job on nothing but the query.
+    """
+    frappe.has_permission("Job Expense", "read", throw=True)
+    start, end = _finance_range(date_from, date_to)
+    permitted = _permitted_jobs()
+    rows = []
+    if permitted:
+        rows = frappe.get_all(
+            "Job Expense",
+            filters={
+                "job": ["in", permitted],
+                "spent_on": ["between", [start, end]],
+            },
+            fields=FINANCE_EXPENSE_FIELDS,
+            order_by="spent_on asc, creation asc",
+        )
+    return finance.expense_report(rows, start, end)
+
+
+@frappe.whitelist()
+def finance_receivables():
+    """What clients owe us right now, aged into buckets.
+
+    Not a range: what is owed is owed today. Everything uncollected
+    counts, not only what has run past the terms - overdue_milestones()
+    answers the nudge, this answers the ledger - and the lateness verdict
+    is the same one, read from auraos.lib.milestones through the same
+    payment terms.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    permitted = _permitted_jobs()
+    rows = []
+    if permitted:
+        rows = frappe.get_all(
+            "Job Payment Milestone",
+            filters={
+                "parenttype": "Job",
+                "parent": ["in", permitted],
+                "status": ["!=", MILESTONE_PAID],
+            },
+            fields=MILESTONE_RECEIVABLE_FIELDS,
+            order_by="due_on asc",
+        )
+        rows = _with_client(rows, _job_clients({row.parent for row in rows}))
+    return finance.receivables_report(
+        rows,
+        now=frappe.utils.now_datetime(),
+        terms_days=job_payment_milestone.payment_terms_days(),
+    )
+
+
+# -- what a job earned (the new UI's per-job profitability) --
+
+# A job stops being open at the end of the production flow; everything
+# before Complete is still running and still worth watching.
+CLOSED_JOB_STAGE = JOB_STAGES[-1]
+
+
+def _job_profit(doc, client=None):
+    """One job's money, as far as it has gone.
+
+    Quoted-versus-actual is lib/settlement's - the same comparison
+    `job_money` renders per category, totalled here rather than computed
+    a second way. Money in is the milestones already collected, which is
+    producer-visible by the same decision that makes the milestone plan
+    producer-visible.
+    """
+    advances, expenses, settlements = _money_rows(doc.name)
+    categories = settlement.category_actuals(doc.packages, doc.cost_lines, expenses)
+    sums = settlement.totals(advances, expenses, categories)
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "company": doc.company,
+        "client": client,
+        "stage": doc.stage,
+        **reporting.profit_view(
+            quoted_total=doc.quote_total,
+            # Output VAT is the client's tax passing through us, so the
+            # margin base is what the company actually keeps - the same
+            # base lib/quote.quote_chain measures a deal's margin on.
+            revenue_ex_vat=to_decimal(doc.quote_subtotal or 0)
+            + to_decimal(doc.quote_mf_amount or 0),
+            quoted_cost=sums.quoted,
+            actual_cost=sums.spent,
+            milestones=[row.as_dict() for row in doc.payment_milestones],
+        ),
+    }
+
+
+@frappe.whitelist()
+def job_profitability(job=None):
+    """What a job has earned so far - one job, or every open one.
+
+    Margin, deliberately, and not the founder profit chain. A producer
+    already sees the quoted total, the milestone plan and every đồng
+    spent; the difference between what was quoted and what the shoot is
+    costing is the number that tells them it is going wrong, and story
+    32 exists so they can act on it. Commission, CM, profit before tax,
+    TNDN and net profit stay behind `deal_profit`, and no code path here
+    reads them.
+
+    With no argument the answer is the whole board, scoped by get_list
+    so a producer sees only the jobs they may list.
+    """
+    if job:
+        _check_job_permission(job, "read")
+        names = [job]
+    else:
+        frappe.has_permission("Job", "read", throw=True)
+        names = frappe.get_list(
+            "Job",
+            filters={"stage": ["!=", CLOSED_JOB_STAGE]},
+            pluck="name",
+            order_by="modified desc",
+            limit_page_length=0,
+        )
+    docs = [frappe.get_doc("Job", name) for name in names]
+    clients = _company_names(doc.company for doc in docs)
+    return [_job_profit(doc, clients.get(doc.company)) for doc in docs]
 
 
 # -- paperwork (T11, issue #13) --
