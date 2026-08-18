@@ -16,9 +16,15 @@ What only a site can prove is the wiring:
 4. **Nothing founder-only rides along.** A producer session gets the
    same rows, and none of them carries commission, CM or the profit
    chain.
+5. **The row is a contract** (issue #83). Now that a separate React
+   frontend reads these rows over HTTP, the key set, the integer đồng
+   and the date types are asserted as an interface rather than left to
+   whatever the endpoint happens to return.
 
 Runs via: bench --site <site> run-tests --app auraos
 """
+
+from datetime import datetime
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -32,19 +38,35 @@ from auraos.auraos.doctype.deal_quote.test_deal_quote import (
     PRODUCER,
     make_quotable_deal,
 )
+from auraos.tests.contract import (
+    FOUNDER_ONLY,
+    assert_counts,
+    assert_keys,
+    assert_money,
+    assert_no_founder_chain,
+)
 from auraos.tests.utils import make_test_user
 
-# The Deal's permlevel-1 block plus the commission rate; none of it may
-# appear on a row any producer can fetch.
-FOUNDER_ONLY = {
-    "commission_pct",
-    "total_commission",
-    "cm",
-    "profit_before_tax",
-    "tndn",
-    "net_profit",
-    "vat_payable",
-}
+# Every key a row carries. Listed once: the boundary test proves a
+# producer gets exactly this and no founder field, and the contract test
+# proves the frontend gets exactly this and no renamed one.
+ROW_KEYS = [
+    "client",
+    "company",
+    "confirmed_on",
+    "deal",
+    "deal_title",
+    "download_count",
+    "last_opened_at",
+    "name",
+    "open_count",
+    "published_on",
+    "sent_on",
+    "status",
+    "total",
+    "url",
+    "version",
+]
 
 
 def rows_for(deal, **kwargs):
@@ -177,26 +199,8 @@ class TestQuotationListBoundary(QuotationListTestCase):
         frappe.set_user(PRODUCER)
         (row,) = rows_for(self.deal.name)
         self.assertTrue(FOUNDER_ONLY.isdisjoint(row))
-        self.assertEqual(
-            sorted(row),
-            [
-                "client",
-                "company",
-                "confirmed_on",
-                "deal",
-                "deal_title",
-                "download_count",
-                "last_opened_at",
-                "name",
-                "open_count",
-                "published_on",
-                "sent_on",
-                "status",
-                "total",
-                "url",
-                "version",
-            ],
-        )
+        assert_no_founder_chain(self, row, "producer quote row")
+        assert_keys(self, row, ROW_KEYS, "producer quote row")
 
     def test_an_outsider_reads_no_quotes_at_all(self):
         publish_quote(self.deal.name)
@@ -204,3 +208,55 @@ class TestQuotationListBoundary(QuotationListTestCase):
         frappe.set_user(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):
             quotation_list()
+
+
+class TestQuotationListContract(QuotationListTestCase):
+    """The row as the React frontend receives it (issue #83, spec #81).
+
+    Shape only. What a total *is* belongs to lib/quote and is pinned in
+    tests/; what this file pins is that the total is still called
+    `total` and still arrives as a number the frontend can print.
+    """
+
+    def test_the_row_carries_every_documented_key_and_no_other(self):
+        publish_quote(self.deal.name)
+
+        (row,) = rows_for(self.deal.name)
+        assert_keys(self, row, ROW_KEYS, "quote row")
+
+    def test_the_total_is_whole_dong_and_the_tallies_are_plain_counts(self):
+        quote = publish_quote(self.deal.name)
+        record_open(quote["name"], via="Page")
+
+        (row,) = rows_for(self.deal.name)
+        assert_money(self, row, "total", where="quote row")
+        assert_counts(self, row, "version", "open_count", "download_count", where="quote row")
+
+    def test_an_empty_result_is_an_empty_list_not_an_error(self):
+        """A search that matches nothing is a normal afternoon, and a
+        new company has published no quotes at all."""
+        publish_quote(self.deal.name)
+
+        rows = quotation_list(search="no client by this name exists")
+        self.assertEqual(rows, [])
+
+    def test_the_quote_stamps_leave_as_datetimes_rather_than_iso_strings(self):
+        """Named rather than accommodated.
+
+        Spec #81 says dates cross the wire as ISO strings, and the
+        finance reports honour that through lib/finance._iso. This
+        endpoint passes the stored stamp straight out of get_all, so it
+        leaves Python as a datetime and leaves Frappe's JSON encoder as
+        `2026-08-13 16:45:26.952510` - space separated, which is not
+        what `datetime.isoformat` writes and not what every browser's
+        Date parser accepts. Pinned so that the day api.py starts
+        emitting `_iso`, this test fails and points at the reason.
+        """
+        quote = publish_quote(self.deal.name)
+        mark_quote_sent(quote["name"])
+        record_open(quote["name"], via="Page")
+
+        (row,) = rows_for(self.deal.name)
+        for field in ("published_on", "sent_on", "last_opened_at"):
+            self.assertIsInstance(row[field], datetime, f"{field} is not a datetime")
+        self.assertIsNone(row["confirmed_on"], "an unsigned quote has no signing date")

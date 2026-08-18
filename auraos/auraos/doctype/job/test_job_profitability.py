@@ -14,6 +14,10 @@ What only a site can prove is the wiring:
 4. **Margin, never the profit chain.** A producer gets the whole row,
    and the row has no commission, CM, profit before tax, TNDN or net
    profit on it for anyone.
+5. **The row is a contract** (issue #83). Now that a separate React
+   frontend reads it over HTTP, the key set and the integer đồng are
+   asserted as an interface rather than left to whatever the endpoint
+   happens to return.
 
 Runs via: bench --site <site> run-tests --app auraos
 """
@@ -32,19 +36,45 @@ from auraos.api import (
 )
 from auraos.auraos.doctype.deal.test_deal import FOUNDER, OUTSIDER, PRODUCER
 from auraos.auraos.doctype.job.job import STAGES
+from auraos.tests.contract import (
+    FOUNDER_ONLY,
+    assert_keys,
+    assert_money,
+    assert_no_founder_chain,
+)
 from auraos.tests.utils import make_test_user
 from auraos.auraos.doctype.job.test_job import won_deal
 
-# The Deal's permlevel-1 block plus the commission rate the job carries.
-FOUNDER_ONLY = {
-    "commission_pct",
-    "total_commission",
-    "cm",
-    "profit_before_tax",
-    "tndn",
-    "net_profit",
-    "vat_payable",
-}
+# Every key a row carries. Listed once: the boundary test proves a
+# producer gets exactly this and no founder field, and the contract test
+# proves the frontend gets exactly this and no renamed one.
+ROW_KEYS = [
+    "actual_cost",
+    "client",
+    "collected",
+    "company",
+    "margin",
+    "margin_pct",
+    "name",
+    "quoted_cost",
+    "quoted_total",
+    "revenue_ex_vat",
+    "stage",
+    "title",
+    "uncollected",
+]
+
+# Every đồng figure on the row - all of them whole numbers, none of them
+# a float that a screen would have to round before printing.
+MONEY_KEYS = (
+    "quoted_total",
+    "collected",
+    "uncollected",
+    "revenue_ex_vat",
+    "quoted_cost",
+    "actual_cost",
+    "margin",
+)
 
 CATEGORY = "Thiết bị"
 
@@ -191,24 +221,8 @@ class TestProfitabilityBoundary(ProfitabilityTestCase):
         frappe.set_user(PRODUCER)
         row = profit_of(self.job)
         self.assertTrue(FOUNDER_ONLY.isdisjoint(row))
-        self.assertEqual(
-            sorted(row),
-            [
-                "actual_cost",
-                "client",
-                "collected",
-                "company",
-                "margin",
-                "margin_pct",
-                "name",
-                "quoted_cost",
-                "quoted_total",
-                "revenue_ex_vat",
-                "stage",
-                "title",
-                "uncollected",
-            ],
-        )
+        assert_no_founder_chain(self, row, "producer profitability row")
+        assert_keys(self, row, ROW_KEYS, "producer profitability row")
 
     def test_the_producer_reads_the_same_numbers_the_founder_does(self):
         log_job_expense(self.job, 5_000_000, category=CATEGORY)
@@ -224,3 +238,50 @@ class TestProfitabilityBoundary(ProfitabilityTestCase):
             job_profitability(self.job)
         with self.assertRaises(frappe.PermissionError):
             job_profitability()
+
+
+class TestProfitabilityContract(ProfitabilityTestCase):
+    """The row as the React frontend receives it (issue #83, spec #81).
+
+    Shape only. Whether the margin is right belongs to lib/reporting and
+    is pinned in tests/; what this file pins is that it is still called
+    `margin` and still arrives as a number the frontend can print.
+    """
+
+    def test_the_row_carries_every_documented_key_and_no_other(self):
+        log_job_expense(self.job, 5_000_000, category=CATEGORY)
+
+        assert_keys(self, profit_of(self.job), ROW_KEYS, "profitability row")
+
+    def test_every_figure_on_the_row_is_whole_dong(self):
+        log_job_expense(self.job, 4_500_001, category=CATEGORY)
+        first = job_milestones(self.job)["milestones"][0]
+        set_milestone_status(self.job, first["name"], "Paid")
+
+        assert_money(self, profit_of(self.job), *MONEY_KEYS, where="profitability row")
+
+    def test_the_margin_percentage_is_a_number_the_screen_formats(self):
+        """A percentage is not money, so it stays a float - and a job
+        quoted at nothing has no percentage rather than a misleading 0."""
+        row = profit_of(self.job)
+        self.assertIs(type(row["margin_pct"]), float)
+
+    def test_a_job_nothing_has_happened_to_yet_is_zeroed_not_absent(self):
+        """The shape a job has on the day it is converted: every key
+        present, every unspent figure a zero."""
+        save_job_milestones(self.job, [])
+
+        row = profit_of(self.job)
+        assert_keys(self, row, ROW_KEYS, "untouched profitability row")
+        assert_money(self, row, *MONEY_KEYS, where="untouched profitability row")
+        self.assertEqual(row["collected"], 0)
+        self.assertEqual(row["actual_cost"], 0)
+
+    def test_the_row_carries_no_date_at_all(self):
+        """Named rather than assumed. Spec #81 promises ISO dates where
+        there are dates; this payload has none - not the job's stage
+        date, not the last expense, not when the money came in - so a
+        screen wanting "as of when" has to ask somewhere else.
+        """
+        row = profit_of(self.job)
+        self.assertEqual([key for key in row if key.endswith(("_on", "_at"))], [])
