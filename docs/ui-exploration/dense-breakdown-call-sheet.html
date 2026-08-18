@@ -5,6 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AuraOS breakdown - Call sheet</title>
 <style>
+/* ---- app shell ---------------------------------------------------- */
+:root{ --desk:#BEBBB0; --stock:#E6E4DD; --ink:#14130E; --ink2:#6E6B60; --rule:#B9B6AA; }
+html,body{margin:0;padding:0}
+body{background:var(--desk);}
+.app{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh;align-items:start}
+
+/* the spine: a binder edge, reusing the reversed-ink device the sections
+   already use, so it is the same stationery rather than a new component */
+.spine{position:sticky;top:0;align-self:start;height:100vh;background:var(--ink);
+  color:var(--stock);display:flex;flex-direction:column;
+  font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.14em;text-transform:uppercase}
+.spine-mark{padding:18px 14px 16px;border-bottom:1px solid #3a372f}
+.spine-mark b{display:block;font-size:15px;letter-spacing:.2em}
+.spine-mark span{display:block;margin-top:5px;font-size:9px;color:#8d887a;letter-spacing:.12em}
+.spine-nav{list-style:none;margin:0;padding:8px 0 0}
+.spine-nav a{display:block;padding:9px 14px;color:var(--stock);text-decoration:none;
+  border-left:3px solid transparent}
+.spine-nav a:hover{background:#221f19}
+.spine-nav a:focus-visible{outline:2px solid var(--stock);outline-offset:-2px}
+.spine-nav .on a{background:var(--stock);color:var(--ink);border-left-color:#A81F16}
+.spine-foot{margin-top:auto;padding:14px;border-top:1px solid #3a372f}
+.spine-foot a{color:#8d887a;text-decoration:none}
+.spine-foot a:hover{color:var(--stock)}
+
+/* the working area */
+.app-main{min-width:0;padding:22px 24px 90px}
+.measure{max-width:1120px;margin:0 auto}   /* document screens */
+.bleed{max-width:none}                      /* wide tables: fill app-main, scroll inside */
+
+/* below 900px the spine lies down as a top strip */
+@media (max-width:900px){
+  /* minmax(0,1fr), not 1fr: a plain 1fr track takes its min-content from the
+     nav labels and lets the page scroll sideways on a phone */
+  .app{grid-template-columns:minmax(0,1fr)}
+  .spine{position:static;height:auto;flex-direction:row;align-items:center;
+    flex-wrap:wrap;gap:0 2px;padding:0 8px}
+  .spine-mark{border-bottom:0;padding:10px 10px 10px 4px}
+  .spine-mark span{display:none}
+  /* must wrap: six items at min-content are ~430px, wider than a 390px phone,
+     which forced 56px of horizontal page scroll before this was added */
+  .spine-nav{display:flex;flex-wrap:wrap;padding:0}
+  .spine-nav a{padding:10px;border-left:0;border-bottom:3px solid transparent}
+  .spine-nav .on a{border-left-color:transparent;border-bottom-color:#A81F16}
+  .spine-foot{margin-left:auto;border-top:0;padding:10px}
+  .app-main{padding:14px 12px 90px}
+}
+/* ---- end app shell -------------------------------------------------- */
+
   :root{
     --paper:#E6E4DD;
     --paper-2:#DCDAD2;
@@ -37,21 +86,32 @@
   html{-webkit-text-size-adjust:100%}
 
   body{
-    margin:0;
-    padding-bottom:90px;
-    min-height:100vh;
-    /* the sheet is a fixed frame: the table scrolls inside it, so the pinned
-       head, stub, money block and totals never leave the screen */
-    height:100vh;
-    display:flex;
-    flex-direction:column;
-    background:var(--paper);
     color:var(--ink);
     font-family:var(--entry);
     font-size:15px;
     line-height:1.35;
-    background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
   }
+
+  /* ---- the sheet inside the shell's content area ----------------------
+     .bleed comes from the shell and only clears the measure. Everything the
+     paper itself needs lives on .sheet, so no shell rule is touched.
+
+     The sheet is a fixed frame: the table scrolls inside it, so the pinned
+     head, stub, money block and totals never leave the screen. The frame is
+     now app-main's content box, not the viewport, so the sticky gutters pin
+     against the content area - and the un-pin thresholds below are asked of
+     the sheet's own width through a container query rather than of the
+     viewport, which no longer knows how wide the working area is. */
+  .sheet{
+    container:sheet / inline-size;
+    display:flex;
+    flex-direction:column;
+    background:var(--paper);
+    background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
+    border:1px solid var(--rule);
+  }
+  /* 22px of desk above + 90px of desk below = app-main's own padding */
+  @media (min-width:901px){ .sheet{height:calc(100vh - 112px)} }
 
   .sans{font-family:var(--entry)}
   .vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
@@ -635,15 +695,35 @@
   }
 
   /* ============ RESPONSIVE ============ */
-  @media (max-width:1100px){
+  /* These thresholds are all about how much paper there is, so they are asked
+     of the sheet, not of the window. Under the shell the sheet is narrower
+     than the viewport by the spine plus app-main's padding - 256px while the
+     spine stands, 24px once it lies down at 900px - so a viewport figure would
+     be wrong in one regime or the other. Content widths below are the same
+     numbers the pre-shell build used against the viewport, so the sheet
+     behaves exactly as it did, one frame in. */
+  @container sheet (max-width:1100px){
     .info-strip{grid-template-columns:repeat(3,1fr)}
     .info-cell:nth-child(n+4){border-top:1px solid var(--rule)}
     .info-cell:nth-child(4){border-left:0}
   }
 
+  /* While the money block is pinned there is a fold at its left edge, and the
+     band's own money column - unit price - used to come to rest half under it.
+     The perforation excuses a cut category or contact; it does not excuse a cut
+     figure. Resting the band on a column boundary at that fold costs nothing:
+     the snapport is already the width between the two folds, because
+     scroll-padding was set to the gutters for keyboard focus. Proximity, so
+     panning stays free. No pin, no fold, no snap - hence the range below. */
+  @container sheet (min-width:1081px){
+    .sheet-wrap{scroll-snap-type:x proximity}
+    tbody tr.line td:not(.sticky-l):not(.sticky-r){scroll-snap-align:end}
+  }
+
   /* Below this the two pinned gutters (286 + 494) leave no working band between
-     them, so the money block gives up its pin and the sheet is simply panned. */
-  @media (max-width:1080px){
+     them, so the money block gives up its pin and the sheet is simply panned.
+     1080px of sheet is a 1336px window with the spine standing. */
+  @container sheet (max-width:1080px){
     .c-sub.sticky-r,
     .c-quote.sticky-r,
     .c-margin.sticky-r,
@@ -652,20 +732,23 @@
     .sheet-wrap{scroll-padding-right:0}
   }
   /* Narrower still and even the line stub has to let go. */
-  @media (max-width:700px){
+  @container sheet (max-width:700px){
     .c-no.sticky-l,
     .c-desc.sticky-l,
     .b-stub{left:auto}
     .sheet-wrap{scroll-padding-left:0}
   }
-  @media (max-width:760px){
-    body{height:auto}
-    .sheet-head{position:static}
-    .sheet-title{padding:8px 12px 10px}
-    .t-right{margin-left:0}
+  @container sheet (max-width:760px){
     .info-strip{grid-template-columns:repeat(2,1fr)}
     .info-cell:nth-child(n+3){border-top:1px solid var(--rule)}
     .info-cell:nth-child(odd){border-left:0}
+  }
+  /* The fixed frame needs a window to be fixed against: once the spine lies
+     down the sheet grows to its content and the page scrolls instead. */
+  @media (max-width:900px){
+    .sheet-head{position:static}
+    .sheet-title{padding:8px 12px 10px}
+    .t-right{margin-left:0}
     .sheet-wrap{min-height:60vh}
   }
 
@@ -674,7 +757,11 @@
   }
 
   @media print{
-    body{padding-bottom:0;background:#fff;background-image:none;display:block}
+    body{background:#fff}
+    .app{display:block}
+    .spine{display:none}
+    .app-main{padding:0}
+    .sheet{height:auto;display:block;background:#fff;background-image:none;border:0}
     .sheet-head{position:static}
     .sheet-wrap{overflow:visible;border-bottom:0}
     .sticky-l,.sticky-r,thead th,tfoot td{position:static}
@@ -684,6 +771,23 @@
 </style>
 </head>
 <body>
+
+<div class="app">
+<nav class="spine" aria-label="Main navigation">
+  <div class="spine-mark"><b>AuraOS</b><span>Production ops</span></div>
+  <ul class="spine-nav">
+    <li><a href="dense-dashboard-call-sheet.html">Home</a></li>
+    <li class="on"><a href="pipeline-call-sheet.html">Deals</a></li>
+    <li><a href="#jobs">Jobs</a></li>
+    <li><a href="#contacts">Contacts</a></li>
+    <li><a href="#paperwork">Paperwork</a></li>
+    <li><a href="#settings">Settings</a></li>
+  </ul>
+  <div class="spine-foot"><a href="#logout">Log out</a></div>
+</nav>
+<main class="app-main">
+
+<div class="bleed sheet">
 
 <input type="checkbox" id="detailcols" class="vh" checked>
 
@@ -741,7 +845,7 @@
   </div>
 </header>
 
-<main class="sheet-wrap">
+<div class="sheet-wrap">
 <table class="lines">
   <caption class="vh">Cost lines for deal DEAL-0182. Line and money columns stay pinned, the middle band scrolls horizontally.</caption>
 
@@ -1435,7 +1539,7 @@
   </tfoot>
 
 </table>
-</main>
+</div>
 
 <div class="key-strip">
   <span>All figures in VND - never abbreviated</span>
@@ -1445,6 +1549,10 @@
   <span>Line margin is before the 10% management fee added at quote level</span>
   <span>Sheet 01 of 01 - Rev 04 - 18 Aug 2026</span>
 </div>
+
+</div><!-- /.bleed.sheet -->
+</main>
+</div><!-- /.app -->
 
 <!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
 <div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">

@@ -18,17 +18,67 @@
     --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
     --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
 
-    /* the measure: a sheet of paper has an edge */
-    --measure: 1120px;
+    /* the measure now belongs to the shell (.measure) - the sheet inherits it */
     --pad: 22px;
   }
 
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
 
+  /* ---- app shell ---------------------------------------------------- */
+  :root{ --desk:#BEBBB0; --stock:#E6E4DD; --ink:#14130E; --ink2:#6E6B60; --rule:#B9B6AA; }
+  html,body{margin:0;padding:0}
+  body{background:var(--desk);}
+  .app{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh;align-items:start}
+
+  /* the spine: a binder edge, reusing the reversed-ink device the sections
+     already use, so it is the same stationery rather than a new component */
+  .spine{position:sticky;top:0;align-self:start;height:100vh;background:var(--ink);
+    color:var(--stock);display:flex;flex-direction:column;
+    font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    letter-spacing:.14em;text-transform:uppercase}
+  .spine-mark{padding:18px 14px 16px;border-bottom:1px solid #3a372f}
+  .spine-mark b{display:block;font-size:15px;letter-spacing:.2em}
+  .spine-mark span{display:block;margin-top:5px;font-size:9px;color:#8d887a;letter-spacing:.12em}
+  .spine-nav{list-style:none;margin:0;padding:8px 0 0}
+  .spine-nav a{display:block;padding:9px 14px;color:var(--stock);text-decoration:none;
+    border-left:3px solid transparent}
+  .spine-nav a:hover{background:#221f19}
+  .spine-nav a:focus-visible{outline:2px solid var(--stock);outline-offset:-2px}
+  .spine-nav .on a{background:var(--stock);color:var(--ink);border-left-color:#A81F16}
+  .spine-foot{margin-top:auto;padding:14px;border-top:1px solid #3a372f}
+  .spine-foot a{color:#8d887a;text-decoration:none}
+  .spine-foot a:hover{color:var(--stock)}
+
+  /* the working area */
+  .app-main{min-width:0;padding:22px 24px 90px}
+  .measure{max-width:1120px;margin:0 auto}   /* document screens */
+  .bleed{max-width:none}                      /* wide tables: fill app-main, scroll inside */
+
+  /* below 900px the spine lies down as a top strip */
+  @media (max-width:900px){
+    .app{grid-template-columns:1fr}
+    .spine{position:static;height:auto;flex-direction:row;align-items:center;
+      flex-wrap:wrap;gap:0 2px;padding:0 8px}
+    .spine-mark{border-bottom:0;padding:10px 10px 10px 4px}
+    .spine-mark span{display:none}
+    .spine-nav{display:flex;padding:0}
+    .spine-nav a{padding:10px;border-left:0;border-bottom:3px solid transparent}
+    .spine-nav .on a{border-left-color:transparent;border-bottom-color:#A81F16}
+    .spine-foot{margin-left:auto;border-top:0;padding:10px}
+    .app-main{padding:14px 12px 90px}
+  }
+  /* adaptation, not a restyle: the laid-down spine is a non-wrapping flex row,
+     so below ~440px its six labels set the grid track and the whole page
+     scrolls sideways. Letting the row wrap fixes it without touching a
+     single measure. */
+  @media (max-width:900px){
+    .app{grid-template-columns:minmax(0,1fr)}
+    .spine-nav{flex-wrap:wrap}
+  }
+
   body{
     margin:0;
-    padding-bottom:90px;
     min-height:100vh;
     background:var(--desk);
     color:var(--ink);
@@ -38,10 +88,11 @@
   }
 
   /* ============ THE SHEET ON THE DESK ============ */
+  /* the shell's .measure now sets the width and the centring - the sheet
+     only has to be a sheet */
   .sheet{
     width:100%;
-    max-width:var(--measure);
-    margin:30px auto 0;
+    margin:0;
     background:var(--paper);
     border:1px solid var(--rule);
     /* one subtle lift so the sheet edge reads against the desk */
@@ -53,8 +104,7 @@
   .sheet + .sheet{margin-top:38px}
 
   .desk-cap{
-    max-width:var(--measure);
-    margin:44px auto -12px;
+    margin:44px 0 -12px;
     padding:0 2px 8px;
     font-family:var(--form);
     font-size:10px;
@@ -716,27 +766,27 @@
 
   /* ============ RESPONSIVE ============ */
   @media (max-width:1180px){
-    /* the desk must stay visible on either side - the sheet still has an edge */
-    body{padding-left:24px;padding-right:24px}
-    .sheet{margin-top:22px}
-    .desk-cap{margin:34px auto -8px}
+    /* the desk each side is now app-main's padding - the sheet still has an edge */
+    .desk-cap{margin:34px 0 -8px}
   }
   @media (max-width:900px){
     :root{--pad:16px}
     .standing{grid-template-columns:repeat(2,1fr)}
     .st-cell:nth-child(3),.st-cell:nth-child(4){border-top:1px solid var(--rule)}
     .st-cell:nth-child(3){border-left:0}
-    .docket-grid{grid-template-columns:1fr}
+    /* minmax(0,...) + min-width:0 so a long job name in the select cannot
+       push the voucher wider than the sheet */
+    .docket-grid{grid-template-columns:minmax(0,1fr)}
+    .pick{min-width:0}
     .field{border-left:0;border-top:1px solid var(--rule)}
     .field:first-child{border-top:0}
     .amount-field{border-left:0;border-top:1px solid var(--ink)}
   }
   @media (max-width:620px){
-    /* below the sheet's own width the desk is pointless - let the paper fill the screen */
-    body{padding-left:0;padding-right:0}
-    .sheet{margin:0 auto;border-left:0;border-right:0;box-shadow:none}
-    .sheet + .sheet{margin-top:0}
-    .desk-cap{margin:0;padding:16px}
+    /* the shell still leaves 12px of desk each side, so the sheet keeps its
+       edge instead of bleeding to the screen */
+    .sheet + .sheet{margin-top:22px}
+    .desk-cap{margin:24px 0 -6px}
     .sheet-stamp-no{text-align:left}
     .att-row{grid-template-columns:minmax(0,1fr)}
     .att-right{
@@ -771,13 +821,34 @@
   }
 
   @media print{
-    body{padding-bottom:0;background:#fff}
+    body{background:#fff}
+    /* the spine is furniture, not paper */
+    .app{display:block}
+    .spine{display:none}
+    .app-main{padding:0}
+    .measure{max-width:none}
     .sheet{max-width:none;margin:0;border:0;box-shadow:none;background-image:none}
     .stamp{opacity:1}
   }
 </style>
 </head>
 <body>
+
+<div class="app">
+<nav class="spine" aria-label="Main navigation">
+  <div class="spine-mark"><b>AuraOS</b><span>Production ops</span></div>
+  <ul class="spine-nav">
+    <li class="on"><a href="dense-dashboard-call-sheet.html">Home</a></li>
+    <li><a href="pipeline-call-sheet.html">Deals</a></li>
+    <li><a href="#jobs">Jobs</a></li>
+    <li><a href="#contacts">Contacts</a></li>
+    <li><a href="#paperwork">Paperwork</a></li>
+    <li><a href="#settings">Settings</a></li>
+  </ul>
+  <div class="spine-foot"><a href="#logout">Log out</a></div>
+</nav>
+<main class="app-main">
+<div class="measure">
 
 <!-- ============================================================
      LIVE STATE
@@ -1049,6 +1120,10 @@
     </div>
   </section>
 </div>
+
+</div><!-- /.measure -->
+</main>
+</div><!-- /.app -->
 
 <!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
 <div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">

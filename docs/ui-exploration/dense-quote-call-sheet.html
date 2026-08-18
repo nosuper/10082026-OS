@@ -28,7 +28,6 @@
 
   body{
     margin:0;
-    padding-bottom:90px;
     background:var(--desk);
     color:var(--ink);
     font-family:var(--entry);
@@ -36,12 +35,58 @@
     line-height:1.35;
   }
 
+  /* ---- app shell ---------------------------------------------------- */
+:root{ --desk:#BEBBB0; --stock:#E6E4DD; --ink:#14130E; --ink2:#6E6B60; --rule:#B9B6AA; }
+html,body{margin:0;padding:0}
+body{background:var(--desk);}
+.app{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh;align-items:start}
+
+/* the spine: a binder edge, reusing the reversed-ink device the sections
+   already use, so it is the same stationery rather than a new component */
+.spine{position:sticky;top:0;align-self:start;height:100vh;background:var(--ink);
+  color:var(--stock);display:flex;flex-direction:column;
+  font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.14em;text-transform:uppercase}
+.spine-mark{padding:18px 14px 16px;border-bottom:1px solid #3a372f}
+.spine-mark b{display:block;font-size:15px;letter-spacing:.2em}
+.spine-mark span{display:block;margin-top:5px;font-size:9px;color:#8d887a;letter-spacing:.12em}
+.spine-nav{list-style:none;margin:0;padding:8px 0 0}
+.spine-nav a{display:block;padding:9px 14px;color:var(--stock);text-decoration:none;
+  border-left:3px solid transparent}
+.spine-nav a:hover{background:#221f19}
+.spine-nav a:focus-visible{outline:2px solid var(--stock);outline-offset:-2px}
+.spine-nav .on a{background:var(--stock);color:var(--ink);border-left-color:#A81F16}
+.spine-foot{margin-top:auto;padding:14px;border-top:1px solid #3a372f}
+.spine-foot a{color:#8d887a;text-decoration:none}
+.spine-foot a:hover{color:var(--stock)}
+
+/* the working area */
+.app-main{min-width:0;padding:22px 24px 90px}
+.measure{max-width:1120px;margin:0 auto}   /* document screens */
+.bleed{max-width:none}                      /* wide tables: fill app-main, scroll inside */
+
+/* below 900px the spine lies down as a top strip */
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .spine{position:static;height:auto;flex-direction:row;align-items:center;
+    flex-wrap:wrap;gap:0 2px;padding:0 8px}
+  .spine-mark{border-bottom:0;padding:10px 10px 10px 4px}
+  .spine-mark span{display:none}
+  .spine-nav{display:flex;flex-wrap:wrap;padding:0}
+  .spine-nav a{padding:10px;border-left:0;border-bottom:3px solid transparent}
+  .spine-nav .on a{border-left-color:transparent;border-bottom-color:#A81F16}
+  .spine-foot{margin-left:auto;border-top:0;padding:10px}
+  .app-main{padding:14px 12px 90px}
+}
+  /* ---- end app shell ------------------------------------------------- */
+
   /* ============ THE SHEET ============ */
   /* Paper has an edge. Everything below lives inside it. */
+  /* The shell's .measure now holds the 1120px trim and centres it, so the
+     sheet only keeps its vertical desk gutter. */
   .sheet{
     width:100%;
-    max-width:var(--measure);
-    margin:30px auto 34px;
+    margin:30px 0 34px;
     background:var(--paper);
     border:1px solid var(--rule);
     /* one subtle lift so the sheet edge reads against the desk */
@@ -892,7 +937,8 @@
   /* Below this a desk gutter would be narrower than the trim, which reads as
      a mistake rather than as a desk. The sheet takes the window instead. */
   @media (max-width:620px){
-    .sheet{margin:0 auto;border-left:0;border-right:0;box-shadow:none}
+    /* still takes the window: the negative margins cancel app-main's 12px */
+    .sheet{width:auto;margin:0 -12px;border-left:0;border-right:0;box-shadow:none}
   }
   @media (max-width:900px){
     :root{--pad:16px}
@@ -926,7 +972,12 @@
   }
   @media print{
     body{padding-bottom:0;background:#fff}
-    .sheet{margin:0;max-width:none;border:0;box-shadow:none;background:#fff;background-image:none}
+    /* the shell is furniture, not paper: it does not print */
+    .app{display:block;min-height:0}
+    .spine{display:none}
+    .app-main{padding:0}
+    .measure{max-width:none;margin:0}
+    .sheet{width:auto;margin:0;max-width:none;border:0;box-shadow:none;background:#fff;background-image:none}
     .sheet-head{position:static}
     .stamp{opacity:1}
     .tw{overflow:visible}
@@ -934,6 +985,23 @@
 </style>
 </head>
 <body>
+
+<div class="app">
+<nav class="spine" aria-label="Main navigation">
+  <div class="spine-mark"><b>AuraOS</b><span>Production ops</span></div>
+  <ul class="spine-nav">
+    <li><a href="dense-dashboard-call-sheet.html">Home</a></li>
+    <li class="on"><a href="pipeline-call-sheet.html">Deals</a></li>
+    <li><a href="#jobs">Jobs</a></li>
+    <li><a href="#contacts">Contacts</a></li>
+    <li><a href="#paperwork">Paperwork</a></li>
+    <li><a href="#settings">Settings</a></li>
+  </ul>
+  <div class="spine-foot"><a href="#logout">Log out</a></div>
+</nav>
+<main class="app-main">
+
+<div class="measure">
 
 <div class="sheet">
 
@@ -977,7 +1045,8 @@
   </dl>
 </header>
 
-<main>
+<!-- was <main>: the shell owns the page's single <main> now -->
+<div class="sheet-body">
 
 <!-- ============ 01 PACKAGES ============ -->
 <section class="sec" aria-labelledby="s-pkg">
@@ -1342,9 +1411,14 @@
   <span>Section 03 withheld from producer role</span>
 </div>
 
-</main>
+</div><!-- /.sheet-body -->
 
 </div><!-- /.sheet -->
+
+</div><!-- /.measure -->
+
+</main>
+</div><!-- /.app -->
 
 <!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
 <div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
