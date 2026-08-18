@@ -64,21 +64,18 @@ export function initials(name: string): string {
 }
 
 /**
- * Is this session the founder?
+ * The founder check, as an endpoint name.
  *
- * Decided by the server, not guessed in the browser: settings are readable only
- * by the founder, so a successful read of the margin floor is the role check.
- * The UI is never the permission boundary - the server refuses the data either
- * way, this only decides what is worth showing.
+ * Decided by the server, not guessed in the browser: AuraOS Settings are
+ * readable only by the founder, so a successful read of the margin floor is the
+ * role check. The UI is never the permission boundary - the server refuses the
+ * data either way, this only decides what is worth showing.
+ *
+ * SessionProvider runs it as an ordinary query, so a screen that wants the
+ * number itself (the dashboard's margin card) calls the same method and gets
+ * the same cached answer rather than a second request.
  */
-export async function probeFounder(): Promise<boolean> {
-  try {
-    await callMethod<number>("auraos.api.get_margin_floor");
-    return true;
-  } catch {
-    return false;
-  }
-}
+export const FOUNDER_PROBE = "auraos.api.get_margin_floor";
 
 /** End the Frappe session, then land on a login page that returns here. */
 export async function logout(): Promise<void> {

@@ -1,27 +1,32 @@
+// The Home dashboard, on real data.
+//
+// This is the reference screen for the data layer: every other screen ticket
+// can copy the shape of it. Nothing here computes money the server could have
+// computed, nothing formats a number outside lib/format.ts, and every request
+// goes through lib/queries.ts.
+
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowUpRight, Plus } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock } from "lucide-react";
 import { useState } from "react";
+
 import { AppShell } from "@/components/aura/AppShell";
+import { useSession } from "@/components/aura/SessionProvider";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
-import {
-  dashboardTiles,
-  expenseCategories,
-  founderBlock,
-  jobsInProduction,
-  needsAttention,
-  totals,
-} from "@/data/fixture";
+import { ErrorState, Figure, QueryState, QueryStates } from "@/components/aura/states";
+import { countLabel, formatDateLong, overdueLabel, parseVnd, vnd } from "@/lib/format";
+import { listsOf, useList, useMethod, useMethodMutation } from "@/lib/queries";
+import { FOUNDER_PROBE } from "@/lib/session";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Home — AuraOS production ops" },
+      { title: "Home - AuraOS production ops" },
       {
         name: "description",
         content:
           "Pipeline, jobs in production, overdue payments and quiet quotes on one producer desk.",
       },
-      { property: "og:title", content: "Home — AuraOS production ops" },
+      { property: "og:title", content: "Home - AuraOS production ops" },
       {
         property: "og:description",
         content: "Pipeline, jobs in production, overdue payments and quiet quotes at a glance.",
@@ -31,106 +36,274 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-const stageTone: Record<string, string> = {
-  Production: "ink",
-  "Post-production": "neutral",
-  Delivery: "neutral",
-  "Awaiting payment": "ember",
+// -- what the server sends. Declared beside the screen that reads it; a shape
+// -- only moves into a shared file once a second screen needs the same one.
+
+type DealRow = {
+  name: string;
+  title: string | null;
+  stage: string;
+  estimated_budget: number | null;
 };
 
+type JobRow = {
+  name: string;
+  title: string | null;
+  stage: string;
+  quote_total: number | null;
+  company: string | null;
+};
+
+type CompanyRow = { name: string; company_name: string | null };
+
+type OverdueMilestone = {
+  name: string;
+  job: string;
+  job_title: string | null;
+  title: string | null;
+  amount: number | null;
+  days_overdue: number;
+};
+
+type OverduePayload = { payment_terms_days: number; milestones: OverdueMilestone[] };
+
+type SilentDeal = { name: string; title: string | null; quote_sent_on: string | null };
+
+type SilentPayload = { silence_days: number; deals: SilentDeal[] };
+
+type ExpenseResult = { name: string; amount: number; category: string | null };
+
+// The eight canonical job stages (spec #81). Anything else reads neutral.
+const stageTone: Record<string, string> = {
+  Production: "ink",
+  "Awaiting payment": "ember",
+  Complete: "positive",
+};
+
+const RESOLVED_DEAL_STAGES = new Set(["Won", "Lost"]);
+
+function greeting(hour = new Date().getHours()): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function sum(values: Array<number | null | undefined>): number {
+  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
+}
+
 function HomePage() {
-  const [job, setJob] = useState(jobsInProduction[0]?.job ?? "");
-  const [category, setCategory] = useState(expenseCategories[0] ?? "");
+  const session = useSession();
+
+  // -- the four reads this screen is built from --
+  const deals = useList<DealRow>({
+    doctype: "Deal",
+    fields: ["name", "title", "stage", "estimated_budget"],
+    orderBy: "modified desc",
+  });
+
+  const jobs = useList<JobRow>({
+    doctype: "Job",
+    fields: ["name", "title", "stage", "quote_total", "company"],
+    orderBy: "modified desc",
+  });
+
+  const companies = useList<CompanyRow>({
+    doctype: "Party Company",
+    fields: ["name", "company_name"],
+  });
+
+  const overdue = useMethod<OverduePayload>("auraos.api.overdue_milestones");
+  const silent = useMethod<SilentPayload>("auraos.api.silent_quote_deals");
+
+  // Same query key as the founder probe in SessionProvider, so this is a cache
+  // read rather than a second request.
+  const marginFloor = useMethod<number>(FOUNDER_PROBE, undefined, {
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+  const openDeals = (deals.data ?? []).filter((row) => !RESOLVED_DEAL_STAGES.has(row.stage));
+  const openJobs = (jobs.data ?? []).filter((row) => row.stage !== "Complete");
+  const milestones = overdue.data?.milestones ?? [];
+  const silentDeals = silent.data?.deals ?? [];
+
+  const companyName = new Map(
+    (companies.data ?? []).map((c) => [c.name, c.company_name ?? c.name]),
+  );
+
+  const attention = [
+    ...milestones.map((row) => ({
+      key: `overdue-${row.name}`,
+      kind: "Overdue milestone",
+      what: row.job_title || row.job,
+      detail: [row.title, overdueLabel(row.days_overdue)].filter(Boolean).join(" · "),
+      amount: row.amount ?? 0,
+      job: row.job,
+    })),
+    ...silentDeals.map((row) => ({
+      key: `silent-${row.name}`,
+      kind: "Silent quote",
+      what: row.title || row.name,
+      detail: `quote sent, no reply for ${countLabel(silent.data?.silence_days ?? 0, "day")}`,
+      amount: 0,
+      job: null as string | null,
+    })),
+  ];
+
+  const meta = [
+    formatDateLong(new Date()),
+    deals.isSuccess ? countLabel(openDeals.length, "open deal") : null,
+    jobs.isSuccess ? `${countLabel(openJobs.length, "job")} in production` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const firstName = session.userName.trim().split(/\s+/).slice(-1)[0] || session.userName;
 
   return (
     <AppShell
-      title="Good morning, Bảo"
-      meta="Tuesday 18 August 2026 · 6 open deals · 4 jobs in production"
+      title={`${greeting()}, ${firstName}`}
+      meta={meta}
       actions={
-        <button className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90">
-          <Plus className="size-3.5" /> New deal
-        </button>
+        <Link
+          to="/deals"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          Open the pipeline <ArrowUpRight className="size-3.5" />
+        </Link>
       }
     >
       <div className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {dashboardTiles.map((t) => (
-            <Stat
-              key={t.label}
-              label={t.label}
-              value={<Money value={t.value} />}
-              sub={t.sub}
-              alert={t.alert}
-            />
-          ))}
+          <Stat
+            label="Pipeline · open deals"
+            value={
+              <Figure query={deals}>
+                <Money value={sum(openDeals.map((d) => d.estimated_budget))} />
+              </Figure>
+            }
+            sub={deals.isSuccess ? countLabel(openDeals.length, "deal") : undefined}
+          />
+          <Stat
+            label="In production"
+            value={
+              <Figure query={jobs}>
+                <Money value={sum(openJobs.map((j) => j.quote_total))} />
+              </Figure>
+            }
+            sub={jobs.isSuccess ? countLabel(openJobs.length, "job") : undefined}
+          />
+          <Stat
+            label="Overdue payments"
+            alert={milestones.length > 0}
+            value={
+              <Figure query={overdue}>
+                <Money value={sum(milestones.map((m) => m.amount))} />
+              </Figure>
+            }
+            sub={overdue.isSuccess ? countLabel(milestones.length, "milestone") : undefined}
+          />
+          <Stat
+            label="Quotes gone quiet"
+            alert={silentDeals.length > 0}
+            value={
+              <Figure query={silent} width="3rem">
+                <span className="num">{silentDeals.length}</span>
+              </Figure>
+            }
+            sub={
+              silent.isSuccess
+                ? `past ${countLabel(silent.data?.silence_days ?? 0, "day")}`
+                : undefined
+            }
+          />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card
             className="lg:col-span-2"
             title="Needs attention"
-            subtitle="Money that has stopped moving"
+            subtitle="Money that has stopped moving, worst first"
           >
-            <ul className="divide-y divide-border">
-              {needsAttention.map((n) => (
-                <li key={n.what} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <AlertTriangle className="size-4 shrink-0 text-ember" strokeWidth={1.75} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{n.what}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      {n.kind} · <span className="text-ember">{n.age}</span>
-                    </div>
-                  </div>
-                  <Money value={n.amount} className="text-sm font-semibold" />
-                </li>
-              ))}
-            </ul>
+            <QueryStates
+              queries={[overdue, silent]}
+              isEmpty={() => attention.length === 0}
+              empty={{
+                title: "Nothing chasing you.",
+                detail: "No overdue milestones, no silent quotes.",
+                icon: <CheckCircle2 className="size-6" strokeWidth={1.5} />,
+              }}
+            >
+              {() => (
+                <ul className="divide-y divide-border">
+                  {attention.map((item) => (
+                    <li key={item.key} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      <AlertTriangle className="size-4 shrink-0 text-ember" strokeWidth={1.75} />
+                      <div className="min-w-0 flex-1">
+                        {item.job ? (
+                          <Link
+                            to="/jobs/$jobId"
+                            params={{ jobId: item.job }}
+                            className="truncate text-sm font-medium hover:text-ember"
+                          >
+                            {item.what}
+                          </Link>
+                        ) : (
+                          <Link
+                            to="/deals"
+                            className="truncate text-sm font-medium hover:text-ember"
+                          >
+                            {item.what}
+                          </Link>
+                        )}
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {item.kind} · <span className="text-ember">{item.detail}</span>
+                        </div>
+                      </div>
+                      {item.amount ? (
+                        <Money value={item.amount} className="text-sm font-semibold" />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </QueryStates>
           </Card>
 
-          <Card
-            tone="ink"
-            title="Margin — TVC Tết 2027"
-            subtitle="Founder only"
-            action={<Pill tone="ember">Above floor</Pill>}
-          >
-            <div className="space-y-3 p-4">
-              <div>
-                <div className="label-caps text-primary-foreground/50">Quote total</div>
-                <Money value={totals.total} className="text-2xl font-semibold" />
-              </div>
-              <dl className="space-y-1.5 text-sm">
-                {[
-                  ["Cost", totals.cost],
-                  ["Margin", totals.margin],
-                  [`Commission ${founderBlock.commissionRate}%`, founderBlock.commission],
-                  [`TNDN ${founderBlock.tndnRate}%`, founderBlock.tndn],
-                ].map(([k, v]) => (
-                  <div key={k as string} className="flex justify-between gap-3">
-                    <dt className="text-primary-foreground/60">{k}</dt>
-                    <dd>
-                      <Money value={v as number} />
-                    </dd>
-                  </div>
-                ))}
-                <div className="flex justify-between gap-3 border-t border-white/10 pt-2 font-semibold">
-                  <dt>Net profit</dt>
-                  <dd>
-                    <Money value={founderBlock.netProfit} />
-                  </dd>
+          {/* Founder only. The card is absent for a producer because the server
+              refuses the read, not because the browser decided to hide it. */}
+          {session.isFounder ? (
+            <Card tone="ink" title="Margin floor" subtitle="Founder only">
+              <div className="space-y-3 p-4">
+                <div className="flex items-baseline gap-2">
+                  <span className="num text-3xl font-semibold">
+                    <Figure query={marginFloor} width="4rem">
+                      {marginFloor.data ?? 0}%
+                    </Figure>
+                  </span>
+                  <span className="text-xs text-primary-foreground/50">of quote value</span>
                 </div>
-              </dl>
-              <div className="text-xs text-primary-foreground/50">
-                Margin {totals.marginPct}% · floor {totals.marginFloorPct}%
+                <p className="text-xs leading-relaxed text-primary-foreground/60">
+                  Quotes below the floor are blocked at publish, not at send. The breakdown shows
+                  the cause line by line.
+                </p>
+                <Link
+                  to="/settings"
+                  className="block text-xs text-primary-foreground/70 hover:text-primary-foreground"
+                >
+                  Adjust the floor and the defaults
+                </Link>
               </div>
-            </div>
-          </Card>
+            </Card>
+          ) : null}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card
             className="lg:col-span-2"
             title="Jobs in production"
-            subtitle="4 open jobs"
+            subtitle={jobs.isSuccess ? countLabel(openJobs.length, "open job") : undefined}
             action={
               <Link
                 to="/jobs"
@@ -140,91 +313,193 @@ function HomePage() {
               </Link>
             }
           >
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b border-border">
-                  <tr>
-                    <Th>Job</Th>
-                    <Th>Client</Th>
-                    <Th className="text-right">Quoted</Th>
-                    <Th>Stage</Th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {jobsInProduction.map((j) => (
-                    <tr key={j.job} className="hover:bg-secondary/50">
-                      <Td className="font-medium">
-                        <Link to="/jobs/$jobId" params={{ jobId: "JOB-0114" }}>
-                          {j.job}
-                        </Link>
-                      </Td>
-                      <Td className="text-muted-foreground">{j.client}</Td>
-                      <Td className="text-right">
-                        <Money value={j.quoted} />
-                      </Td>
-                      <Td>
-                        <Pill tone={stageTone[j.stage] ?? "neutral"}>{j.stage}</Pill>
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <Card title="Quick expense" subtitle="Log a cost against a job">
-            <form
-              className="space-y-3 p-4"
-              onSubmit={(e) => {
-                e.preventDefault();
+            <QueryStates
+              queries={[jobs, companies]}
+              isEmpty={() => openJobs.length === 0}
+              empty={{
+                title: "No jobs in production.",
+                detail: "A won deal becomes a job, and it lands here.",
+                icon: <Clock className="size-6" strokeWidth={1.5} />,
               }}
             >
-              <label className="block">
-                <span className="label-caps">Job</span>
-                <select
-                  value={job}
-                  onChange={(e) => setJob(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm"
-                >
-                  {jobsInProduction.map((j) => (
-                    <option key={j.job}>{j.job}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="label-caps">Amount (VND)</span>
-                <input
-                  inputMode="numeric"
-                  placeholder="0"
-                  className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 num text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="label-caps">Category</span>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm"
-                >
-                  {expenseCategories.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="label-caps">Note (optional)</span>
-                <input className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm" />
-              </label>
-              <button
-                type="submit"
-                className="w-full rounded-lg bg-ember px-3 py-2 text-sm font-medium text-ember-foreground transition-opacity hover:opacity-90"
-              >
-                Log expense
-              </button>
-            </form>
+              {() => (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="border-b border-border">
+                      <tr>
+                        <Th>Job</Th>
+                        <Th>Client</Th>
+                        <Th className="text-right">Quoted</Th>
+                        <Th>Stage</Th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {openJobs.map((job) => (
+                        <tr key={job.name} className="hover:bg-secondary/50">
+                          <Td className="font-medium">
+                            <Link to="/jobs/$jobId" params={{ jobId: job.name }}>
+                              {job.title || job.name}
+                            </Link>
+                            <div className="num text-[11px] text-muted-foreground">{job.name}</div>
+                          </Td>
+                          <Td className="text-muted-foreground">
+                            {job.company ? (companyName.get(job.company) ?? job.company) : "-"}
+                          </Td>
+                          <Td className="text-right">
+                            <Money value={job.quote_total ?? 0} />
+                          </Td>
+                          <Td>
+                            <Pill tone={stageTone[job.stage] ?? "neutral"}>{job.stage}</Pill>
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </QueryStates>
           </Card>
+
+          <QuickExpense jobs={openJobs} jobsQuery={jobs} />
         </div>
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * The one mutation on this screen, and the proof that a POST from a signed-in
+ * user passes CSRF. It is also the pattern for every write in the app: mutate,
+ * never await mutateAsync, and read the failure off the mutation.
+ */
+function QuickExpense({
+  jobs,
+  jobsQuery,
+}: {
+  jobs: JobRow[];
+  jobsQuery: ReturnType<typeof useList<JobRow>>;
+}) {
+  const [job, setJob] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [note, setNote] = useState("");
+  const [logged, setLogged] = useState("");
+
+  // Categories belong to the job, so the request waits for one to be picked.
+  const categories = useMethod<string[]>(
+    "auraos.api.job_expense_categories",
+    { job },
+    { enabled: Boolean(job) },
+  );
+
+  const logExpense = useMethodMutation<ExpenseResult, Record<string, unknown>>(
+    "auraos.api.log_job_expense",
+    {
+      invalidate: [listsOf("Job Expense")],
+      onSuccess: (result) => {
+        setLogged(`Logged ${vnd(result.amount)} ₫ on ${job}.`);
+        setAmount("");
+        setNote("");
+      },
+    },
+  );
+
+  const value = parseVnd(amount);
+
+  return (
+    <Card title="Quick expense" subtitle="Log a cost against a job">
+      <QueryState
+        query={jobsQuery}
+        isEmpty={() => jobs.length === 0}
+        empty={{ title: "No open job to spend on." }}
+      >
+        {() => (
+          <form
+            className="space-y-3 p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!job || !value) return;
+              setLogged("");
+              logExpense.mutate({
+                job,
+                amount: value,
+                category: category || null,
+                description: note || null,
+              });
+            }}
+          >
+            <label className="block">
+              <span className="label-caps">Job</span>
+              <select
+                value={job}
+                onChange={(event) => {
+                  setJob(event.target.value);
+                  setCategory("");
+                  setLogged("");
+                }}
+                className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm"
+              >
+                <option value="">Which job...</option>
+                {jobs.map((row) => (
+                  <option key={row.name} value={row.name}>
+                    {row.title || row.name} · {row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="label-caps">Amount (VND)</span>
+              <input
+                inputMode="numeric"
+                value={value ? vnd(value) : ""}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0"
+                className="num mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-right text-sm"
+              />
+            </label>
+
+            <label className="block">
+              <span className="label-caps">Category</span>
+              <select
+                value={category}
+                disabled={!job}
+                onChange={(event) => setCategory(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm disabled:text-muted-foreground"
+              >
+                <option value="">Uncategorised</option>
+                {(categories.data ?? []).map((title) => (
+                  <option key={title} value={title}>
+                    {title}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="label-caps">Note (optional)</span>
+              <input
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={!job || !value || logExpense.isPending}
+              className="w-full rounded-lg bg-ember px-3 py-2 text-sm font-medium text-ember-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {logExpense.isPending ? "Logging..." : value ? `Log ${vnd(value)} ₫` : "Log expense"}
+            </button>
+
+            {logged ? <p className="text-xs text-positive">{logged}</p> : null}
+            {logExpense.isError ? (
+              <ErrorState error={logExpense.error} className="px-0 py-2" />
+            ) : null}
+          </form>
+        )}
+      </QueryState>
+    </Card>
   );
 }

@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/session";
 import { useSession } from "@/components/aura/SessionProvider";
 
 type NavItem = { to: string; label: string; icon: typeof Home; founder?: boolean };
@@ -114,7 +113,7 @@ export function AppShell({
           <div className="border-t border-border p-3">
             <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ember-soft text-xs font-semibold text-ember">
-                {initials(session.userName)}
+                {session.initials}
               </div>
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="truncate text-sm font-medium">{session.userName}</div>
