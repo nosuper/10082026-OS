@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AuraOS pipeline - Grading suite</title>
+<style>
+  /* ============================================================
+     GRADING SUITE - AuraOS deal pipeline
+     Money is luma (achromatic, brightest thing on screen).
+     Chroma is reserved for one state: stalled.
+     ============================================================ */
+
+  :root{
+    --room:      #17191B;  /* studio wall - deep neutral charcoal */
+    --room-deep: #121416;  /* recessed terminal zone */
+    --panel:     #202427;  /* clip surface, low glare */
+    --panel-hi:  #262B2E;  /* hover / won lift */
+    --bezel:     #313739;  /* hairlines, instrument bezel */
+    --luma:      #EEF2EF;  /* money + peak values */
+    --dim:       #8A9497;  /* labels, secondary data */
+    --dimmer:    #565E61;  /* graticule, separators */
+    --signal:    #E9A83C;  /* the only chroma: state */
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+            "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+            "DejaVu Sans Mono", "Roboto Mono", monospace;
+
+    --col-w: 258px;
+    --col-w-end: 206px;   /* terminal columns are endings, not workspaces */
+  }
+
+  *{box-sizing:border-box}
+
+  html{ -webkit-text-size-adjust:100% }
+
+  body{
+    margin:0;
+    padding-bottom:90px;
+    background:var(--room);
+    color:var(--dim);
+    font-family:var(--sans);
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* Vietnamese diacritics stack tall (Tế, Vị, Ữ, Ầ). Nothing that carries
+     them is allowed a cramped line-height or a fixed height. */
+  .viet{ line-height:1.4 }
+
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  /* ---------- slate (header) ---------- */
+
+  .slate{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    gap:28px 40px;
+    padding:22px 24px 18px;
+    border-bottom:1px solid var(--bezel);
+    background:linear-gradient(180deg,#1A1D1F 0%, var(--room) 100%);
+  }
+
+  .lockup{ margin-right:auto }
+
+  .lockup .mark{
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:.34em;
+    text-transform:uppercase;
+    color:var(--dimmer);
+    margin:0 0 6px;
+  }
+  .lockup h1{
+    margin:0;
+    font-family:var(--mono);
+    font-size:17px;
+    font-weight:500;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--luma);
+  }
+
+  .readouts{ display:flex; gap:34px; flex-wrap:wrap }
+
+  .readout .cap{
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.26em;
+    text-transform:uppercase;
+    color:var(--dimmer);
+    display:block;
+    margin-bottom:3px;
+  }
+  .readout .val{
+    font-family:var(--mono);
+    font-variant-numeric:tabular-nums;
+    font-feature-settings:"tnum" 1;
+    font-size:19px;
+    letter-spacing:.01em;
+    color:var(--luma);
+    white-space:nowrap;
+  }
+  .readout.closed .val{ color:var(--dim) }
+  /* the warning stays on the monitor even when the card scrolls off */
+  .readout.alert .cap{ color:var(--signal) }
+  .readout.alert .val{ color:var(--signal) }
+  .readout.alert .val i, .readout.alert .val u{ color:#9A7429 }
+  .readout .val i{ font-style:normal; color:var(--dimmer) }
+  .readout .val u{ text-decoration:none; font-size:10px; letter-spacing:.18em; color:var(--dimmer); margin-left:1px }
+
+  .legend{
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--dimmer);
+    border-left:1px solid var(--bezel);
+    padding-left:16px;
+    line-height:1.8;
+  }
+  .legend b{ color:var(--dim); font-weight:400 }
+
+  /* ---------- board ---------- */
+
+  .board{
+    display:flex;
+    align-items:stretch;
+    gap:1px;
+    padding:0 0 0 0;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scroll-snap-type:x proximity;
+    background:var(--bezel);      /* the 1px gaps become hairline rules */
+    border-bottom:1px solid var(--bezel);
+  }
+
+  .board::-webkit-scrollbar{height:10px}
+  .board::-webkit-scrollbar-track{background:var(--room-deep)}
+  .board::-webkit-scrollbar-thumb{background:var(--bezel);border-radius:0}
+  .board::-webkit-scrollbar-thumb:hover{background:#454C4F}
+
+  .col{
+    flex:1 0 var(--col-w);   /* fills a wide monitor, never shrinks below legible */
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    background:var(--room);
+    scroll-snap-align:start;
+  }
+
+  .col-head{
+    position:sticky;
+    top:0;
+    z-index:2;
+    padding:14px 16px 11px;
+    background:var(--room);
+    border-bottom:1px solid var(--bezel);
+  }
+  .col-head .row{ display:flex; align-items:baseline; gap:8px }
+  .col-head .name{
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--dim);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .col-head .n{
+    margin-left:auto;
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--dimmer);
+    font-variant-numeric:tabular-nums;
+  }
+  .col-head .sum{
+    display:block;
+    margin-top:5px;
+    font-family:var(--mono);
+    font-variant-numeric:tabular-nums;
+    font-feature-settings:"tnum" 1;
+    font-size:11px;
+    letter-spacing:.02em;
+    color:var(--dim);
+  }
+  .col-head .sum i{font-style:normal;color:var(--dimmer)}
+
+  .col-body{
+    padding:12px 12px 40px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    overflow-y:auto;
+    min-height:0;
+  }
+  .col-body::-webkit-scrollbar{width:8px}
+  .col-body::-webkit-scrollbar-track{background:transparent}
+  .col-body::-webkit-scrollbar-thumb{background:var(--bezel)}
+
+  /* Desktop: the board is the room - it fills the window, and each column
+     scrolls inside itself. This is what lets the board take 3x the cards
+     without the header or the terminal zone ever leaving the screen. */
+  @media (min-width:900px){
+    body{ display:flex; flex-direction:column; min-height:100vh }
+    .board{ flex:1 1 auto; min-height:0 }
+    .col-body{ flex:1 1 auto }
+  }
+
+  /* ---------- card (a clip) ---------- */
+
+  .clip{
+    position:relative;
+    display:block;
+    background:var(--panel);
+    border:1px solid var(--bezel);
+    border-left:0;
+    padding:11px 13px 10px 14px;
+    transition:background .14s linear, transform .14s ease;
+  }
+  /* the clip handle: state lives here, and only state */
+  .clip::before{
+    content:"";
+    position:absolute;
+    left:0; top:-1px; bottom:-1px;
+    width:3px;
+    background:var(--dimmer);
+  }
+  .clip:hover{ background:var(--panel-hi) }
+  .clip:hover::before{ background:var(--dim) }
+  .clip:focus-visible{ outline:2px solid var(--luma); outline-offset:1px }
+
+  .title{
+    margin:0 0 3px;
+    font-size:13.5px;
+    font-weight:600;
+    line-height:1.4;
+    color:var(--luma);
+    letter-spacing:-.005em;
+  }
+  .client{
+    margin:0 0 9px;
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.14em;
+    line-height:1.6;          /* headroom for Ấ / Ồ / Ứ */
+    text-transform:uppercase;
+    color:var(--dim);
+  }
+
+  /* money: timecode. digits luminous, separators and unit recessed. */
+  .money{
+    font-family:var(--mono);
+    font-variant-numeric:tabular-nums;
+    font-feature-settings:"tnum" 1;
+    font-size:19px;
+    line-height:1.15;
+    letter-spacing:.005em;
+    color:var(--luma);
+    white-space:nowrap;
+  }
+  .money i{ font-style:normal; color:var(--dimmer) }
+  .money u{
+    text-decoration:none;
+    font-size:9.5px;
+    letter-spacing:.2em;
+    color:var(--dim);
+    margin-left:1px;
+    vertical-align:.14em;
+  }
+
+  /* the signature: shared-graticule level trace under every figure.
+     full scale 0 - 1,000,000,000 VND, one tick per 100,000,000. */
+  .trace{
+    position:relative;
+    height:9px;
+    margin:8px 0 10px;
+    background:
+      repeating-linear-gradient(90deg,
+        var(--bezel) 0 1px,
+        transparent 1px 10%);
+    border-bottom:1px solid var(--bezel);
+  }
+  .trace span{
+    position:absolute;
+    left:0; bottom:0;
+    height:2px;
+    background:var(--luma);
+  }
+
+  .footrow{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--dim);
+  }
+
+  /* tier: three vertical ticks - a level ladder, deliberately on the
+     opposite axis from the horizontal money trace. */
+  .tier{ display:flex; align-items:flex-end; gap:2px; height:10px }
+  .tier b{ width:2px; background:var(--dimmer) }
+  .tier b:nth-child(1){height:4px}
+  .tier b:nth-child(2){height:7px}
+  .tier b:nth-child(3){height:10px}
+  .tier b.on{ background:var(--luma) }
+  .tier-n{ color:var(--dim); margin-left:1px }
+
+  .type{ color:var(--dim) }
+  .dwell{
+    margin-left:auto;
+    font-variant-numeric:tabular-nums;
+    color:var(--dim);
+    letter-spacing:.1em;
+  }
+
+  /* ---------- stalled: the one warning on the monitor ---------- */
+
+  .clip.stalled{ border-color:#5B4520 }
+  .clip.stalled::before{
+    background:var(--signal);
+    box-shadow:0 0 10px 1px rgba(233,168,60,.55);
+    animation:bias 3.2s ease-in-out infinite;
+  }
+  .clip.stalled .dwell{ color:var(--signal) }
+  .flag{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    margin-bottom:8px;
+    padding:2px 7px 2px 6px;
+    font-family:var(--mono);
+    font-size:8.5px;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--signal);
+    border:1px solid rgba(233,168,60,.4);
+    background:rgba(233,168,60,.07);
+  }
+  .flag::before{
+    content:"";
+    width:5px;height:5px;
+    background:var(--signal);
+    box-shadow:0 0 7px 1px rgba(233,168,60,.8);
+    animation:bias 3.2s ease-in-out infinite;
+  }
+  @keyframes bias{ 0%,100%{opacity:1} 50%{opacity:.42} }
+
+  /* ---------- terminal zone: the cut ---------- */
+
+  /* Pinned to the right edge: the open stages scroll away underneath it,
+     the ending never does. */
+  .terminal{
+    position:sticky;
+    right:0;
+    z-index:4;
+    flex:0 0 auto;
+    display:flex;
+    flex-direction:column;
+    background:var(--room-deep);
+    border-left:2px solid var(--dimmer);
+    box-shadow:-20px 0 26px -14px rgba(0,0,0,.8), inset 14px 0 22px -14px #000;
+  }
+  .cut{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:9px 16px 8px;
+    border-bottom:1px solid var(--bezel);
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.3em;
+    text-transform:uppercase;
+    color:var(--dimmer);
+  }
+  .cut::after{ content:""; flex:1; height:1px; background:var(--bezel) }
+  .terminal .cols{ display:flex; gap:1px; background:var(--bezel); min-height:0; flex:1 1 auto }
+  .terminal .col{
+    flex:0 0 var(--col-w-end);
+    width:var(--col-w-end);
+    background:var(--room-deep);
+  }
+  .terminal .col-head{ background:var(--room-deep) }
+  .terminal .col-body{ padding-left:10px; padding-right:10px }
+  /* closed figures are set one step down - the ending speaks quieter */
+  .terminal .money{ font-size:17px }
+
+  /* won: printed at full exposure */
+  .clip.won{ border-top-color:var(--luma) }
+  .clip.won::before{ background:var(--luma) }
+
+  /* lost: crushed to the room. figure stays exact, luminance drops out. */
+  .clip.lost{ background:transparent; border-color:#22262A }
+  .clip.lost::before{ background:#22262A }
+  .clip.lost:hover{ background:var(--panel) }
+  .clip.lost .title{ color:var(--dim); font-weight:500 }
+  .clip.lost .client{ color:var(--dimmer) }
+  .clip.lost .money{ color:var(--dim) }
+  .clip.lost .money i, .clip.lost .money u{ color:var(--dimmer) }
+  .clip.lost .trace span{ background:var(--dimmer) }
+  .clip.lost .tier b.on{ background:var(--dim) }
+
+  .outcome{
+    display:block;
+    margin:9px 0 0;
+    padding-top:8px;
+    border-top:1px solid var(--bezel);
+    font-family:var(--mono);
+    font-size:8.5px;
+    letter-spacing:.24em;
+    text-transform:uppercase;
+    color:var(--dimmer);
+  }
+  .clip.won .outcome{ color:var(--dim) }
+
+  /* ---------- footer note ---------- */
+  .foot{
+    padding:14px 24px 0;
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--dimmer);
+  }
+
+  /* ---------- load sequence ---------- */
+  .col, .terminal{ animation:up .4s ease both }
+  .board > *:nth-child(1){animation-delay:.00s}
+  .board > *:nth-child(2){animation-delay:.04s}
+  .board > *:nth-child(3){animation-delay:.08s}
+  .board > *:nth-child(4){animation-delay:.12s}
+  .board > *:nth-child(5){animation-delay:.16s}
+  .board > *:nth-child(6){animation-delay:.20s}
+  @keyframes up{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important;transition:none !important}
+  }
+
+  /* ---------- mobile ---------- */
+  @media (max-width:899px){
+    .slate{ gap:20px 28px; padding:18px 16px 16px }
+    .readouts{ gap:24px }
+    .legend{ border-left:0; padding-left:0 }
+    .board{ flex-direction:column; overflow-x:visible; gap:1px }
+    .col, .terminal .col{ flex:1 1 auto; width:100% }
+    .col-head{ position:sticky; top:0 }
+    .terminal{
+      position:static;
+      border-left:0;
+      border-top:2px solid var(--dimmer);
+      box-shadow:inset 0 14px 22px -14px #000;
+    }
+    .terminal .cols{ flex-direction:column }
+    .col-body{ padding-bottom:16px }
+  }
+</style>
+</head>
+<body>
+
+<header class="slate">
+  <div class="lockup">
+    <p class="mark">AuraOS &middot; Sales</p>
+    <h1>Deal pipeline</h1>
+  </div>
+
+  <div class="readouts">
+    <div class="readout">
+      <span class="cap">Open</span>
+      <span class="val">1<i>,</i>925<i>,</i>000<i>,</i>000 <u>VND</u></span>
+    </div>
+    <div class="readout alert">
+      <span class="cap">Stalled 09d</span>
+      <span class="val">95<i>,</i>000<i>,</i>000 <u>VND</u></span>
+    </div>
+    <div class="readout closed">
+      <span class="cap">Won</span>
+      <span class="val">210<i>,</i>000<i>,</i>000 <u>VND</u></span>
+    </div>
+    <div class="readout closed">
+      <span class="cap">Lost</span>
+      <span class="val">60<i>,</i>000<i>,</i>000 <u>VND</u></span>
+    </div>
+  </div>
+
+  <div class="legend">
+    Trace scale <b>0 - 1,000,000,000 VND</b><br>
+    Tick <b>100,000,000</b> &nbsp;&middot;&nbsp; Ladder <b>tier 1-3</b>
+  </div>
+</header>
+
+<main class="board">
+
+  <!-- 1. Brief Received -->
+  <section class="col" aria-label="Brief Received">
+    <div class="col-head">
+      <div class="row"><span class="name">Brief Received</span><span class="n">2</span></div>
+      <span class="sum">970<i>,</i>000<i>,</i>000 VND</span>
+    </div>
+    <div class="col-body">
+
+      <article class="clip" tabindex="0">
+        <h2 class="title viet">TVC T&#7871;t 2027 &ldquo;V&#7883; Xu&acirc;n&rdquo;</h2>
+        <p class="client viet">Nh&#7845;t Minh Beverage</p>
+        <p class="money">850<i>,</i>000<i>,</i>000 <u>VND</u></p>
+        <div class="trace" aria-hidden="true"><span style="width:85%"></span></div>
+        <div class="footrow">
+          <span class="tier" aria-hidden="true"><b class="on"></b><b class="on"></b><b class="on"></b></span>
+          <span class="tier-n">T3</span>
+          <span class="sr">Tier 3</span>
+          <span class="type">Brand</span>
+          <span class="dwell">04d</span>
+        </div>
+      </article>
+
+      <article class="clip" tabindex="0">
+        <h2 class="title viet">Recruitment film</h2>
+        <p class="client viet">S&ocirc;ng H&agrave; Logistics</p>
+        <p class="money">120<i>,</i>000<i>,</i>000 <u>VND</u></p>
+        <div class="trace" aria-hidden="true"><span style="width:12%"></span></div>
+        <div class="footrow">
+          <span class="tier" aria-hidden="true"><b class="on"></b><b></b><b></b></span>
+          <span class="tier-n">T1</span>
+          <span class="sr">Tier 1</span>
+          <span class="type">Cash</span>
+          <span class="dwell">02d</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 2. De-brief -->
+  <section class="col" aria-label="De-brief">
+    <div class="col-head">
+      <div class="row"><span class="name">De-brief</span><span class="n">1</span></div>
+      <span class="sum">260<i>,</i>000<i>,</i>000 VND</span>
+    </div>
+    <div class="col-body">
+
+      <article class="clip" tabindex="0">
+        <h2 class="title viet">Product launch livestream</h2>
+        <p class="client viet">An Khang Pharma</p>
+        <p class="money">260<i>,</i>000<i>,</i>000 <u>VND</u></p>
+        <div class="trace" aria-hidden="true"><span style="width:26%"></span></div>
+        <div class="footrow">
+          <span class="tier" aria-hidden="true"><b class="on"></b><b class="on"></b><b></b></span>
+          <span class="tier-n">T2</span>
+          <span class="sr">Tier 2</span>
+          <span class="type">Bridge</span>
+          <span class="dwell">06d</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 3. Breakdown -->
+  <section class="col" aria-label="Breakdown">
+    <div class="col-head">
+      <div class="row"><span class="name">Breakdown</span><span class="n">1</span></div>
+      <span class="sum">180<i>,</i>000<i>,</i>000 VND</span>
+    </div>
+    <div class="col-body">
+
+      <article class="clip" tabindex="0">
+        <h2 class="title viet">Corporate profile 2026</h2>
+        <p class="client viet">Ki&#7871;n V&agrave;ng Construction</p>
+        <p class="money">180<i>,</i>000<i>,</i>000 <u>VND</u></p>
+        <div class="trace" aria-hidden="true"><span style="width:18%"></span></div>
+        <div class="footrow">
+          <span class="tier" aria-hidden="true"><b class="on"></b><b></b><b></b></span>
+          <span class="tier-n">T1</span>
+          <span class="sr">Tier 1</span>
+          <span class="type">Cash</span>
+          <span class="dwell">01d</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 4. Quote Sent -->
+  <section class="col" aria-label="Quote Sent">
+    <div class="col-head">
+      <div class="row"><span class="name">Quote Sent</span><span class="n">1</span></div>
+      <span class="sum">95<i>,</i>000<i>,</i>000 VND</span>
+    </div>
+    <div class="col-body">
+
+      <article class="clip stalled" tabindex="0">
+        <span class="flag">Stalled &middot; 09d no reply</span>
+        <h2 class="title viet">Social cutdowns x12</h2>
+        <p class="client viet">Nh&#7845;t Minh Beverage</p>
+        <p class="money">95<i>,</i>000<i>,</i>000 <u>VND</u></p>
+        <div class="trace" aria-hidden="true"><span style="width:9.5%"></span></div>
+        <div class="footrow">
+          <span class="tier" aria-hidden="true"><b class="on"></b><b></b><b></b></span>
+          <span class="tier-n">T1</span>
+          <span class="sr">Tier 1</span>
+          <span class="type">Bridge</span>
+          <span class="dwell">09d</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 5. Negotiation -->
+  <section class="col" aria-label="Negotiation">
+    <div class="col-head">
+      <div class="row"><span class="name">Negotiation</span><span class="n">1</span></div>
+      <span class="sum">420<i>,</i>000<i>,</i>000 VND</span>
+    </div>
+    <div class="col-body">
+
+      <article class="clip" tabindex="0">
+        <h2 class="title viet">Brand film &ldquo;Ng&#432;&#7901;i Gi&#7919; L&#7917;a&rdquo;</h2>
+        <p class="client viet">G&#7889;m S&#7913; Minh Long</p>
+        <p class="money">420<i>,</i>000<i>,</i>000 <u>VND</u></p>
+        <div class="trace" aria-hidden="true"><span style="width:42%"></span></div>
+        <div class="footrow">
+          <span class="tier" aria-hidden="true"><b class="on"></b><b class="on"></b><b></b></span>
+          <span class="tier-n">T2</span>
+          <span class="sr">Tier 2</span>
+          <span class="type">Brand</span>
+          <span class="dwell">03d</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- terminal zone -->
+  <div class="terminal">
+    <div class="cut">Closed &middot; no further moves</div>
+    <div class="cols">
+
+      <!-- 6. Won -->
+      <section class="col" aria-label="Won">
+        <div class="col-head">
+          <div class="row"><span class="name">Won</span><span class="n">1</span></div>
+          <span class="sum">210<i>,</i>000<i>,</i>000 VND</span>
+        </div>
+        <div class="col-body">
+
+          <article class="clip won" tabindex="0">
+            <h2 class="title viet">Factory safety series</h2>
+            <p class="client viet">S&ocirc;ng H&agrave; Logistics</p>
+            <p class="money">210<i>,</i>000<i>,</i>000 <u>VND</u></p>
+            <div class="trace" aria-hidden="true"><span style="width:21%"></span></div>
+            <div class="footrow">
+              <span class="tier" aria-hidden="true"><b class="on"></b><b class="on"></b><b></b></span>
+              <span class="tier-n">T2</span>
+              <span class="sr">Tier 2</span>
+              <span class="type">Cash</span>
+              <span class="dwell">12d</span>
+            </div>
+            <span class="outcome">Won &middot; moves to jobs</span>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- 7. Lost -->
+      <section class="col" aria-label="Lost">
+        <div class="col-head">
+          <div class="row"><span class="name">Lost</span><span class="n">1</span></div>
+          <span class="sum">60<i>,</i>000<i>,</i>000 VND</span>
+        </div>
+        <div class="col-body">
+
+          <article class="clip lost" tabindex="0">
+            <h2 class="title viet">Event aftermovie</h2>
+            <p class="client viet">Deja Vu Weddings</p>
+            <p class="money">60<i>,</i>000<i>,</i>000 <u>VND</u></p>
+            <div class="trace" aria-hidden="true"><span style="width:6%"></span></div>
+            <div class="footrow">
+              <span class="tier" aria-hidden="true"><b class="on"></b><b></b><b></b></span>
+              <span class="tier-n">T1</span>
+              <span class="sr">Tier 1</span>
+              <span class="type">Cash</span>
+              <span class="dwell">05d</span>
+            </div>
+            <span class="outcome">Lost &middot; archived</span>
+          </article>
+
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+</main>
+
+<p class="foot">8 deals &middot; 2,195,000,000 VND on the board &middot; figures exact, no rounding</p>
+
+<!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
+<div id="proto-switcher" role="navigation" aria-label="Prototype direction switcher">
+  <button type="button" data-dir="-1" aria-label="Previous direction">&#8592;</button>
+  <span id="proto-label"></span>
+  <button type="button" data-dir="1" aria-label="Next direction">&#8594;</button>
+</div>
+<style>
+  #proto-switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:.4rem;background:#111;color:#fff;border:1px solid #4a4a4a;border-radius:999px;padding:.35rem .45rem;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+  #proto-switcher button{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:999px;color:#fff}
+  #proto-switcher button:hover{background:#333}
+  #proto-switcher button:focus-visible{outline:2px solid #7cd6ff;outline-offset:2px}
+  #proto-label{padding:0 .35rem;white-space:nowrap}
+  @media print{#proto-switcher{display:none}}
+</style>
+<script>
+(function(){
+  var V=[{k:'A',n:'Call sheet',f:'pipeline-call-sheet.html'},
+         {k:'B',n:'Grading suite',f:'pipeline-grading-suite.html'},
+         {k:'C',n:'Studio brand',f:'pipeline-studio-brand.html'}];
+  var CURRENT=1;
+  document.getElementById('proto-label').textContent=V[CURRENT].k+' - '+V[CURRENT].n+'  ('+(CURRENT+1)+'/'+V.length+')';
+  function go(d){location.href=V[(CURRENT+d+V.length)%V.length].f;}
+  document.querySelectorAll('#proto-switcher button').forEach(function(b){b.addEventListener('click',function(){go(+b.dataset.dir);});});
+  document.addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);
+  });
+})();
+</script>
+
+</body>
+</html>

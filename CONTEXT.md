@@ -169,3 +169,21 @@ _Avoid_: UAT, QA, demo, acceptance testing
 **Seed data**:
 Data a branch creates at stack boot so its own feature is visible. Never real, never preserved.
 _Avoid_: smoke data, fixtures, demo data, test data
+
+## Design
+
+**Direction**:
+A coherent aesthetic candidate for the AuraOS screens - palette, type and layout language - built as throwaway pages for judgement, never as code to keep. A direction commits to one mode, light or dark; none owes a second variant.
+_Avoid_: theme, style, skin, look
+
+**Direction panel**:
+The founder judging 2-3 divergent directions side by side, each rendering the same screen with the same data so only the design varies. The pick is the founder's, never the agent's.
+_Avoid_: bake-off, comparison, shortlist
+
+**Front-runner**:
+The direction picked from the panel. Not yet the winner: it must first survive the densest screens and the client-facing quote page.
+_Avoid_: winner (until it survives), chosen design, final direction
+
+**Restyle spec**:
+The document translating the winning direction into buildable changes to the live screens, screen by screen. Writing it ends the exploration; the current UI is untouched until it ships through the main flow.
+_Avoid_: redesign, style guide, theme spec

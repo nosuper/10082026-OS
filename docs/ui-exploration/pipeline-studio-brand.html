@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AuraOS pipeline - Studio brand</title>
+<style>
+/* ------------------------------------------------------------------
+   AuraOS - Deal pipeline - direction C "Studio brand"
+   Palette
+     --paper    #F1ECE4  warm tungsten-lit paper, the board ground
+     --card     #FBF8F3  card field, one step brighter than paper
+     --ink      #171310  near-black with brown in it, all primary text
+     --ash      #7C736A  warm grey, secondary text and quiet marks
+     --lacquer  #D8202B  the one saturated brand red, structural only
+     --closed   #211B16  deep warm ink slab, the terminal band
+   Type
+     one grotesque superfamily, three roles by weight + tracking + case.
+     Every face in the stack carries the full Vietnamese block
+     (Tet, Vi Xuan, Gom Su, Nguoi Giu Lua all render, no fallback).
+   ------------------------------------------------------------------ */
+
+:root{
+  --paper:#F1ECE4;
+  --card:#FBF8F3;
+  --ink:#171310;
+  --ash:#7C736A;
+  --lacquer:#D8202B;
+  --closed:#211B16;
+
+  --rule:rgba(23,19,16,.14);
+  --rule-soft:rgba(23,19,16,.08);
+  --rule-dark:rgba(241,236,228,.16);
+
+  /* Display + body: system grotesques with complete Vietnamese coverage.
+     Georgia, Helvetica, Palatino and Baskerville were tried against
+     "Nguoi Giu Lua" and "Gom Su" and dropped - they drop out of the
+     face on the stacked diacritics. */
+  --sans:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI Variable Display","Segoe UI",Roboto,"Noto Sans","Helvetica Neue",Arial,sans-serif;
+  /* Data role: ASCII-only micro marks (T2, 6d, 01), never Vietnamese. */
+  --mono:ui-monospace,SFMono-Regular,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+
+  --col:316px;
+  --gap:clamp(14px,1.6vw,26px);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+
+body{
+  margin:0;
+  padding-bottom:90px;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.45;
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1,"kern" 1;
+  -webkit-font-smoothing:antialiased;
+}
+
+:focus-visible{outline:2px solid var(--lacquer);outline-offset:3px}
+
+/* ============================== masthead ============================== */
+
+.masthead{
+  padding:clamp(26px,4vw,58px) var(--gap) clamp(20px,2.4vw,32px);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:clamp(18px,3vw,54px);
+  border-bottom:1px solid var(--rule);
+}
+
+.lockup{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.3em;
+  text-transform:uppercase;
+  color:var(--ash);
+  margin-bottom:clamp(14px,1.6vw,22px);
+}
+.lockup b{color:var(--ink);font-weight:700}
+.lockup i{color:var(--lacquer);font-style:normal;padding:0 .45em}
+
+.pitch{
+  margin:0;
+  max-width:16ch;
+  font-size:clamp(38px,6.4vw,86px);
+  font-weight:800;
+  letter-spacing:-.038em;
+  line-height:.94;
+}
+.pitch .amt{display:block;white-space:nowrap}
+.pitch .cur{
+  font-size:.42em;
+  font-weight:700;
+  letter-spacing:.02em;
+  vertical-align:.42em;
+  color:var(--lacquer);
+  margin-left:.22em;
+}
+.pitch .tail{
+  display:block;
+  font-size:.235em;
+  font-weight:600;
+  letter-spacing:-.01em;
+  color:var(--ash);
+  margin-top:.9em;
+  max-width:34ch;
+}
+
+.ledger{
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.9;
+  letter-spacing:.01em;
+  color:var(--ash);
+  border-left:2px solid var(--lacquer);
+  padding-left:16px;
+  min-width:min(100%,268px);
+}
+.ledger div{display:flex;justify-content:space-between;gap:20px;white-space:nowrap}
+.ledger dd{margin:0}
+.ledger dt{text-transform:uppercase;letter-spacing:.14em;font-size:10px;padding-top:1px}
+.ledger b{color:var(--ink);font-weight:700}
+
+/* ================================ board ================================ */
+
+.board{
+  display:flex;
+  align-items:stretch;
+  gap:var(--gap);
+  padding:clamp(22px,2.6vw,38px) var(--gap) 34px;
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+  scrollbar-width:thin;
+}
+
+.stage{
+  flex:0 0 var(--col);
+  width:var(--col);
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+/* --- the signature: oversize stage header carrying a value rule --- */
+
+.head{flex:none;padding-bottom:14px}
+
+.idx{
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:.24em;
+  color:var(--ash);
+  display:block;
+  margin-bottom:8px;
+}
+
+.name{
+  margin:0;
+  font-size:clamp(23px,2.1vw,31px);
+  font-weight:700;
+  letter-spacing:-.026em;
+  line-height:1.02;
+}
+
+.total{
+  display:block;
+  margin-top:4px;
+  font-size:clamp(21px,1.95vw,28px);
+  font-weight:800;
+  letter-spacing:-.028em;
+  color:var(--lacquer);
+  line-height:1.05;
+}
+.total span{
+  font-size:.44em;
+  font-weight:700;
+  letter-spacing:.06em;
+  vertical-align:.5em;
+  margin-left:.24em;
+}
+
+/* value rule: length is this stage's share of the largest stage.
+   read across the top of the board and you see where the money sits. */
+.vrule{
+  margin-top:13px;
+  height:7px;
+  background:var(--lacquer);
+  border-radius:1px;
+}
+.vtrack{
+  border-top:1px solid var(--rule);
+  padding-top:0;
+  margin-top:13px;
+}
+.vtrack .vrule{margin-top:0;border-radius:0 0 1px 1px}
+
+.count{
+  display:block;
+  margin-top:9px;
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ash);
+}
+
+/* ------------------------------- cards ------------------------------- */
+
+.list{
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  max-height:min(58vh,660px);
+  overflow-y:auto;
+  overscroll-behavior-y:contain;
+  padding:2px 4px 26px 0;
+  scrollbar-width:thin;
+  scrollbar-color:var(--rule) transparent;
+}
+.list::-webkit-scrollbar{width:6px}
+.list::-webkit-scrollbar-thumb{background:var(--rule);border-radius:99px}
+
+.card{
+  position:relative;
+  flex:none;
+  background:var(--card);
+  border:1px solid var(--rule-soft);
+  border-radius:3px;
+  padding:15px 16px 14px;
+  transition:border-color .16s ease,transform .16s ease;
+}
+.card:hover,.card:focus-visible{
+  border-color:rgba(23,19,16,.28);
+  transform:translateY(-1px);
+}
+
+.deal{
+  margin:0;
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:-.012em;
+  line-height:1.3;
+}
+.client{
+  margin:3px 0 0;
+  font-size:12px;
+  letter-spacing:.03em;
+  color:var(--ash);
+}
+
+/* money is the loudest fact on the card */
+.money{
+  margin:12px 0 0;
+  font-size:21px;
+  font-weight:700;
+  letter-spacing:-.03em;
+  line-height:1;
+}
+.money span{
+  font-size:.5em;
+  font-weight:700;
+  letter-spacing:.07em;
+  color:var(--ash);
+  margin-left:.32em;
+  vertical-align:.16em;
+}
+
+.marks{
+  margin:13px 0 0;
+  padding-top:11px;
+  border-top:1px solid var(--rule-soft);
+  display:flex;
+  align-items:center;
+  gap:9px;
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  color:var(--ash);
+}
+
+/* tier: weight of the mark rises with the tier */
+.tier{
+  display:inline-grid;
+  place-items:center;
+  width:21px;height:17px;
+  border-radius:2px;
+  font-size:9.5px;
+  letter-spacing:.04em;
+  font-weight:700;
+}
+.t1{border:1px solid var(--rule);color:var(--ash)}
+.t2{border:1px solid var(--ink);color:var(--ink)}
+.t3{background:var(--lacquer);color:#fff}
+
+/* type: a 7px swatch says which of the three it is */
+.type{display:inline-flex;align-items:center;gap:6px;color:var(--ink)}
+.type::before{content:"";width:7px;height:7px;border-radius:1px}
+.cash::before{background:var(--ink)}
+.bridge::before{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.brand::before{background:var(--lacquer)}
+
+.age{margin-left:auto}
+
+/* stalled: the one card allowed to break the calm, and it echoes the
+   header architecture with a full-width lacquer rule of its own */
+.card.stalled{border-color:rgba(216,32,43,.42);padding-bottom:18px;overflow:hidden}
+.card.stalled::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--lacquer);
+}
+.flag{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  margin-bottom:10px;
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--lacquer);
+}
+.flag::before{
+  content:"";width:6px;height:6px;border-radius:99px;background:var(--lacquer);
+}
+.card.stalled .age{color:var(--lacquer);font-weight:700}
+
+/* ============================ terminal band ============================ */
+
+.closed{
+  flex:0 0 auto;
+  display:flex;
+  gap:var(--gap);
+  align-self:stretch;
+  background:var(--closed);
+  color:var(--paper);
+  border-radius:3px;
+  padding:clamp(18px,2vw,26px) clamp(18px,2vw,26px) 8px;
+  margin-left:clamp(6px,1vw,18px);
+  position:relative;
+}
+.closed::before{
+  content:"Closed";
+  position:absolute;
+  top:0;left:clamp(18px,2vw,26px);
+  transform:translateY(-50%);
+  background:var(--lacquer);
+  color:#fff;
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  padding:5px 11px;
+  border-radius:2px;
+}
+
+.closed .stage{flex:0 0 var(--col);width:var(--col)}
+.closed .idx,.closed .count{color:rgba(241,236,228,.5)}
+.closed .name{color:var(--paper)}
+.closed .vtrack{border-top-color:var(--rule-dark)}
+
+.closed .card{
+  background:transparent;
+  border-color:var(--rule-dark);
+  color:var(--paper);
+}
+.closed .card:hover,.closed .card:focus-visible{border-color:rgba(241,236,228,.4)}
+.closed .client,.closed .marks{color:rgba(241,236,228,.55)}
+.closed .marks{border-top-color:var(--rule-dark)}
+.closed .t1{border-color:rgba(241,236,228,.3);color:rgba(241,236,228,.6)}
+.closed .type{color:var(--paper)}
+.closed .cash::before{background:var(--paper)}
+.closed .bridge::before{box-shadow:inset 0 0 0 1.5px var(--paper)}
+
+.won .total{color:#fff}
+.won .money{color:#fff}
+.won .card{border-color:rgba(241,236,228,.3)}
+
+.lost .total,.lost .name{color:rgba(241,236,228,.52)}
+.lost .vrule{background:rgba(241,236,228,.28)}
+.lost .card{opacity:.62}
+.lost .card:hover,.lost .card:focus-visible{opacity:1}
+.lost .money{color:rgba(241,236,228,.8)}
+
+/* ================================ mobile ================================ */
+
+@media (max-width:860px){
+  :root{--col:100%}
+  .board{
+    flex-direction:column;
+    overflow-x:visible;
+    padding-bottom:20px;
+  }
+  .stage{flex:none;width:100%}
+  .list{max-height:none;overflow-y:visible;padding-right:0}
+  .closed{
+    flex-direction:column;
+    margin-left:0;
+    margin-top:26px;
+    padding-bottom:20px;
+  }
+  .closed .stage{flex:none;width:100%}
+  .masthead{align-items:flex-start;flex-direction:column}
+  .ledger{padding-left:14px}
+  .pitch{max-width:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div>
+    <p class="lockup"><b>AuraOS</b><i>/</i>Deal pipeline<i>/</i>August 2026</p>
+    <h1 class="pitch">
+      <span class="amt">1,925,000,000<span class="cur">VND</span></span>
+      still in play
+      <span class="tail">Six open deals across five working stages. Two closed this month.</span>
+    </h1>
+  </div>
+
+  <dl class="ledger">
+    <div><dt>On the board</dt><dd><b>2,195,000,000 VND</b></dd></div>
+    <div><dt>Open</dt><dd><b>6 deals</b> / 1,925,000,000 VND</dd></div>
+    <div><dt>Won</dt><dd><b>210,000,000 VND</b></dd></div>
+    <div><dt>Lost</dt><dd><b>60,000,000 VND</b></dd></div>
+    <div><dt>Stalled</dt><dd><b>1 deal</b> / 95,000,000 VND</dd></div>
+  </dl>
+</header>
+
+<main class="board">
+
+  <!-- 01 Brief Received -->
+  <section class="stage" aria-labelledby="s1">
+    <div class="head">
+      <span class="idx">01</span>
+      <h2 class="name" id="s1">Brief Received</h2>
+      <strong class="total">970,000,000<span>VND</span></strong>
+      <div class="vtrack"><div class="vrule" style="width:100%"></div></div>
+      <span class="count">2 deals</span>
+    </div>
+    <div class="list">
+
+      <article class="card" tabindex="0">
+        <p class="deal">TVC T&#7871;t 2027 "V&#7883; Xu&#226;n"</p>
+        <p class="client">Nh&#7845;t Minh Beverage</p>
+        <p class="money">850,000,000<span>VND</span></p>
+        <p class="marks">
+          <span class="tier t3">T3</span>
+          <span class="type brand">Brand</span>
+          <span class="age">4d</span>
+        </p>
+      </article>
+
+      <article class="card" tabindex="0">
+        <p class="deal">Recruitment film</p>
+        <p class="client">S&#244;ng H&#224; Logistics</p>
+        <p class="money">120,000,000<span>VND</span></p>
+        <p class="marks">
+          <span class="tier t1">T1</span>
+          <span class="type cash">Cash</span>
+          <span class="age">2d</span>
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 02 De-brief -->
+  <section class="stage" aria-labelledby="s2">
+    <div class="head">
+      <span class="idx">02</span>
+      <h2 class="name" id="s2">De-brief</h2>
+      <strong class="total">260,000,000<span>VND</span></strong>
+      <div class="vtrack"><div class="vrule" style="width:26.8%"></div></div>
+      <span class="count">1 deal</span>
+    </div>
+    <div class="list">
+
+      <article class="card" tabindex="0">
+        <p class="deal">Product launch livestream</p>
+        <p class="client">An Khang Pharma</p>
+        <p class="money">260,000,000<span>VND</span></p>
+        <p class="marks">
+          <span class="tier t2">T2</span>
+          <span class="type bridge">Bridge</span>
+          <span class="age">6d</span>
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 03 Breakdown -->
+  <section class="stage" aria-labelledby="s3">
+    <div class="head">
+      <span class="idx">03</span>
+      <h2 class="name" id="s3">Breakdown</h2>
+      <strong class="total">180,000,000<span>VND</span></strong>
+      <div class="vtrack"><div class="vrule" style="width:18.6%"></div></div>
+      <span class="count">1 deal</span>
+    </div>
+    <div class="list">
+
+      <article class="card" tabindex="0">
+        <p class="deal">Corporate profile 2026</p>
+        <p class="client">Ki&#7871;n V&#224;ng Construction</p>
+        <p class="money">180,000,000<span>VND</span></p>
+        <p class="marks">
+          <span class="tier t1">T1</span>
+          <span class="type cash">Cash</span>
+          <span class="age">1d</span>
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 04 Quote Sent -->
+  <section class="stage" aria-labelledby="s4">
+    <div class="head">
+      <span class="idx">04</span>
+      <h2 class="name" id="s4">Quote Sent</h2>
+      <strong class="total">95,000,000<span>VND</span></strong>
+      <div class="vtrack"><div class="vrule" style="width:9.8%"></div></div>
+      <span class="count">1 deal / 1 stalled</span>
+    </div>
+    <div class="list">
+
+      <article class="card stalled" tabindex="0">
+        <p class="flag">No answer 9 days</p>
+        <p class="deal">Social cutdowns x12</p>
+        <p class="client">Nh&#7845;t Minh Beverage</p>
+        <p class="money">95,000,000<span>VND</span></p>
+        <p class="marks">
+          <span class="tier t1">T1</span>
+          <span class="type bridge">Bridge</span>
+          <span class="age">9d</span>
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 05 Negotiation -->
+  <section class="stage" aria-labelledby="s5">
+    <div class="head">
+      <span class="idx">05</span>
+      <h2 class="name" id="s5">Negotiation</h2>
+      <strong class="total">420,000,000<span>VND</span></strong>
+      <div class="vtrack"><div class="vrule" style="width:43.3%"></div></div>
+      <span class="count">1 deal</span>
+    </div>
+    <div class="list">
+
+      <article class="card" tabindex="0">
+        <p class="deal">Brand film "Ng&#432;&#7901;i Gi&#7919; L&#7917;a"</p>
+        <p class="client">G&#7889;m S&#7913; Minh Long</p>
+        <p class="money">420,000,000<span>VND</span></p>
+        <p class="marks">
+          <span class="tier t2">T2</span>
+          <span class="type brand">Brand</span>
+          <span class="age">3d</span>
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- terminal band: the board stops being paper and becomes ink -->
+  <div class="closed">
+
+    <section class="stage won" aria-labelledby="s6">
+      <div class="head">
+        <span class="idx">Terminal</span>
+        <h2 class="name" id="s6">Won</h2>
+        <strong class="total">210,000,000<span>VND</span></strong>
+        <div class="vtrack"><div class="vrule" style="width:21.6%"></div></div>
+        <span class="count">1 deal</span>
+      </div>
+      <div class="list">
+
+        <article class="card" tabindex="0">
+          <p class="deal">Factory safety series</p>
+          <p class="client">S&#244;ng H&#224; Logistics</p>
+          <p class="money">210,000,000<span>VND</span></p>
+          <p class="marks">
+            <span class="tier t2">T2</span>
+            <span class="type cash">Cash</span>
+            <span class="age">12d</span>
+          </p>
+        </article>
+
+      </div>
+    </section>
+
+    <section class="stage lost" aria-labelledby="s7">
+      <div class="head">
+        <span class="idx">Terminal</span>
+        <h2 class="name" id="s7">Lost</h2>
+        <strong class="total">60,000,000<span>VND</span></strong>
+        <div class="vtrack"><div class="vrule" style="width:6.2%"></div></div>
+        <span class="count">1 deal</span>
+      </div>
+      <div class="list">
+
+        <article class="card" tabindex="0">
+          <p class="deal">Event aftermovie</p>
+          <p class="client">Deja Vu Weddings</p>
+          <p class="money">60,000,000<span>VND</span></p>
+          <p class="marks">
+            <span class="tier t1">T1</span>
+            <span class="type cash">Cash</span>
+            <span class="age">5d</span>
+          </p>
+        </article>
+
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+<!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
+<div id="proto-switcher" role="navigation" aria-label="Prototype direction switcher">
+  <button type="button" data-dir="-1" aria-label="Previous direction">&#8592;</button>
+  <span id="proto-label"></span>
+  <button type="button" data-dir="1" aria-label="Next direction">&#8594;</button>
+</div>
+<style>
+  #proto-switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:.4rem;background:#111;color:#fff;border:1px solid #4a4a4a;border-radius:999px;padding:.35rem .45rem;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+  #proto-switcher button{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:999px;color:#fff}
+  #proto-switcher button:hover{background:#333}
+  #proto-switcher button:focus-visible{outline:2px solid #7cd6ff;outline-offset:2px}
+  #proto-label{padding:0 .35rem;white-space:nowrap}
+  @media print{#proto-switcher{display:none}}
+</style>
+<script>
+(function(){
+  var V=[{k:'A',n:'Call sheet',f:'pipeline-call-sheet.html'},
+         {k:'B',n:'Grading suite',f:'pipeline-grading-suite.html'},
+         {k:'C',n:'Studio brand',f:'pipeline-studio-brand.html'}];
+  var CURRENT=2;
+  document.getElementById('proto-label').textContent=V[CURRENT].k+' - '+V[CURRENT].n+'  ('+(CURRENT+1)+'/'+V.length+')';
+  function go(d){location.href=V[(CURRENT+d+V.length)%V.length].f;}
+  document.querySelectorAll('#proto-switcher button').forEach(function(b){b.addEventListener('click',function(){go(+b.dataset.dir);});});
+  document.addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);
+  });
+})();
+</script>
+
+</body>
+</html>

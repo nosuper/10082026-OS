@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AuraOS pipeline - Call sheet</title>
+<style>
+  :root{
+    --paper:#E6E4DD;
+    --ink:#14130E;
+    --ink-mid:#6E6B60;
+    --rule:#B9B6AA;
+    --stamp-red:#A81F16;
+    --stamp-green:#1D5535;
+    --stock-won:#D7DCD2;
+    --stock-lost:#E3D7D6;
+
+    --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
+    --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+
+    --col-min: 196px;
+    --card-bg: var(--paper);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+
+  body{
+    margin:0;
+    padding-bottom:90px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--entry);
+    font-size:15px;
+    line-height:1.35;
+    /* faint ruled-stock tint */
+    background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
+  }
+
+  /* ============ HEADER BAND ============ */
+  .sheet-head{
+    border-bottom:3px solid var(--ink);
+    flex:0 0 auto;
+  }
+  .sheet-title{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:.6rem 1.5rem;
+    padding:14px 14px 10px;
+  }
+  .sheet-title h1{
+    margin:0;
+    font-family:var(--form);
+    font-size:clamp(19px,3.4vw,27px);
+    font-weight:700;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    line-height:1;
+  }
+  .eyebrow{
+    display:block;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin-bottom:7px;
+  }
+  .sheet-stamp-no{
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    text-align:right;
+    color:var(--ink-mid);
+    line-height:1.7;
+  }
+  .sheet-stamp-no b{color:var(--ink);font-weight:700}
+
+  .info-strip{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--ink);
+  }
+  .info-cell{
+    padding:9px 14px 10px;
+    border-left:1px solid var(--rule);
+    min-width:0;
+  }
+  .info-cell:first-child{border-left:0}
+  .info-cell dt{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.19em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin:0 0 4px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .info-cell dd{
+    margin:0;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:clamp(13px,1.7vw,17px);
+    letter-spacing:-.01em;
+    white-space:nowrap;
+  }
+  .info-cell dd .u{font-size:.66em;font-weight:600;letter-spacing:.08em;color:var(--ink-mid);margin-left:.25em}
+  .info-cell.is-alert dd{color:var(--stamp-red)}
+
+  .key-strip{
+    border-top:1px solid var(--rule);
+    padding:6px 14px 7px;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    display:flex;
+    flex-wrap:wrap;
+    gap:.35rem 1.4rem;
+  }
+  .key-strip .k-rule{display:inline-flex;align-items:center;gap:.45rem}
+  .key-strip i{display:inline-block;height:11px;background:var(--ink);font-style:normal}
+  .key-strip i.w1{width:2px}
+  .key-strip i.w2{width:4px}
+  .key-strip i.w3{width:7px}
+
+  /* ============ BOARD ============ */
+  .board{
+    flex:1 1 auto;
+    min-height:0;
+    display:flex;
+    align-items:stretch;
+    overflow-x:auto;
+    overflow-y:hidden;
+    padding:0 14px;
+    border-bottom:3px solid var(--ink);
+    scrollbar-width:thin;
+    scrollbar-color:var(--ink-mid) transparent;
+  }
+  .board::-webkit-scrollbar{height:9px}
+  .board::-webkit-scrollbar-thumb{background:var(--ink-mid)}
+  .board::-webkit-scrollbar-track{background:transparent}
+
+  .col{
+    flex:1 1 0;
+    min-width:var(--col-min);
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    border-right:1px solid var(--rule);
+  }
+  .col:last-child{border-right:0}
+
+  .col-head{
+    flex:0 0 auto;
+    padding:10px 12px 9px;
+    border-bottom:2px solid var(--ink);
+    background:inherit;
+  }
+  .col-head .stage-no{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.2em;
+    color:var(--ink-mid);
+    display:block;
+    margin-bottom:3px;
+  }
+  .col-head h2{
+    margin:0;
+    font-family:var(--form);
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    line-height:1.15;
+  }
+
+  .col-body{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    scrollbar-width:thin;
+    scrollbar-color:var(--rule) transparent;
+  }
+  /* blank ruled stock below the last entry - the rest of the form */
+  .col-body::after{
+    content:"";
+    flex:1 0 44px;
+    background-image:repeating-linear-gradient(180deg, transparent 0 43px, rgba(20,19,14,.085) 43px 44px);
+  }
+  .col-body::-webkit-scrollbar{width:7px}
+  .col-body::-webkit-scrollbar-thumb{background:var(--rule)}
+  .col-body::-webkit-scrollbar-track{background:transparent}
+
+  .col-foot{
+    flex:0 0 auto;
+    border-top:2px solid var(--ink);
+    padding:7px 12px 8px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:.5rem;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+  }
+  .col-foot .f-label{
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
+  }
+  .col-foot .f-sum{
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:-.01em;
+    white-space:nowrap;
+  }
+
+  /* ============ CARD ============ */
+  .card{
+    position:relative;
+    flex:0 0 auto;
+    display:block;
+    width:100%;
+    text-align:left;
+    background:var(--card-bg);
+    border:0;
+    border-left:2px solid var(--ink);
+    border-bottom:1px solid var(--rule);
+    padding:11px 12px 10px 11px;
+    font:inherit;
+    color:inherit;
+    cursor:pointer;
+    transition:background .12s linear;
+  }
+  .card:hover{box-shadow:inset 0 0 0 999px rgba(20,19,14,.05)}
+  .card:focus-visible{
+    outline:2px solid var(--ink);
+    outline-offset:-3px;
+    box-shadow:inset 0 0 0 999px rgba(20,19,14,.06);
+  }
+  .card.t1{border-left-width:2px}
+  .card.t2{border-left-width:4px}
+  .card.t3{border-left-width:7px}
+
+  .client{
+    margin:0 0 3px;
+    font-family:var(--entry);
+    font-size:10.5px;
+    font-weight:600;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    overflow-wrap:anywhere;
+  }
+  .deal{
+    margin:0 0 9px;
+    font-family:var(--entry);
+    font-size:15px;
+    font-weight:600;
+    line-height:1.24;
+    letter-spacing:-.005em;
+    overflow-wrap:anywhere;
+  }
+  .money{
+    margin:0;
+    padding-top:7px;
+    border-top:1px solid var(--rule);
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:18px;
+    letter-spacing:-.025em;
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  .money .u{
+    font-size:.58em;
+    font-weight:600;
+    letter-spacing:.1em;
+    color:var(--ink-mid);
+    margin-left:.3em;
+  }
+
+  .card-foot{
+    margin-top:9px;
+    display:flex;
+    align-items:center;
+    gap:5px;
+  }
+  .mark{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    padding:2px 5px 1px;
+    line-height:1.4;
+    white-space:nowrap;
+  }
+  .mark.tier{border:1px solid var(--ink-mid);color:var(--ink)}
+  .type-cash{background:var(--ink);color:var(--paper)}
+  .type-bridge{border:1px solid var(--ink);color:var(--ink)}
+  .type-brand{
+    border:1px solid var(--ink);
+    color:var(--ink);
+    background-image:repeating-linear-gradient(45deg, rgba(20,19,14,.20) 0 1px, transparent 1px 3px);
+  }
+  .age{
+    margin-left:auto;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.06em;
+    color:var(--ink-mid);
+    border:1px solid transparent;
+    padding:2px 4px 1px;
+    white-space:nowrap;
+  }
+
+  /* stalled */
+  .card.is-stalled{border-left-color:var(--stamp-red)}
+  .card.is-stalled .age{color:var(--stamp-red);border-color:var(--stamp-red)}
+
+  /* ============ SIGNATURE: RUBBER STAMP OVERPRINT ============ */
+  .stamp{
+    position:absolute;
+    z-index:3;
+    display:inline-block;
+    padding:3px 8px 2px;
+    border:2.5px solid currentColor;
+    box-shadow:inset 0 0 0 1px currentColor;
+    font-family:var(--form);
+    font-weight:700;
+    text-transform:uppercase;
+    line-height:1.15;
+    text-align:center;
+    opacity:.88;
+    mix-blend-mode:multiply;
+    pointer-events:none;
+  }
+  .stamp::after{
+    content:"";
+    position:absolute;
+    inset:-3px;
+    background:
+      repeating-linear-gradient(112deg, rgba(230,228,221,.62) 0 1px, transparent 1px 5px),
+      repeating-linear-gradient(31deg, rgba(230,228,221,.34) 0 1px, transparent 1px 9px);
+    pointer-events:none;
+  }
+  .stamp .big{display:block;font-size:15px;letter-spacing:.22em}
+  .stamp .sub{
+    display:block;
+    font-size:8px;
+    letter-spacing:.14em;
+    font-weight:600;
+    margin-top:1px;
+    padding-top:2px;
+    border-top:1px solid currentColor;
+  }
+
+  /* stamps get their own overprint band at the card foot - money is never covered */
+  .card.has-stamp{padding-bottom:38px}
+  .stamp{right:-1px;bottom:-6px;transform-origin:100% 100%}
+
+  .stamp--stalled{color:var(--stamp-red);transform:rotate(-4.5deg)}
+  .stamp--won{color:var(--stamp-green);transform:rotate(-3.5deg)}
+  .stamp--won .big{font-size:17px;letter-spacing:.26em}
+  .stamp--lost{color:var(--stamp-red);transform:rotate(4deg)}
+  .stamp--lost .big{font-size:17px;letter-spacing:.26em}
+
+  /* ============ TERMINAL ZONE ============ */
+  .terminal{
+    flex:2 1 0;
+    min-width:calc(var(--col-min) * 2 + 28px);
+    display:flex;
+    align-items:stretch;
+    min-height:0;
+  }
+  .perf{
+    flex:0 0 28px;
+    width:28px;
+    position:relative;
+    border-left:1px dashed var(--ink);
+    border-right:1px dashed var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background-image:radial-gradient(circle at 50% 0, var(--ink) 1.1px, transparent 1.3px);
+    background-size:100% 9px;
+    background-repeat:repeat-y;
+  }
+  .perf span{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.34em;
+    text-transform:uppercase;
+    writing-mode:vertical-rl;
+    color:var(--ink);
+    background:var(--paper);
+    padding:10px 1px;
+  }
+
+  .col--won{background:var(--stock-won);--card-bg:var(--stock-won)}
+  .col--lost{background:var(--stock-lost);--card-bg:var(--stock-lost)}
+  .col--won .col-head,
+  .col--lost .col-head{background:var(--ink)}
+  .col--won .col-head h2,
+  .col--lost .col-head h2{color:var(--paper)}
+  .col--won .col-head .stage-no,
+  .col--lost .col-head .stage-no{color:#9E9C90}
+  .col--lost .card .client,
+  .col--lost .card .deal,
+  .col--lost .card .money{opacity:.62}
+  .col--lost .card .stamp{opacity:.95}
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:760px){
+    body{padding-bottom:90px}
+    .sheet-stamp-no{text-align:left}
+    .info-strip{grid-template-columns:repeat(2,1fr)}
+    .info-cell:nth-child(3),
+    .info-cell:nth-child(4){border-top:1px solid var(--rule)}
+    .info-cell:nth-child(3){border-left:0}
+
+    .board{
+      display:block;
+      overflow-x:visible;
+      overflow-y:visible;
+      padding:0;
+      flex:0 0 auto;
+    }
+    .col{
+      flex:none;
+      width:100%;
+      min-width:0;
+      border-right:0;
+      border-bottom:1px solid var(--rule);
+    }
+    .col-body::after{flex:0 0 44px}
+    .terminal{min-width:0}
+    .col-head{position:sticky;top:0;z-index:4;background:var(--paper);border-top:1px solid var(--rule)}
+    .col--won .col-head,
+    .col--lost .col-head{background:var(--ink)}
+    .col-body{overflow-y:visible;min-height:0}
+    .terminal{display:block}
+    .perf{
+      width:100%;
+      height:24px;
+      flex:none;
+      border-left:0;
+      border-right:0;
+      border-top:1px dashed var(--ink);
+      border-bottom:1px dashed var(--ink);
+      background-image:radial-gradient(circle at 0 50%, var(--ink) 1.1px, transparent 1.3px);
+      background-size:9px 100%;
+      background-repeat:repeat-x;
+    }
+    .perf span{writing-mode:horizontal-tb;padding:1px 10px}
+  }
+
+  @media (max-width:420px){
+    .sheet-title{padding:12px 14px 9px}
+    .money{font-size:17.5px}
+    .stamp{right:8px}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+
+  @media print{
+    body{padding-bottom:0;background:#fff;background-image:none}
+    .board{display:block;border-bottom:0}
+    .col{width:100%;border-right:0;page-break-inside:avoid}
+    .col-body{overflow:visible}
+    .terminal{display:block}
+    .stamp{opacity:1}
+  }
+</style>
+</head>
+<body>
+
+<header class="sheet-head">
+  <div class="sheet-title">
+    <div>
+      <span class="eyebrow">AuraOS - Production operations</span>
+      <h1>Deal pipeline</h1>
+    </div>
+    <div class="sheet-stamp-no">
+      Sheet 04 of 09<br>
+      Tue 18 Aug 2026<br>
+      <b>Prepared 06:57 ICT</b>
+    </div>
+  </div>
+
+  <dl class="info-strip">
+    <div class="info-cell">
+      <dt>Open pipeline</dt>
+      <dd>1,925,000,000<span class="u">VND</span></dd>
+    </div>
+    <div class="info-cell">
+      <dt>Active deals</dt>
+      <dd>06</dd>
+    </div>
+    <div class="info-cell is-alert">
+      <dt>Stalled</dt>
+      <dd>01</dd>
+    </div>
+    <div class="info-cell">
+      <dt>Closed won</dt>
+      <dd>210,000,000<span class="u">VND</span></dd>
+    </div>
+  </dl>
+
+  <div class="key-strip">
+    <span class="k-rule"><i class="w1"></i> Tier 1</span>
+    <span class="k-rule"><i class="w2"></i> Tier 2</span>
+    <span class="k-rule"><i class="w3"></i> Tier 3</span>
+    <span>Solid = Cash</span>
+    <span>Outline = Bridge</span>
+    <span>Hatch = Brand</span>
+    <span>Figures in VND</span>
+  </div>
+</header>
+
+<main class="board">
+
+  <!-- 01 -->
+  <section class="col" aria-labelledby="st1">
+    <div class="col-head">
+      <span class="stage-no">Stage 01</span>
+      <h2 id="st1">Brief received</h2>
+    </div>
+    <div class="col-body">
+
+      <article class="card t3" tabindex="0">
+        <p class="client">Nhất Minh Beverage</p>
+        <h3 class="deal">TVC Tết 2027 "Vị Xuân"</h3>
+        <p class="money">850,000,000<span class="u">VND</span></p>
+        <div class="card-foot">
+          <span class="mark tier">T3</span>
+          <span class="mark type-brand">Brand</span>
+          <span class="age">04d</span>
+        </div>
+      </article>
+
+      <article class="card t1" tabindex="0">
+        <p class="client">Sông Hà Logistics</p>
+        <h3 class="deal">Recruitment film</h3>
+        <p class="money">120,000,000<span class="u">VND</span></p>
+        <div class="card-foot">
+          <span class="mark tier">T1</span>
+          <span class="mark type-cash">Cash</span>
+          <span class="age">02d</span>
+        </div>
+      </article>
+
+    </div>
+    <div class="col-foot">
+      <span class="f-label">02 deals</span>
+      <span class="f-sum">970,000,000</span>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section class="col" aria-labelledby="st2">
+    <div class="col-head">
+      <span class="stage-no">Stage 02</span>
+      <h2 id="st2">De-brief</h2>
+    </div>
+    <div class="col-body">
+
+      <article class="card t2" tabindex="0">
+        <p class="client">An Khang Pharma</p>
+        <h3 class="deal">Product launch livestream</h3>
+        <p class="money">260,000,000<span class="u">VND</span></p>
+        <div class="card-foot">
+          <span class="mark tier">T2</span>
+          <span class="mark type-bridge">Bridge</span>
+          <span class="age">06d</span>
+        </div>
+      </article>
+
+    </div>
+    <div class="col-foot">
+      <span class="f-label">01 deal</span>
+      <span class="f-sum">260,000,000</span>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section class="col" aria-labelledby="st3">
+    <div class="col-head">
+      <span class="stage-no">Stage 03</span>
+      <h2 id="st3">Breakdown</h2>
+    </div>
+    <div class="col-body">
+
+      <article class="card t1" tabindex="0">
+        <p class="client">Kiến Vàng Construction</p>
+        <h3 class="deal">Corporate profile 2026</h3>
+        <p class="money">180,000,000<span class="u">VND</span></p>
+        <div class="card-foot">
+          <span class="mark tier">T1</span>
+          <span class="mark type-cash">Cash</span>
+          <span class="age">01d</span>
+        </div>
+      </article>
+
+    </div>
+    <div class="col-foot">
+      <span class="f-label">01 deal</span>
+      <span class="f-sum">180,000,000</span>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section class="col" aria-labelledby="st4">
+    <div class="col-head">
+      <span class="stage-no">Stage 04</span>
+      <h2 id="st4">Quote sent</h2>
+    </div>
+    <div class="col-body">
+
+      <article class="card t1 is-stalled has-stamp" tabindex="0">
+        <p class="client">Nhất Minh Beverage</p>
+        <h3 class="deal">Social cutdowns x12</h3>
+        <p class="money">95,000,000<span class="u">VND</span></p>
+        <div class="card-foot">
+          <span class="mark tier">T1</span>
+          <span class="mark type-bridge">Bridge</span>
+          <span class="age">09d</span>
+        </div>
+        <span class="stamp stamp--stalled">
+          <span class="big">Stalled</span>
+          <span class="sub">09 days no reply</span>
+        </span>
+      </article>
+
+    </div>
+    <div class="col-foot">
+      <span class="f-label">01 deal</span>
+      <span class="f-sum">95,000,000</span>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section class="col" aria-labelledby="st5">
+    <div class="col-head">
+      <span class="stage-no">Stage 05</span>
+      <h2 id="st5">Negotiation</h2>
+    </div>
+    <div class="col-body">
+
+      <article class="card t2" tabindex="0">
+        <p class="client">Gốm Sứ Minh Long</p>
+        <h3 class="deal">Brand film "Người Giữ Lửa"</h3>
+        <p class="money">420,000,000<span class="u">VND</span></p>
+        <div class="card-foot">
+          <span class="mark tier">T2</span>
+          <span class="mark type-brand">Brand</span>
+          <span class="age">03d</span>
+        </div>
+      </article>
+
+    </div>
+    <div class="col-foot">
+      <span class="f-label">01 deal</span>
+      <span class="f-sum">420,000,000</span>
+    </div>
+  </section>
+
+  <!-- TERMINAL ZONE -->
+  <div class="terminal">
+    <div class="perf" aria-hidden="true"><span>Closed</span></div>
+
+    <!-- 06 -->
+    <section class="col col--won" aria-labelledby="st6">
+      <div class="col-head">
+        <span class="stage-no">Stage 06 - terminal</span>
+        <h2 id="st6">Won</h2>
+      </div>
+      <div class="col-body">
+
+        <article class="card t2 has-stamp" tabindex="0">
+          <p class="client">Sông Hà Logistics</p>
+          <h3 class="deal">Factory safety series</h3>
+          <p class="money">210,000,000<span class="u">VND</span></p>
+          <div class="card-foot">
+            <span class="mark tier">T2</span>
+            <span class="mark type-cash">Cash</span>
+            <span class="age">12d</span>
+          </div>
+          <span class="stamp stamp--won">
+            <span class="big">Won</span>
+            <span class="sub">Filed - to jobs</span>
+          </span>
+        </article>
+
+      </div>
+      <div class="col-foot">
+        <span class="f-label">01 deal</span>
+        <span class="f-sum">210,000,000</span>
+      </div>
+    </section>
+
+    <!-- 07 -->
+    <section class="col col--lost" aria-labelledby="st7">
+      <div class="col-head">
+        <span class="stage-no">Stage 07 - terminal</span>
+        <h2 id="st7">Lost</h2>
+      </div>
+      <div class="col-body">
+
+        <article class="card t1 has-stamp" tabindex="0">
+          <p class="client">Deja Vu Weddings</p>
+          <h3 class="deal">Event aftermovie</h3>
+          <p class="money">60,000,000<span class="u">VND</span></p>
+          <div class="card-foot">
+            <span class="mark tier">T1</span>
+            <span class="mark type-cash">Cash</span>
+            <span class="age">05d</span>
+          </div>
+          <span class="stamp stamp--lost">
+            <span class="big">Lost</span>
+            <span class="sub">Filed - archive</span>
+          </span>
+        </article>
+
+      </div>
+      <div class="col-foot">
+        <span class="f-label">01 deal</span>
+        <span class="f-sum">60,000,000</span>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
+<div id="proto-switcher" role="navigation" aria-label="Prototype direction switcher">
+  <button type="button" data-dir="-1" aria-label="Previous direction">&#8592;</button>
+  <span id="proto-label"></span>
+  <button type="button" data-dir="1" aria-label="Next direction">&#8594;</button>
+</div>
+<style>
+  #proto-switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:.4rem;background:#111;color:#fff;border:1px solid #4a4a4a;border-radius:999px;padding:.35rem .45rem;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+  #proto-switcher button{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:999px;color:#fff}
+  #proto-switcher button:hover{background:#333}
+  #proto-switcher button:focus-visible{outline:2px solid #7cd6ff;outline-offset:2px}
+  #proto-label{padding:0 .35rem;white-space:nowrap}
+  @media print{#proto-switcher{display:none}}
+</style>
+<script>
+(function(){
+  var V=[{k:'A',n:'Call sheet',f:'pipeline-call-sheet.html'},
+         {k:'B',n:'Grading suite',f:'pipeline-grading-suite.html'},
+         {k:'C',n:'Studio brand',f:'pipeline-studio-brand.html'}];
+  var CURRENT=0;
+  document.getElementById('proto-label').textContent=V[CURRENT].k+' - '+V[CURRENT].n+'  ('+(CURRENT+1)+'/'+V.length+')';
+  function go(d){location.href=V[(CURRENT+d+V.length)%V.length].f;}
+  document.querySelectorAll('#proto-switcher button').forEach(function(b){b.addEventListener('click',function(){go(+b.dataset.dir);});});
+  document.addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);
+  });
+})();
+</script>
+</body>
+</html>
