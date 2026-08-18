@@ -6,12 +6,21 @@ COMPOSE=(docker compose --project-name auraos-e2e --file "$REPO_DIR/docker/compo
 
 # Signed-in state lives inside the Playwright container (E2E_AUTH_DIR), so it
 # goes when the container does and there is nothing here to delete.
-cleanup() {
+teardown() {
   "${COMPOSE[@]}" down --volumes --remove-orphans
 }
 
+# The trap must re-raise the status that triggered it. Without the explicit
+# exit, a failing Playwright run left the script reporting the exit code of
+# `compose down` instead - a red suite looked green.
+cleanup() {
+  local status=$?
+  teardown
+  exit "$status"
+}
+
 trap cleanup EXIT
-cleanup
+teardown
 
 export AURA_WEB_PORT=18000
 export AURA_SOCKET_PORT=19000
@@ -35,6 +44,27 @@ done
 if [ "$ready" != true ]; then
   "${COMPOSE[@]}" logs --tail 200 frappe
   echo "AuraOS E2E site was not ready within 20 minutes" >&2
+  exit 1
+fi
+
+# /api/method/ping answers long before a server-rendered page does: the first
+# hit on /login compiles assets and templates and can take minutes on a cold
+# site. Playwright's global setup navigates straight there with a 30s
+# timeout, so gating on ping alone let the suite start too early and fail in
+# setup with zero tests run. Warm the real page before handing over.
+warm=false
+for _ in $(seq 1 300); do
+  if curl --fail --silent --output /dev/null --max-time 30 \
+    "http://127.0.0.1:18000/login?redirect-to=%2Faura%2Fdeals"; then
+    warm=true
+    break
+  fi
+  sleep 2
+done
+
+if [ "$warm" != true ]; then
+  "${COMPOSE[@]}" logs --tail 200 frappe
+  echo "AuraOS E2E login page never rendered" >&2
   exit 1
 fi
 

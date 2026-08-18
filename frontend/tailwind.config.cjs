@@ -36,7 +36,11 @@ module.exports = {
       },
       fontFamily: {
         display: ['"Space Grotesk"', "system-ui", "sans-serif"],
-        sans: ['"DM Sans"', "system-ui", "sans-serif"],
+        // Be Vietnam Pro, not DM Sans: DM Sans has no vietnamese subset on
+        // Google Fonts (no U+1EA0-1EF9), so every tone-marked vowel fell back
+        // mid-word. This is the body face - it carries nearly all the app's
+        // Vietnamese - so full diacritic coverage outranks the closer match.
+        sans: ['"Be Vietnam Pro"', "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
       },
       borderRadius: {
