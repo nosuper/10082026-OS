@@ -30,7 +30,7 @@ import { AppShell } from "@/components/aura/AppShell";
 import { Card, Pill, Td, Th } from "@/components/aura/primitives";
 import { Empty, ErrorState, QueryState } from "@/components/aura/states";
 import { countLabel, formatDateTime } from "@/lib/format";
-import { FrappeError, csrfToken } from "@/lib/frappe";
+import { FrappeError, uploadFile, type UploadedFile } from "@/lib/frappe";
 import { resultOf, useMethod, useMethodMutation } from "@/lib/queries";
 
 export const Route = createFileRoute("/paperwork")({
@@ -93,7 +93,6 @@ type PaperRow = {
 
 type Preview = { html: string | null; web?: boolean; file_url?: string | null };
 
-type UploadedFile = { file_url: string; file_name: string };
 
 const LIBRARY = "auraos.api.paperwork_library";
 const PAPERS = "auraos.api.generated_papers";
@@ -117,74 +116,6 @@ const ROW_BUTTON =
 // the app; an upload is multipart. Rather than widen the shared layer for one
 // screen, the upload lives here and hands back the same FrappeError everything
 // else throws, so <ErrorState> reads it the way it reads the rest.
-
-function serverSentences(body: Record<string, unknown> | undefined): string[] {
-  if (!body) return [];
-  const found: string[] = [];
-  const packed = body["_server_messages"];
-  if (typeof packed === "string") {
-    try {
-      for (const entry of JSON.parse(packed) as unknown[]) {
-        if (typeof entry !== "string") continue;
-        try {
-          found.push(String((JSON.parse(entry) as { message?: unknown }).message ?? entry));
-        } catch {
-          found.push(entry);
-        }
-      }
-    } catch {
-      found.push(packed);
-    }
-  }
-  for (const key of ["_error_message", "exception"]) {
-    const value = body[key];
-    if (typeof value === "string" && value) found.push(value);
-  }
-  return [...new Set(found.map((text) => text.replace(/<[^>]*>/g, "").trim()).filter(Boolean))];
-}
-
-async function uploadPrivateFile(file: File): Promise<UploadedFile> {
-  const body = new FormData();
-  body.append("file", file, file.name);
-  body.append("is_private", "1");
-
-  let response: Response;
-  try {
-    response = await fetch("/api/method/upload_file", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { Accept: "application/json", "X-Frappe-CSRF-Token": csrfToken() },
-      body,
-    });
-  } catch {
-    throw new FrappeError({ kind: "network", status: 0, messages: [], endpoint: "upload_file" });
-  }
-
-  const text = await response.text();
-  let payload: Record<string, unknown> | undefined;
-  try {
-    payload = text ? (JSON.parse(text) as Record<string, unknown>) : undefined;
-  } catch {
-    payload = undefined;
-  }
-
-  if (!response.ok) {
-    throw new FrappeError({
-      kind: response.status === 403 ? "permission" : "validation",
-      status: response.status,
-      messages: serverSentences(payload),
-      endpoint: "upload_file",
-    });
-  }
-  return (payload?.["message"] ?? {}) as UploadedFile;
-}
-
-// -- placeholders, between the stored source and the editor --
-//
-// A template stores {{freelancer.full_name}}: that is the fill pipeline's
-// contract. In the editor the same thing is a chip - readable, atomic, deleted
-// in one keystroke, offered by typing @. These two convert, so neither side
-// has to know about the other. Mirrors frontend/src/utils/placeholders.js.
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\s*\}\}/g;
 
@@ -689,7 +620,7 @@ function NewTemplateCard({ onWriteOne }: { onWriteOne: () => void }) {
     if (!file) return;
     setUploadError(null);
     setUploading(true);
-    uploadPrivateFile(file)
+    uploadFile(file, { isPrivate: true })
       .then((result) => setUploaded(result))
       .catch((error: unknown) => setUploadError(error))
       .finally(() => setUploading(false));

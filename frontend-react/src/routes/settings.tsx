@@ -25,7 +25,7 @@ import { useState, type ChangeEvent, type ReactNode } from "react";
 import { AppShell } from "@/components/aura/AppShell";
 import { Card, Pill } from "@/components/aura/primitives";
 import { ErrorState, QueryStates } from "@/components/aura/states";
-import { FrappeError, csrfToken } from "@/lib/frappe";
+import { FrappeError, uploadFile } from "@/lib/frappe";
 import { parseVnd, vnd } from "@/lib/format";
 import { listsOf, resultOf, useMethod, useMethodMutation } from "@/lib/queries";
 import { FOUNDER_PROBE } from "@/lib/session";
@@ -559,65 +559,12 @@ function PositioningCard({ initial }: { initial: PositioningRules }) {
  * the same place and still fails as a FrappeError, so <ErrorState> reads it
  * exactly like any other failure.
  */
-async function uploadPublicImage(file: File): Promise<string> {
-  const form = new FormData();
-  form.append("file", file, file.name);
-  form.append("is_private", "0");
-  form.append("folder", "Home");
-  form.append("optimize", "1");
-
-  let response: Response;
-  try {
-    response = await fetch("/api/method/upload_file", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { Accept: "application/json", "X-Frappe-CSRF-Token": csrfToken() },
-      body: form,
-    });
-  } catch {
-    throw new FrappeError({ kind: "network", status: 0, messages: [], endpoint: "upload_file" });
-  }
-
-  const text = await response.text();
-  let body: { message?: { file_url?: string }; exc_type?: string } | undefined;
-  try {
-    body = text ? (JSON.parse(text) as typeof body) : undefined;
-  } catch {
-    body = undefined;
-  }
-
-  if (!response.ok) {
-    const excType = body?.exc_type ?? "";
-    throw new FrappeError({
-      kind:
-        response.status === 401
-          ? "session"
-          : response.status === 403 || excType === "PermissionError"
-            ? "permission"
-            : "server",
-      status: response.status,
-      messages: [],
-      excType,
-      endpoint: "upload_file",
-    });
-  }
-
-  const url = body?.message?.file_url;
-  if (!url) {
-    throw new FrappeError({
-      kind: "server",
-      status: response.status,
-      messages: ["The upload finished without returning a file."],
-      endpoint: "upload_file",
-    });
-  }
-  return url;
+async function uploadLogoFile(file: File): Promise<string> {
+  // Public: the logo is printed on quotes a client opens without a session.
+  const uploaded = await uploadFile(file, { isPrivate: false });
+  return uploaded.file_url ?? "";
 }
 
-/**
- * What a client reads at the top of every quote. These render live, so editing
- * one changes quotes already sent - see docs/adr/0002-quote-branding-renders-live.md.
- */
 function CompanyCard({ initial }: { initial: CompanyIdentity }) {
   const [values, setValues] = useState<CompanyIdentity>(() => ({ ...initial }));
   const [saved, setSaved] = useState(false);
@@ -650,7 +597,7 @@ function CompanyCard({ initial }: { initial: CompanyIdentity }) {
     setUploadError(null);
     setUploading(true);
     try {
-      set("logo", await uploadPublicImage(file));
+      set("logo", await uploadLogoFile(file));
     } catch (error) {
       setUploadError(error);
     } finally {
