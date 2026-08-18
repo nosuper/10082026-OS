@@ -56,6 +56,12 @@ if [ ! -f "apps/auraos/auraos/www/aura.html" ]; then
     (cd apps/auraos/frontend && npm install --no-audit --no-fund && npm run build)
 fi
 
+# Build the React SPA so /aura-next serves (skipped if already built).
+# It coexists with /aura until the React app reaches parity.
+if [ ! -f "apps/auraos/auraos/www/aura-next.html" ]; then
+    (cd apps/auraos/frontend-react && npm install --no-audit --no-fund && npm run build)
+fi
+
 # Ensure the app's assets symlink exists - without it the built
 # frontend 404s and /aura renders as a white page.
 mkdir -p sites/assets
