@@ -264,3 +264,80 @@ export async function getList<T>(query: ListQuery): Promise<T[]> {
 export async function getDoc<T>(doctype: string, name: string): Promise<T> {
   return await callMethod<T>("frappe.client.get", { doctype, name });
 }
+
+/** What Frappe returns for an accepted upload. */
+export type UploadedFile = {
+  file_url?: string;
+  file_name?: string;
+  name?: string;
+};
+
+export type UploadOptions = {
+  /** Attach the file to this doctype and record, rather than leaving it loose. */
+  doctype?: string;
+  docname?: string;
+  fieldname?: string;
+  /** Private files need a session to read; public ones are served to anyone. */
+  isPrivate?: boolean;
+  /** Where Frappe files it, e.g. "Home/Attachments". */
+  folder?: string;
+};
+
+/**
+ * Upload a file.
+ *
+ * Separate from `request` because this one alone sends multipart rather than
+ * JSON, so the body cannot go through the same encoder. Everything else is
+ * shared deliberately: the same CSRF token, the same error classification, the
+ * same FrappeError, so a failed upload reaches a screen looking exactly like
+ * any other failure and `ErrorState` renders it without special cases.
+ *
+ * It lives here because two screens wrote this by hand independently before it
+ * did, which is how one shared client quietly becomes several.
+ */
+export async function uploadFile(
+  file: File,
+  options: UploadOptions = {},
+): Promise<UploadedFile> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  if (options.isPrivate) form.append("is_private", "1");
+  if (options.folder) form.append("folder", options.folder);
+  if (options.doctype) form.append("doctype", options.doctype);
+  if (options.docname) form.append("docname", options.docname);
+  if (options.fieldname) form.append("fieldname", options.fieldname);
+
+  const endpoint = "upload_file";
+  let response: Response;
+  try {
+    response = await fetch("/api/method/upload_file", {
+      method: "POST",
+      credentials: "same-origin",
+      // No Content-Type: the browser must set the multipart boundary itself.
+      headers: { Accept: "application/json", "X-Frappe-CSRF-Token": csrfToken() },
+      body: form,
+    });
+  } catch {
+    throw new FrappeError({ kind: "network", status: 0, messages: [], endpoint });
+  }
+
+  const text = await response.text();
+  let payload: Record<string, unknown> | undefined;
+  try {
+    payload = text ? (JSON.parse(text) as Record<string, unknown>) : undefined;
+  } catch {
+    payload = undefined;
+  }
+
+  if (!response.ok) {
+    const excType = String(payload?.["exc_type"] ?? "");
+    throw new FrappeError({
+      kind: kindFor(response.status, excType),
+      status: response.status,
+      messages: unwrapMessages(payload),
+      endpoint,
+    });
+  }
+
+  return (payload?.["message"] ?? {}) as UploadedFile;
+}

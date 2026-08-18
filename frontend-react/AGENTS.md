@@ -73,6 +73,23 @@ CSRF is attached to every request by `src/lib/frappe.ts`. There is nothing to
 remember and nothing to pass. Use `mutate`, not `await mutateAsync` without a
 catch: that is the one way to produce an unhandled rejection.
 
+### Uploading a file
+
+```tsx
+import { uploadFile } from "@/lib/frappe";
+
+const uploaded = await uploadFile(file, { isPrivate: true, folder: "Home/Attachments" });
+// uploaded.file_url is what you store on the record
+```
+
+Uploads are the one call that is not JSON, so they have their own function
+rather than going through `callMethod`. Everything else is shared: the same
+CSRF token, the same error classification, the same `FrappeError`, so a failed
+upload reaches `ErrorState` looking like any other failure.
+
+**Do not hand-roll a multipart fetch.** Two screens each wrote their own before
+this existed, which is precisely how one shared client becomes several.
+
 ## Loading, empty and errors
 
 `src/components/aura/states.tsx`. Do not write your own.
