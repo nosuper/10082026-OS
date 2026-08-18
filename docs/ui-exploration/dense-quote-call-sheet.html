@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AuraOS quote builder - Call sheet</title>
+<style>
+  :root{
+    --paper:#E6E4DD;
+    --ink:#14130E;
+    --ink-mid:#6E6B60;
+    --rule:#B9B6AA;
+    --stamp-red:#A81F16;
+    --stamp-green:#1D5535;
+    /* the desk the sheet lies on - one darker tone of the same stock, no new hue */
+    --desk:#C6C3B8;
+
+    --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
+    --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+
+    /* the measure: a sheet of paper has an edge. Matched to the dashboard sheet. */
+    --measure: 1120px;
+    --pad: 22px;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+
+  body{
+    margin:0;
+    padding-bottom:90px;
+    background:var(--desk);
+    color:var(--ink);
+    font-family:var(--entry);
+    font-size:15px;
+    line-height:1.35;
+  }
+
+  /* ============ THE SHEET ============ */
+  /* Paper has an edge. Everything below lives inside it. */
+  .sheet{
+    width:100%;
+    max-width:var(--measure);
+    margin:30px auto 34px;
+    background:var(--paper);
+    border:1px solid var(--rule);
+    /* one subtle lift so the sheet edge reads against the desk */
+    box-shadow:0 1px 0 rgba(20,19,14,.16), 0 14px 30px -14px rgba(20,19,14,.34);
+    /* faint ruled-stock tint, on the sheet only */
+    background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
+    padding-bottom:16px;
+  }
+
+  /* ---------- shared type roles ---------- */
+  /* .f = preprinted form face. ASCII by construction. Never Vietnamese. */
+  .f{font-family:var(--form)}
+  .num{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    letter-spacing:-.015em;
+    white-space:nowrap;
+  }
+  .u{
+    font-family:var(--form);
+    font-size:.62em;
+    font-weight:600;
+    letter-spacing:.1em;
+    color:var(--ink-mid);
+    margin-left:.32em;
+  }
+  .lbl{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.19em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  /* Vietnamese label: same rank as .lbl but must sit in the sans face,
+     so it is set unuppercased and slightly tighter to hold the same weight. */
+  .lbl-vn{
+    font-family:var(--entry);
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:.02em;
+    color:var(--ink-mid);
+  }
+
+  a{color:inherit}
+
+  /* ============ STICKY DEAL HEADER ============ */
+  .sheet-head{
+    position:sticky;
+    top:0;
+    z-index:20;
+    background:var(--paper);
+    border-bottom:3px solid var(--ink);
+  }
+  .head-top{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:.55rem 1.5rem;
+    padding:9px var(--pad) 9px;
+  }
+  .backline{
+    display:block;
+    margin-bottom:6px;
+  }
+  .back{
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    text-decoration:none;
+    border-bottom:1px solid var(--rule);
+    padding-bottom:1px;
+  }
+  .back:hover{color:var(--ink);border-bottom-color:var(--ink)}
+  .back:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .eyebrow{
+    display:block;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin-bottom:5px;
+  }
+  /* the deal title carries Vietnamese, so it sits in the sans face -
+     the mono display face used on the pipeline sheet cannot hold it */
+  .sheet-head h1{
+    margin:0;
+    font-family:var(--entry);
+    font-size:clamp(19px,3vw,26px);
+    font-weight:700;
+    letter-spacing:-.012em;
+    line-height:1.1;
+  }
+  .head-ids{
+    display:flex;
+    align-items:center;
+    gap:.45rem;
+    flex-wrap:wrap;
+    margin-top:7px;
+  }
+  .mark{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    padding:2px 6px 1px;
+    line-height:1.4;
+    white-space:nowrap;
+  }
+  .mark--code{background:var(--ink);color:var(--paper)}
+  .mark--stage{border:1px solid var(--ink)}
+  .mark--tier{border:1px solid var(--ink-mid);color:var(--ink)}
+  .mark--brand{
+    border:1px solid var(--ink);
+    background-image:repeating-linear-gradient(45deg, rgba(20,19,14,.20) 0 1px, transparent 1px 3px);
+  }
+  .head-meta{
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    text-align:right;
+    line-height:1.75;
+  }
+  .head-meta b{color:var(--ink);font-weight:700}
+  .head-meta .vn{
+    font-family:var(--entry);
+    font-size:11.5px;
+    letter-spacing:0;
+    text-transform:none;
+    color:var(--ink);
+    font-weight:600;
+  }
+
+  /* Four fields, but not four equal voices. The total is the headline
+     figure of the sheet, the margin answers it, the other two are context. */
+  .info-strip{
+    display:grid;
+    grid-template-columns:1.6fr 1.3fr 1fr 1fr;
+    border-top:1px solid var(--ink);
+    margin:0;
+    align-items:end;
+  }
+  .info-cell{
+    padding:8px var(--pad) 10px;
+    border-left:1px solid var(--rule);
+    min-width:0;
+  }
+  .info-cell:first-child{border-left:0}
+  .info-cell dt{margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .info-cell dd{
+    margin:0;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:-.015em;
+    white-space:nowrap;
+    color:var(--ink-mid);
+  }
+  .info-cell dd .u{font-size:.62em}
+
+  /* rank 1 - the quote total */
+  .info-cell--total{padding-top:9px}
+  .info-cell--total dt{color:var(--ink);letter-spacing:.22em}
+  .info-cell--total dd{
+    color:var(--ink);
+    font-size:33px;
+    letter-spacing:-.038em;
+    line-height:1;
+  }
+  .info-cell--total dd .u{font-size:.34em;letter-spacing:.14em}
+
+  /* rank 2 - the margin, read immediately after */
+  .info-cell--margin{border-left-color:var(--ink)}
+  .info-cell--margin dd{color:var(--ink);font-size:19px;letter-spacing:-.025em}
+  .info-cell--margin dd .pct-tag{font-size:11px;vertical-align:2px}
+
+  /* ============ SHEET SECTIONS ============ */
+  .sec{
+    border-bottom:3px solid var(--ink);
+    padding:0 var(--pad) 18px;
+  }
+  .sec-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:.6rem 1.2rem;
+    flex-wrap:wrap;
+    padding:13px 0 7px;
+    border-bottom:2px solid var(--ink);
+    margin-bottom:0;
+  }
+  .sec-head h2{
+    margin:0;
+    font-family:var(--form);
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    line-height:1.15;
+  }
+  .sec-head .sec-no{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.2em;
+    color:var(--ink-mid);
+    display:block;
+    margin-bottom:3px;
+  }
+  .sec-note{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+
+  /* ============ PACKAGES TABLE ============ */
+  .tw{overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--ink-mid) transparent}
+  .tw::-webkit-scrollbar{height:9px}
+  .tw::-webkit-scrollbar-thumb{background:var(--ink-mid)}
+  table.pk{
+    width:100%;
+    min-width:940px;
+    border-collapse:collapse;
+    text-align:left;
+  }
+  table.pk th,
+  table.pk td{
+    padding:9px 10px 8px;
+    border-bottom:1px solid var(--rule);
+    vertical-align:top;
+  }
+  table.pk thead th{
+    border-bottom:1px solid var(--ink);
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.15em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
+    padding-top:8px;
+    padding-bottom:6px;
+  }
+  table.pk thead th .sub{
+    display:block;
+    font-size:8.5px;
+    font-weight:600;
+    letter-spacing:.1em;
+    text-transform:none;
+    color:var(--ink-mid);
+    margin-top:2px;
+  }
+  .c-r{text-align:right}
+  .c-c{text-align:center}
+  td.pkg-code{
+    width:1%;
+    border-left:4px solid var(--ink);
+    padding-left:9px;
+  }
+  .pkg-code span{
+    font-family:var(--form);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.08em;
+  }
+  .pk-title{
+    font-family:var(--entry);
+    font-size:15px;
+    font-weight:600;
+    letter-spacing:-.005em;
+    margin:0 0 2px;
+  }
+  .pk-desc{
+    font-family:var(--entry);
+    font-size:12.5px;
+    color:var(--ink-mid);
+    margin:0;
+    line-height:1.3;
+  }
+  td.money{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:-.02em;
+    white-space:nowrap;
+    text-align:right;
+  }
+  td.money.sum{font-weight:600;color:var(--ink-mid)}
+  td.money.price{font-size:16.5px}
+
+  /* form field: a ruled write-in box, not a widget */
+  .field{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:-.01em;
+    text-align:right;
+    color:var(--ink);
+    background:transparent;
+    border:0;
+    border-bottom:1.5px solid var(--ink);
+    padding:2px 3px 1px;
+    width:120px;
+    max-width:100%;
+    border-radius:0;
+  }
+  .field::placeholder{
+    color:var(--ink-mid);
+    font-weight:600;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    font-size:11px;
+  }
+  .field:focus{outline:2px solid var(--ink);outline-offset:2px;background:rgba(20,19,14,.05)}
+  .field.pct{width:56px;text-align:center}
+
+  /* variance: an initialled amendment, never an error */
+  .var{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:6px;
+    white-space:nowrap;
+  }
+  .var b{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-size:13.5px;
+    font-weight:700;
+    letter-spacing:-.01em;
+    border-bottom:1px dotted var(--ink);
+    padding-bottom:1px;
+  }
+  .initial{
+    font-family:var(--form);
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.1em;
+    border:1px solid var(--ink-mid);
+    color:var(--ink-mid);
+    padding:1px 3px 0;
+    line-height:1.5;
+  }
+
+  .btn{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.15em;
+    text-transform:uppercase;
+    color:var(--ink);
+    background:transparent;
+    border:1px solid var(--ink);
+    border-radius:0;
+    padding:4px 8px 3px;
+    cursor:pointer;
+    line-height:1.4;
+    white-space:nowrap;
+  }
+  .btn:hover{background:rgba(20,19,14,.08)}
+  .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .btn--quiet{border-color:var(--rule);color:var(--ink-mid)}
+  .btn--quiet:hover{border-color:var(--ink);color:var(--ink)}
+  .btn--solid{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .btn--solid:hover{background:#000}
+  .btn--wide{width:100%;text-align:center;border-style:dashed;padding:9px 8px 8px}
+  .btn--lg{font-size:11px;padding:8px 14px 7px;letter-spacing:.18em}
+
+  tfoot td{border-bottom:0;padding:10px 10px 0}
+
+  .pk-key{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.3rem 1.4rem;
+    padding:9px 0 0;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+
+  /* ============ TOTALS + DETAIL LEVEL ============ */
+  .grid2{
+    display:grid;
+    grid-template-columns:minmax(280px,1fr) minmax(360px,520px);
+    gap:0 26px;
+    align-items:start;
+    padding-top:14px;
+  }
+
+  .ledger{width:100%;border-collapse:collapse}
+  .ledger th,
+  .ledger td{padding:6px 0 5px;vertical-align:baseline}
+  .ledger th{
+    text-align:left;
+    font-family:var(--form);
+    font-size:10.5px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    font-weight:600;
+  }
+  .ledger td{
+    text-align:right;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:15.5px;
+    letter-spacing:-.02em;
+    white-space:nowrap;
+  }
+  .ledger tr.inputrow th,
+  .ledger tr.inputrow td{padding:4px 0}
+  .ledger tr.rule-top th,
+  .ledger tr.rule-top td{border-top:1px solid var(--rule);padding-top:8px}
+  .ledger tr.rule-hard th,
+  .ledger tr.rule-hard td{border-top:2px solid var(--ink);padding-top:9px}
+  .ledger tr.total th{
+    font-size:12px;
+    letter-spacing:.2em;
+    color:var(--ink);
+    font-weight:700;
+  }
+  .ledger tr.total td{
+    font-size:27px;
+    letter-spacing:-.035em;
+    line-height:1.05;
+    padding-bottom:9px;
+  }
+  .ledger tr.total td .u{font-size:.42em}
+  .ledger tr.cost th,
+  .ledger tr.cost td{color:var(--ink-mid)}
+  .ledger tr.margin th,
+  .ledger tr.margin td{border-top:1px solid var(--rule);padding-top:8px}
+  .ledger tr.margin td{font-size:18px}
+  .pct-tag{
+    font-family:var(--form);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.02em;
+    margin-left:.5em;
+    border:1px solid var(--ink);
+    padding:1px 5px 0;
+  }
+
+  .margin-wrap{position:relative;padding-top:8px;text-align:right}
+
+  .floor-key{
+    margin-top:16px;
+    border-top:1px solid var(--rule);
+    padding-top:10px;
+    display:flex;
+    gap:14px;
+    align-items:flex-start;
+  }
+  .floor-key p{
+    margin:0;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    line-height:1.6;
+  }
+  .specimen{
+    position:relative;
+    flex:0 0 auto;
+    opacity:.6;
+    transform:rotate(-3deg);
+    margin:4px 4px 0 2px;
+  }
+
+  /* detail level */
+  .opts{margin:0;padding:0;border:0}
+  .opts legend{
+    font-family:var(--form);
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    padding:0 0 7px;
+  }
+  .opt{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:8px 0;
+    border-top:1px solid var(--rule);
+    cursor:pointer;
+  }
+  .opt:last-child{border-bottom:1px solid var(--rule)}
+  .opt input{position:absolute;opacity:0;width:0;height:0}
+  .tick{
+    flex:0 0 auto;
+    width:17px;
+    height:17px;
+    border:1.5px solid var(--ink);
+    display:grid;
+    place-items:center;
+    font-family:var(--form);
+    font-size:12px;
+    font-weight:700;
+    line-height:1;
+    color:transparent;
+    margin-top:1px;
+  }
+  .opt input:checked + .tick{color:var(--ink)}
+  .opt input:focus-visible + .tick{outline:2px solid var(--ink);outline-offset:2px}
+  .opt-txt strong{
+    display:block;
+    font-family:var(--form);
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    line-height:1.3;
+  }
+  .opt-txt span{
+    display:block;
+    font-family:var(--entry);
+    font-size:12.5px;
+    color:var(--ink-mid);
+    margin-top:2px;
+  }
+  .opt input:checked ~ .opt-txt strong{color:var(--ink)}
+  .opt-txt{color:var(--ink)}
+  .opt input:not(:checked) ~ .opt-txt strong{color:var(--ink-mid)}
+  .opts-note{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin:9px 0 0;
+    line-height:1.6;
+  }
+
+  /* ============ RUBBER STAMP ============ */
+  .stamp{
+    display:inline-block;
+    padding:3px 8px 2px;
+    border:2.5px solid currentColor;
+    box-shadow:inset 0 0 0 1px currentColor;
+    font-family:var(--form);
+    font-weight:700;
+    text-transform:uppercase;
+    line-height:1.15;
+    text-align:center;
+    opacity:.88;
+    mix-blend-mode:multiply;
+    position:relative;
+    pointer-events:none;
+  }
+  .stamp::after{
+    content:"";
+    position:absolute;
+    inset:-3px;
+    background:
+      repeating-linear-gradient(112deg, rgba(230,228,221,.62) 0 1px, transparent 1px 5px),
+      repeating-linear-gradient(31deg, rgba(230,228,221,.34) 0 1px, transparent 1px 9px);
+    pointer-events:none;
+  }
+  .stamp .big{display:block;font-size:14px;letter-spacing:.2em}
+  .stamp .sub{
+    display:block;
+    font-size:8px;
+    letter-spacing:.13em;
+    font-weight:600;
+    margin-top:1px;
+    padding-top:2px;
+    border-top:1px solid currentColor;
+  }
+  .stamp--ok{color:var(--stamp-green);transform:rotate(-3deg)}
+  .stamp--alarm{color:var(--stamp-red);transform:rotate(3.5deg)}
+  .stamp--gate{color:var(--stamp-red);transform:rotate(-4deg)}
+  .stamp--float{
+    position:absolute;
+    right:0;
+    top:-6px;
+  }
+
+  /* ============ FOUNDER-ONLY TEAR-OFF ============ */
+  .founder{
+    margin:0 var(--pad);
+    border:2px solid var(--ink);
+    border-top:0;
+    background-image:repeating-linear-gradient(45deg, rgba(20,19,14,.05) 0 1px, transparent 1px 6px);
+  }
+  .tear{
+    position:relative;
+    height:22px;
+    border-top:1px dashed var(--ink);
+    border-bottom:1px dashed var(--ink);
+    background-image:radial-gradient(circle at 50% 50%, var(--ink) 1.1px, transparent 1.3px);
+    background-size:9px 100%;
+    background-repeat:repeat-x;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin:22px var(--pad) 0;
+  }
+  .tear span{
+    background:var(--paper);
+    padding:0 10px;
+    font-family:var(--form);
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:var(--ink);
+  }
+  .founder-head{
+    background:var(--ink);
+    color:var(--paper);
+    padding:9px 14px 9px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.6rem 1rem;
+    flex-wrap:wrap;
+  }
+  .founder-head h2{
+    margin:0;
+    font-family:var(--form);
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+  }
+  .founder-head .sec-no{color:#9E9C90;margin-bottom:3px}
+  .founder-head .who{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:#9E9C90;
+    text-align:right;
+    line-height:1.7;
+  }
+  .founder-head .who b{color:var(--paper)}
+  .founder-body{
+    position:relative;
+    padding:14px 14px 16px;
+    display:grid;
+    grid-template-columns:minmax(300px,1fr) minmax(220px,300px);
+    gap:0 26px;
+    align-items:start;
+  }
+  .founder-body .ledger td{font-size:15px}
+  .founder-gate{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:12px;
+    padding-top:4px;
+  }
+  .founder-gate p{
+    margin:0;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    text-align:right;
+    line-height:1.65;
+    max-width:280px;
+  }
+
+  /* ============ VERSIONS ============ */
+  .ver{
+    border-left:4px solid var(--ink);
+    border-bottom:1px solid var(--rule);
+    padding:11px 12px 11px;
+    display:grid;
+    grid-template-columns:minmax(220px,1.15fr) minmax(180px,.85fr) minmax(260px,1.2fr);
+    gap:10px 22px;
+    align-items:start;
+  }
+  .ver--superseded{border-left-color:var(--rule)}
+  .ver--superseded .ver-total,
+  .ver--superseded .ver-no{color:var(--ink-mid)}
+  .ver-id{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ver-no{
+    font-family:var(--form);
+    font-size:20px;
+    font-weight:700;
+    letter-spacing:-.01em;
+    line-height:1;
+  }
+  .mark--current{background:var(--ink);color:var(--paper)}
+  .mark--old{border:1px solid var(--rule);color:var(--ink-mid)}
+  .ver-status{
+    font-family:var(--form);
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    margin-top:7px;
+  }
+  .ver-status .dot{
+    display:inline-block;
+    width:8px;
+    height:8px;
+    border:1.5px solid var(--ink);
+    margin-right:6px;
+    vertical-align:baseline;
+  }
+  .ver--current .ver-status .dot{background:var(--ink)}
+  .ver--superseded .ver-status{color:var(--ink-mid)}
+  .ver--superseded .ver-status .dot{border-color:var(--ink-mid)}
+  .ver-date{
+    display:block;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin-top:4px;
+  }
+  .ver-total{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-size:19px;
+    font-weight:700;
+    letter-spacing:-.025em;
+    white-space:nowrap;
+    line-height:1.1;
+  }
+  .ver-total .u{font-size:.5em}
+  .opens{
+    margin-top:7px;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  .tally{
+    display:inline-block;
+    font-family:var(--form);
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.14em;
+    color:var(--ink);
+    margin-right:7px;
+    vertical-align:-1px;
+  }
+  .tally.none{color:var(--ink-mid);letter-spacing:.1em}
+  .linkrow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .linkbox{
+    flex:1 1 190px;
+    min-width:0;
+    font-family:var(--form);
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:.02em;
+    color:var(--ink);
+    background:transparent;
+    border:1px solid var(--rule);
+    border-right:0;
+    border-radius:0;
+    padding:5px 8px 4px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .linkbox:focus{outline:2px solid var(--ink);outline-offset:-1px}
+  .linkrow .btn{border-left-width:1px;margin-left:-1px;padding-top:5px;padding-bottom:4px}
+  .ver-acts{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+
+  .notes{padding-top:14px;display:grid;grid-template-columns:minmax(300px,1fr) minmax(240px,320px);gap:14px 26px;align-items:end}
+  .notes label{display:block}
+  textarea.field-area{
+    display:block;
+    width:100%;
+    min-height:74px;
+    resize:vertical;
+    font-family:var(--entry);
+    font-size:14px;
+    line-height:1.4;
+    color:var(--ink);
+    background:transparent;
+    border:1px solid var(--rule);
+    border-radius:0;
+    padding:8px 9px;
+    margin-top:6px;
+    background-image:repeating-linear-gradient(180deg, transparent 0 21px, rgba(20,19,14,.09) 21px 22px);
+    background-position:0 8px;
+  }
+  textarea.field-area:focus{outline:2px solid var(--ink);outline-offset:1px;border-color:var(--ink)}
+  .publish{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+  .publish p{
+    margin:0;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    line-height:1.6;
+  }
+
+  .foot-rule{
+    padding:12px var(--pad) 0;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    display:flex;
+    flex-wrap:wrap;
+    gap:.3rem 1.4rem;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:1180px){
+    .sheet{margin-top:20px}
+  }
+  /* Below this a desk gutter would be narrower than the trim, which reads as
+     a mistake rather than as a desk. The sheet takes the window instead. */
+  @media (max-width:620px){
+    .sheet{margin:0 auto;border-left:0;border-right:0;box-shadow:none}
+  }
+  @media (max-width:900px){
+    :root{--pad:16px}
+    .grid2{grid-template-columns:1fr;gap:22px}
+    .founder-body{grid-template-columns:1fr;gap:18px}
+    .founder-gate{align-items:flex-start}
+    .founder-gate p{text-align:left}
+    .ver{grid-template-columns:1fr;gap:8px}
+    .notes{grid-template-columns:1fr;align-items:start}
+  }
+  @media (max-width:760px){
+    .info-strip{grid-template-columns:repeat(2,1fr)}
+    .info-cell:nth-child(3),
+    .info-cell:nth-child(4){border-top:1px solid var(--rule)}
+    .info-cell:nth-child(3){border-left:0}
+    .head-meta{text-align:left}
+    .sheet-head{position:static}
+    .info-cell--margin{border-left-color:var(--rule)}
+    .info-cell--total dd{font-size:29px}
+    .info-cell--margin dd{font-size:17px}
+    .ledger tr.total td{font-size:24px}
+  }
+  @media (max-width:430px){
+    .info-strip{grid-template-columns:1fr}
+    .info-cell{border-left:0;border-top:1px solid var(--rule)}
+    .info-cell--total{border-top:0}
+    .info-cell:nth-child(3){border-left:0}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+  @media print{
+    body{padding-bottom:0;background:#fff}
+    .sheet{margin:0;max-width:none;border:0;box-shadow:none;background:#fff;background-image:none}
+    .sheet-head{position:static}
+    .stamp{opacity:1}
+    .tw{overflow:visible}
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+<header class="sheet-head">
+  <div class="head-top">
+    <div>
+      <span class="backline"><a class="back" href="#">&#8592; Back to pipeline</a></span>
+      <span class="eyebrow">AuraOS - Deal sheet 02 of 03 - Quote builder</span>
+      <h1>TVC T&#7871;t 2027 &#8220;V&#7883; Xu&#226;n&#8221;</h1>
+      <div class="head-ids">
+        <span class="mark mark--code">DEAL-0182</span>
+        <span class="mark mark--stage">Stage 03 - Breakdown</span>
+        <span class="mark mark--tier">T3</span>
+        <span class="mark mark--brand">Brand</span>
+      </div>
+    </div>
+    <div class="head-meta">
+      Client <span class="vn">Nh&#7845;t Minh Beverage</span><br>
+      Owner <span class="vn">Tr&#7847;n Qu&#7889;c B&#7843;o</span><br>
+      <b>Tue 18 Aug 2026 - 06:57 ICT</b>
+    </div>
+  </div>
+
+  <dl class="info-strip">
+    <div class="info-cell info-cell--total">
+      <dt class="lbl">Quote total</dt>
+      <dd>736,560,000<span class="u">VND</span></dd>
+    </div>
+    <div class="info-cell info-cell--margin">
+      <dt class="lbl">Margin - floor 20 pct</dt>
+      <dd>151,400,000<span class="pct-tag">22.2 PCT</span></dd>
+    </div>
+    <div class="info-cell">
+      <dt class="lbl">Client budget</dt>
+      <dd>850,000,000<span class="u">VND</span></dd>
+    </div>
+    <div class="info-cell">
+      <dt class="lbl">Live version</dt>
+      <dd>v2<span class="u">PUBLISHED</span></dd>
+    </div>
+  </dl>
+</header>
+
+<main>
+
+<!-- ============ 01 PACKAGES ============ -->
+<section class="sec" aria-labelledby="s-pkg">
+  <div class="sec-head">
+    <div>
+      <span class="sec-no">Section 01</span>
+      <h2 id="s-pkg">Client-facing packages</h2>
+    </div>
+    <span class="sec-note">3 packages - priced from 17 cost lines - figures in VND</span>
+  </div>
+
+  <div class="tw">
+    <table class="pk">
+      <thead>
+        <tr>
+          <th scope="col">Pkg</th>
+          <th scope="col">Title / description</th>
+          <th scope="col" class="c-r">Member sum</th>
+          <th scope="col" class="c-r">Override<span class="sub">blank = auto</span></th>
+          <th scope="col" class="c-r">Price</th>
+          <th scope="col" class="c-r">Variance<span class="sub">initialled</span></th>
+          <th scope="col" class="c-c">Strike</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="pkg-code"><span>P1</span></td>
+          <td>
+            <p class="pk-title">Pre-production &amp; concept</p>
+            <p class="pk-desc">Script, storyboard, casting, recce and permits</p>
+          </td>
+          <td class="money sum">71,490,000</td>
+          <td class="c-r">
+            <label class="lbl" for="ov1" style="position:absolute;left:-9999px">Override price for package P1</label>
+            <input class="field" id="ov1" type="text" inputmode="numeric" value="72,000,000" placeholder="auto">
+          </td>
+          <td class="money price">72,000,000</td>
+          <td>
+            <span class="var"><b>+510,000</b><span class="initial">TQB</span></span>
+          </td>
+          <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P1 from the quote">Strike</button></td>
+        </tr>
+        <tr>
+          <td class="pkg-code"><span>P2</span></td>
+          <td>
+            <p class="pk-title">Production - 2 shoot days</p>
+            <p class="pk-desc">Crew, cast, camera, lighting, art and studio</p>
+          </td>
+          <td class="money sum">399,700,000</td>
+          <td class="c-r">
+            <label class="lbl" for="ov2" style="position:absolute;left:-9999px">Override price for package P2</label>
+            <input class="field" id="ov2" type="text" inputmode="numeric" value="400,000,000" placeholder="auto">
+          </td>
+          <td class="money price">400,000,000</td>
+          <td>
+            <span class="var"><b>+300,000</b><span class="initial">TQB</span></span>
+          </td>
+          <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P2 from the quote">Strike</button></td>
+        </tr>
+        <tr>
+          <td class="pkg-code"><span>P3</span></td>
+          <td>
+            <p class="pk-title">Post-production &amp; delivery</p>
+            <p class="pk-desc">Edit, grade, sound, music licence, VFX, masters</p>
+          </td>
+          <td class="money sum">146,400,000</td>
+          <td class="c-r">
+            <label class="lbl" for="ov3" style="position:absolute;left:-9999px">Override price for package P3</label>
+            <input class="field" id="ov3" type="text" inputmode="numeric" value="148,000,000" placeholder="auto">
+          </td>
+          <td class="money price">148,000,000</td>
+          <td>
+            <span class="var"><b>+1,600,000</b><span class="initial">TQB</span></span>
+          </td>
+          <td class="c-c"><button class="btn btn--quiet" type="button" aria-label="Strike package P3 from the quote">Strike</button></td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="7">
+            <button class="btn btn--wide" type="button">+ Add package</button>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="pk-key">
+    <span>Member sum 617,590,000 - priced 620,000,000</span>
+    <span>Variance = override minus member sum</span>
+    <span>Initials = who wrote the override in</span>
+    <span>Rounding up is deliberate, not a fault</span>
+  </div>
+</section>
+
+<!-- ============ 02 TOTALS + DETAIL LEVEL ============ -->
+<section class="sec" aria-labelledby="s-tot">
+  <div class="sec-head">
+    <div>
+      <span class="sec-no">Section 02</span>
+      <h2 id="s-tot">Totals and detail level</h2>
+    </div>
+    <span class="sec-note">Client-visible figures - margin floor 20 pct</span>
+  </div>
+
+  <div class="grid2">
+
+    <!-- detail level -->
+    <div>
+      <fieldset class="opts">
+        <legend>Quote detail level - what the client sees</legend>
+
+        <label class="opt">
+          <input type="radio" name="detail" value="package" checked>
+          <span class="tick" aria-hidden="true">X</span>
+          <span class="opt-txt">
+            <strong>Package totals</strong>
+            <span>One price per package. Three lines on the client PDF.</span>
+          </span>
+        </label>
+
+        <label class="opt">
+          <input type="radio" name="detail" value="line">
+          <span class="tick" aria-hidden="true">X</span>
+          <span class="opt-txt">
+            <strong>Line by line</strong>
+            <span>All 17 cost lines priced individually. Exposes rates.</span>
+          </span>
+        </label>
+
+        <label class="opt">
+          <input type="radio" name="detail" value="lump">
+          <span class="tick" aria-hidden="true">X</span>
+          <span class="opt-txt">
+            <strong>Lump sum</strong>
+            <span>One figure only. No breakdown of any kind.</span>
+          </span>
+        </label>
+      </fieldset>
+      <p class="opts-note">
+        Changing the level re-renders the public quote page and the PDF.<br>
+        It does not change any figure below.
+      </p>
+
+      <div class="floor-key">
+        <span class="specimen">
+          <span class="stamp stamp--alarm">
+            <span class="big">Below floor</span>
+            <span class="sub">Margin under 20 pct</span>
+          </span>
+        </span>
+        <p>
+          Specimen - not active on this quote.<br>
+          Under 20 pct the margin figure sets in stamp red, this stamp overprints the margin row, and Publish is held until a founder initials the exception.
+        </p>
+      </div>
+    </div>
+
+    <!-- ledger -->
+    <div>
+      <table class="ledger">
+        <caption class="lbl" style="text-align:left;padding-bottom:6px">Quote ledger - all figures VND</caption>
+        <tbody>
+          <tr class="inputrow">
+            <th scope="row"><label for="mf">Quote MF pct</label></th>
+            <td><input class="field pct" id="mf" type="text" inputmode="decimal" value="10"><span class="u">PCT</span></td>
+          </tr>
+          <tr class="inputrow">
+            <th scope="row"><label for="vat">VAT pct</label></th>
+            <td><input class="field pct" id="vat" type="text" inputmode="decimal" value="8"><span class="u">PCT</span></td>
+          </tr>
+
+          <tr class="rule-hard">
+            <th scope="row">Subtotal (packages)</th>
+            <td>620,000,000</td>
+          </tr>
+          <tr>
+            <th scope="row">Management fee 10 pct</th>
+            <td>62,000,000</td>
+          </tr>
+          <tr class="rule-top">
+            <th scope="row">Total before VAT</th>
+            <td>682,000,000</td>
+          </tr>
+          <tr>
+            <th scope="row">VAT 8 pct</th>
+            <td>54,560,000</td>
+          </tr>
+          <tr class="total rule-hard">
+            <th scope="row">Total</th>
+            <td>736,560,000<span class="u">VND</span></td>
+          </tr>
+
+          <tr class="cost rule-hard">
+            <th scope="row">Cost (17 lines)</th>
+            <td>530,600,000</td>
+          </tr>
+          <tr class="margin">
+            <th scope="row">Margin</th>
+            <td>151,400,000<span class="pct-tag">22.2 PCT</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="margin-wrap">
+        <span class="stamp stamp--ok">
+          <span class="big">Above floor</span>
+          <span class="sub">Floor 20 pct - clear by 2.2</span>
+        </span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ 03 FOUNDER-ONLY TEAR-OFF ============ -->
+<div class="tear" aria-hidden="true"><span>Detach before sending</span></div>
+<section class="founder" aria-labelledby="s-founder">
+  <div class="founder-head">
+    <div>
+      <span class="sec-no lbl" style="color:#9E9C90">Section 03 - restricted insert</span>
+      <h2 id="s-founder">Founder only</h2>
+    </div>
+    <div class="who">
+      Visible to <b>Founder</b> role only<br>
+      Producers never receive this insert
+    </div>
+  </div>
+
+  <div class="founder-body">
+    <table class="ledger">
+      <caption class="lbl" style="text-align:left;padding-bottom:6px">Post-quote position - all figures VND</caption>
+      <tbody>
+        <tr>
+          <th scope="row">Commission (CMF) 5 pct</th>
+          <td>34,100,000</td>
+        </tr>
+        <tr class="rule-top">
+          <th scope="row">CM after commission</th>
+          <td>117,300,000</td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="lbl-vn">L&#7907;i nhu&#7853;n tr&#432;&#7899;c thu&#7871;</span></th>
+          <td>117,300,000</td>
+        </tr>
+        <tr>
+          <th scope="row">TNDN 20 pct</th>
+          <td>23,460,000</td>
+        </tr>
+        <tr class="rule-hard">
+          <th scope="row">Net profit</th>
+          <td>93,840,000</td>
+        </tr>
+        <tr class="rule-top">
+          <th scope="row"><span class="lbl-vn">VAT ph&#7843;i n&#7897;p</span></th>
+          <td>54,560,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="founder-gate">
+      <span class="stamp stamp--gate">
+        <span class="big">Founder only</span>
+        <span class="sub">Do not circulate</span>
+      </span>
+      <p>
+        Withheld by role at the server, not folded away in the page.<br>
+        A producer opening DEAL-0182 gets Section 02 and then Section 04. This insert is not in their sheet at all.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 VERSIONS ============ -->
+<section class="sec" aria-labelledby="s-ver" style="border-top:3px solid var(--ink);margin-top:22px">
+  <div class="sec-head">
+    <div>
+      <span class="sec-no">Section 04</span>
+      <h2 id="s-ver">Quote versions</h2>
+    </div>
+    <span class="sec-note">2 versions - v2 is live on the public link</span>
+  </div>
+
+  <div>
+
+    <!-- v2 -->
+    <article class="ver ver--current">
+      <div>
+        <div class="ver-id">
+          <span class="ver-no">v2</span>
+          <span class="mark mark--current">Current</span>
+        </div>
+        <p class="ver-status"><span class="dot" aria-hidden="true"></span>Published</p>
+        <span class="ver-date">Published 17 Aug 2026</span>
+      </div>
+      <div>
+        <p class="ver-total">736,560,000<span class="u">VND</span></p>
+        <p class="opens"><span class="tally none">----</span>Not opened yet</p>
+      </div>
+      <div>
+        <div class="linkrow">
+          <label class="lbl" for="lk2" style="position:absolute;left:-9999px">Public link for version 2</label>
+          <input class="linkbox" id="lk2" type="text" readonly value="/q/8f2a-0182-v2">
+          <button class="btn" type="button">Copy</button>
+          <button class="btn" type="button">PDF</button>
+        </div>
+        <div class="ver-acts">
+          <button class="btn btn--quiet" type="button">Open public page</button>
+          <button class="btn btn--quiet" type="button">Duplicate to draft</button>
+        </div>
+      </div>
+    </article>
+
+    <!-- v1 -->
+    <article class="ver ver--superseded">
+      <div>
+        <div class="ver-id">
+          <span class="ver-no">v1</span>
+          <span class="mark mark--old">Superseded</span>
+        </div>
+        <p class="ver-status"><span class="dot" aria-hidden="true"></span>Sent</p>
+        <span class="ver-date">Published 05 Aug 2026</span>
+      </div>
+      <div>
+        <p class="ver-total">712,800,000<span class="u">VND</span></p>
+        <p class="opens"><span class="tally">||||</span>4 opens - last 09 Aug 2026</p>
+      </div>
+      <div>
+        <div class="linkrow">
+          <label class="lbl" for="lk1" style="position:absolute;left:-9999px">Public link for version 1</label>
+          <input class="linkbox" id="lk1" type="text" readonly value="/q/8f2a-0182-v1">
+          <button class="btn" type="button">Copy</button>
+          <button class="btn" type="button">PDF</button>
+        </div>
+        <div class="ver-acts">
+          <button class="btn btn--quiet" type="button">Open public page</button>
+          <button class="btn btn--quiet" type="button">Compare with v2</button>
+        </div>
+      </div>
+    </article>
+
+    <div class="notes">
+      <div>
+        <label>
+          <span class="lbl">Version notes - goes on the internal record, not the client PDF</span>
+          <textarea class="field-area" rows="3" placeholder="What changed and why"></textarea>
+        </label>
+      </div>
+      <div class="publish">
+        <button class="btn btn--solid btn--lg" type="button">Publish version 3</button>
+        <p>Publishing freezes packages, totals and detail level, then mints a new public link. v2 stays readable at its own link.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<div class="foot-rule">
+  <span>DEAL-0182 - quote builder</span>
+  <span>Figures in VND - never abbreviated</span>
+  <span>Margin floor 20 pct</span>
+  <span>Section 03 withheld from producer role</span>
+</div>
+
+</main>
+
+</div><!-- /.sheet -->
+
+<!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
+<div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
+  <button type="button" data-dir="-1" aria-label="Previous screen">&#8592;</button>
+  <span id="proto-label"></span>
+  <button type="button" data-dir="1" aria-label="Next screen">&#8594;</button>
+</div>
+<style>
+  #proto-switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:.4rem;background:#111;color:#fff;border:1px solid #4a4a4a;border-radius:999px;padding:.35rem .45rem;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+  #proto-switcher button{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:999px;color:#fff}
+  #proto-switcher button:hover{background:#333}
+  #proto-switcher button:focus-visible{outline:2px solid #7cd6ff;outline-offset:2px}
+  #proto-label{padding:0 .35rem;white-space:nowrap}
+  @media print{#proto-switcher{display:none}}
+</style>
+<script>
+(function(){
+  var V=[{k:'1',n:'Pipeline',f:'pipeline-call-sheet.html'},
+         {k:'2',n:'Breakdown',f:'dense-breakdown-call-sheet.html'},
+         {k:'3',n:'Quote builder',f:'dense-quote-call-sheet.html'},
+         {k:'4',n:'Dashboard',f:'dense-dashboard-call-sheet.html'}];
+  var CURRENT=2;
+  document.getElementById('proto-label').textContent=V[CURRENT].k+' - '+V[CURRENT].n+'  ('+(CURRENT+1)+'/'+V.length+')';
+  function go(d){location.href=V[(CURRENT+d+V.length)%V.length].f;}
+  document.querySelectorAll('#proto-switcher button').forEach(function(b){b.addEventListener('click',function(){go(+b.dataset.dir);});});
+  document.addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);
+  });
+})();
+</script>
+</body>
+</html>

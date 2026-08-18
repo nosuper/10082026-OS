@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AuraOS dashboard - Call sheet</title>
+<style>
+  :root{
+    --paper:#E6E4DD;
+    --ink:#14130E;
+    --ink-mid:#6E6B60;
+    --rule:#B9B6AA;
+    --stamp-red:#A81F16;
+    --stamp-green:#1D5535;
+    /* the desk the sheet lies on - one darker tone of the same stock, no new hue */
+    --desk:#BEBBB0;
+
+    --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
+    --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+
+    /* the measure: a sheet of paper has an edge */
+    --measure: 1120px;
+    --pad: 22px;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+
+  body{
+    margin:0;
+    padding-bottom:90px;
+    min-height:100vh;
+    background:var(--desk);
+    color:var(--ink);
+    font-family:var(--entry);
+    font-size:15px;
+    line-height:1.35;
+  }
+
+  /* ============ THE SHEET ON THE DESK ============ */
+  .sheet{
+    width:100%;
+    max-width:var(--measure);
+    margin:30px auto 0;
+    background:var(--paper);
+    border:1px solid var(--rule);
+    /* one subtle lift so the sheet edge reads against the desk */
+    box-shadow:0 1px 0 rgba(20,19,14,.16), 0 14px 30px -14px rgba(20,19,14,.34);
+    /* faint ruled-stock tint, on the sheet only */
+    background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
+    overflow:hidden;
+  }
+  .sheet + .sheet{margin-top:38px}
+
+  .desk-cap{
+    max-width:var(--measure);
+    margin:44px auto -12px;
+    padding:0 2px 8px;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--ink);
+  }
+
+  /* ============ SHARED ATOMS ============ */
+  .u{
+    font-size:.52em;
+    font-weight:600;
+    letter-spacing:.1em;
+    color:var(--ink-mid);
+    margin-left:.42em;
+  }
+  .label{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.19em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+
+  /* ============ SHEET HEAD ============ */
+  .sheet-head{border-bottom:3px solid var(--ink)}
+  .sheet-title{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:.6rem 1.5rem;
+    padding:20px var(--pad) 16px;
+  }
+  .sheet-title h1{
+    margin:0;
+    font-family:var(--form);
+    font-size:clamp(20px,3vw,28px);
+    font-weight:700;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    line-height:1;
+  }
+  .eyebrow{
+    display:block;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin-bottom:8px;
+  }
+  .sheet-stamp-no{
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    text-align:right;
+    color:var(--ink-mid);
+    line-height:1.7;
+  }
+  .sheet-stamp-no b{color:var(--ink);font-weight:700}
+
+  /* ============ SECTION SHELL ============ */
+  /* every section opens with a reversed bar - that bar IS the boundary */
+  .sec{position:relative}
+  .sec + .sec{margin-top:30px}
+
+  .sec-bar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:.5rem 1rem;
+    flex-wrap:wrap;
+    background:var(--ink);
+    color:var(--paper);
+    padding:8px var(--pad) 7px;
+  }
+  .sec-bar h2{
+    margin:0;
+    font-family:var(--form);
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    line-height:1.2;
+  }
+  .sec-bar h2 .sec-no{
+    display:inline-block;
+    margin-right:.85em;
+    padding-right:.85em;
+    border-right:1px solid var(--ink-mid);
+    color:var(--rule);
+    font-weight:700;
+  }
+  .sec-bar .bar-note{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--rule);
+    white-space:nowrap;
+  }
+  .sec-close{border-bottom:3px solid var(--ink)}
+
+  /* ============ SECTION A - THE FOCAL POINT ============ */
+  /* A1: money already ours that has not arrived. Loud, solid, red. */
+  .alarm{padding:0}
+  .alarm-head{
+    position:relative;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:end;
+    gap:6px 22px;
+    padding:22px var(--pad) 20px;
+  }
+  .alarm-kind{
+    grid-column:1;
+    margin:0 0 10px;
+    font-family:var(--form);
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--stamp-red);
+  }
+  .alarm-kind .qual{color:var(--ink-mid);font-weight:600;letter-spacing:.14em}
+  .alarm-fig{
+    grid-column:1;
+    margin:0;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:clamp(36px,5.4vw,62px);
+    letter-spacing:-.045em;
+    line-height:.92;
+    color:var(--stamp-red);
+    white-space:nowrap;
+  }
+  .alarm-fig .u{font-size:.3em;letter-spacing:.14em;margin-left:.55em}
+  .alarm-count{
+    grid-column:2;
+    grid-row:2;
+    text-align:right;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
+    padding-bottom:6px;
+  }
+
+  /* A2: at risk, not yet ours. Quiet, void, ink - never red money. */
+  .risk-head{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:end;
+    gap:4px 22px;
+    padding:16px var(--pad) 14px;
+    border-top:2px solid var(--ink);
+  }
+  .risk-kind{
+    grid-column:1;
+    margin:0 0 8px;
+    font-family:var(--form);
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--ink);
+  }
+  .risk-kind .qual{color:var(--ink-mid);font-weight:600;letter-spacing:.14em}
+  .risk-fig{
+    grid-column:1;
+    margin:0;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:26px;
+    letter-spacing:-.03em;
+    line-height:1;
+    color:var(--ink);
+    white-space:nowrap;
+  }
+  .risk-count{
+    grid-column:2;
+    grid-row:2;
+    text-align:right;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
+  }
+
+  .att-list{border-top:1px solid var(--ink)}
+  .att-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:2px 18px;
+    text-decoration:none;
+    color:inherit;
+    padding:12px var(--pad) 11px;
+    border-bottom:1px solid var(--rule);
+    transition:background .12s linear;
+  }
+  .att-list .att-row:last-child{border-bottom:0}
+  .att-row:hover{box-shadow:inset 0 0 0 999px rgba(20,19,14,.05)}
+  .att-row:focus-visible{
+    outline:2px solid var(--ink);
+    outline-offset:-3px;
+    box-shadow:inset 0 0 0 999px rgba(20,19,14,.06);
+  }
+  .att-what{
+    grid-column:1;
+    font-family:var(--entry);
+    font-size:15.5px;
+    font-weight:600;
+    line-height:1.25;
+    letter-spacing:-.005em;
+    overflow-wrap:anywhere;
+  }
+  .att-right{
+    grid-column:2;
+    text-align:right;
+    white-space:nowrap;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:14px;
+  }
+  .att-money{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:17px;
+    letter-spacing:-.03em;
+    line-height:1.1;
+  }
+  .att-age{
+    display:inline-block;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    padding:3px 6px 2px;
+    line-height:1.4;
+    min-width:140px;
+    text-align:center;
+  }
+  /* already ours, late: filled red - the ink has been spent */
+  .att-row--due .att-money{color:var(--stamp-red)}
+  .att-row--due .att-age{background:var(--stamp-red);color:var(--paper)}
+  /* not ours yet: void - outlined, hatched, hollow */
+  .att-row--quiet .att-money{color:var(--ink)}
+  .att-row--quiet .att-age{
+    color:var(--stamp-red);
+    border:1px dashed var(--stamp-red);
+    padding:2px 5px 1px;
+    background-image:repeating-linear-gradient(45deg, rgba(168,31,22,.16) 0 1px, transparent 1px 4px);
+  }
+
+  /* ============ RUBBER STAMP - one per section, maximum ============ */
+  .stamp{
+    position:absolute;
+    z-index:3;
+    display:inline-block;
+    padding:4px 10px 3px;
+    border:2.5px solid currentColor;
+    box-shadow:inset 0 0 0 1px currentColor;
+    font-family:var(--form);
+    font-weight:700;
+    text-transform:uppercase;
+    line-height:1.15;
+    text-align:center;
+    opacity:.88;
+    mix-blend-mode:multiply;
+    pointer-events:none;
+  }
+  .stamp::after{
+    content:"";
+    position:absolute;
+    inset:-3px;
+    background:
+      repeating-linear-gradient(112deg, rgba(230,228,221,.62) 0 1px, transparent 1px 5px),
+      repeating-linear-gradient(31deg, rgba(230,228,221,.34) 0 1px, transparent 1px 9px);
+    pointer-events:none;
+  }
+  .stamp .big{display:block;font-size:17px;letter-spacing:.24em}
+  .stamp .sub{
+    display:block;
+    font-size:8px;
+    letter-spacing:.14em;
+    font-weight:600;
+    margin-top:2px;
+    padding-top:3px;
+    border-top:1px solid currentColor;
+  }
+  .stamp--action{
+    color:var(--stamp-red);
+    transform:rotate(-3.5deg);
+    right:var(--pad);
+    top:20px;
+  }
+  .stamp--clear{
+    color:var(--stamp-green);
+    transform:rotate(-2.5deg);
+    right:var(--pad);
+    top:18px;
+  }
+
+  /* ============ SECTION B - JOBS ============ */
+  .jobs{width:100%;border-collapse:collapse;table-layout:fixed}
+  .jobs caption{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .jobs th{
+    font-family:var(--form);
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    text-align:left;
+    padding:8px var(--pad) 7px;
+    border-bottom:1px solid var(--ink);
+    white-space:nowrap;
+  }
+  .jobs th.num,.jobs td.num{text-align:right}
+  .jobs td{
+    padding:12px var(--pad) 11px;
+    border-bottom:1px solid var(--rule);
+    vertical-align:middle;
+  }
+  .jobs tbody tr:hover{box-shadow:inset 0 0 0 999px rgba(20,19,14,.04)}
+  .job-link{
+    display:block;
+    text-decoration:none;
+    color:inherit;
+    font-family:var(--entry);
+    font-size:15.5px;
+    font-weight:600;
+    line-height:1.25;
+    letter-spacing:-.005em;
+    overflow-wrap:anywhere;
+  }
+  .job-link:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .job-client{
+    font-family:var(--entry);
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    overflow-wrap:anywhere;
+  }
+  .job-money{
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:16px;
+    letter-spacing:-.03em;
+    white-space:nowrap;
+  }
+  .job-stage{
+    display:inline-block;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    padding:2px 5px 1px;
+    line-height:1.4;
+    border:1px solid var(--ink-mid);
+    white-space:nowrap;
+  }
+  .job-stage.is-hold{border-color:var(--stamp-red);color:var(--stamp-red)}
+  /* the only ruled filler left on the sheet: two write-in lines, inside the table */
+  .jobs tr.blank td{height:38px;border-bottom:1px solid var(--rule)}
+  .jobs tr.blank td:first-child{
+    font-family:var(--form);
+    font-size:9px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--rule);
+  }
+  .sec-foot{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:.5rem 1rem;
+    flex-wrap:wrap;
+    padding:10px var(--pad) 11px;
+    border-top:2px solid var(--ink);
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+  }
+  .sec-foot .f-label{
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
+  }
+  .sec-foot .f-sum{
+    font-size:15px;
+    font-weight:700;
+    letter-spacing:-.02em;
+    white-space:nowrap;
+  }
+
+  /* ============ SECTION C - STANDING FIGURES (demoted) ============ */
+  .standing{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+  }
+  .st-cell{
+    padding:11px var(--pad) 13px;
+    border-left:1px solid var(--rule);
+    min-width:0;
+    text-decoration:none;
+    color:inherit;
+    display:block;
+    transition:background .12s linear;
+  }
+  .st-cell:first-child{border-left:0}
+  .st-cell:hover{box-shadow:inset 0 0 0 999px rgba(20,19,14,.05)}
+  .st-cell:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+  .st-lab{
+    display:block;
+    font-family:var(--form);
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin-bottom:6px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .st-fig{
+    display:block;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:-.025em;
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  .st-sub{
+    display:block;
+    margin-top:5px;
+    font-family:var(--form);
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .st-cell.is-alarm .st-fig{color:var(--stamp-red)}
+  .st-cell.is-alarm .st-sub{color:var(--stamp-red)}
+
+  /* ============ SECTION D - TEAR-OFF VOUCHER ============ */
+  .perf{
+    height:26px;
+    margin-top:30px;
+    border-top:1px dashed var(--ink);
+    border-bottom:1px dashed var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background-image:radial-gradient(circle at 0 50%, var(--ink) 1.1px, transparent 1.3px);
+    background-size:9px 100%;
+    background-repeat:repeat-x;
+  }
+  .perf span{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.34em;
+    text-transform:uppercase;
+    background:var(--paper);
+    padding:1px 14px;
+    color:var(--ink);
+  }
+  .docket-grid{
+    display:grid;
+    grid-template-columns:minmax(0,1.15fr) minmax(0,.8fr) minmax(0,1.4fr);
+    align-items:end;
+    gap:0;
+  }
+  .field{
+    padding:14px var(--pad) 16px;
+    border-left:1px solid var(--rule);
+    min-width:0;
+  }
+  .field:first-child{border-left:0}
+  .field > .label{display:block;margin-bottom:8px}
+  .field .hint,
+  .amount-field .hint{
+    display:block;
+    margin-top:7px;
+    font-family:var(--form);
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  .pick,
+  .note-in{
+    width:100%;
+    font-family:var(--entry);
+    font-size:15px;
+    font-weight:600;
+    color:var(--ink);
+    background:transparent;
+    border:0;
+    border-bottom:1.5px solid var(--ink);
+    border-radius:0;
+    padding:5px 22px 5px 2px;
+    line-height:1.3;
+    appearance:none;
+    -webkit-appearance:none;
+  }
+  .note-in{padding-right:2px;font-weight:500}
+  .note-in::placeholder{color:var(--ink-mid);font-weight:500}
+  .pick-wrap{position:relative;display:block}
+  .pick-wrap::after{
+    content:"";
+    position:absolute;
+    right:4px;
+    bottom:13px;
+    width:0;
+    height:0;
+    border-left:4.5px solid transparent;
+    border-right:4.5px solid transparent;
+    border-top:5px solid var(--ink);
+    pointer-events:none;
+  }
+  .pick:focus-visible,
+  .note-in:focus-visible,
+  .amt-in:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .amount-field{
+    border-left:1px solid var(--ink);
+    padding:14px var(--pad) 16px;
+  }
+  .amt-line{display:flex;align-items:flex-end;gap:.45rem;border-bottom:3px solid var(--ink)}
+  .amt-in{
+    flex:1 1 auto;
+    min-width:0;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:clamp(26px,3.2vw,38px);
+    letter-spacing:-.04em;
+    line-height:1.05;
+    text-align:right;
+    color:var(--ink);
+    background:transparent;
+    border:0;
+    border-radius:0;
+    padding:2px 0 3px;
+  }
+  .amt-in::placeholder{color:var(--rule)}
+  .amt-unit{
+    flex:0 0 auto;
+    font-family:var(--form);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.16em;
+    color:var(--ink-mid);
+    padding-bottom:9px;
+  }
+  .docket-foot{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px var(--pad);
+    padding:13px var(--pad) 15px;
+    border-top:1px solid var(--ink);
+  }
+  .docket-note{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  /* names carry diacritics - never set them in the mono form face */
+  .docket-note .name{
+    font-family:var(--entry);
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:.02em;
+    text-transform:none;
+    color:var(--ink);
+  }
+  .btn-row{display:flex;align-items:center;gap:8px}
+  .btn{
+    font-family:var(--form);
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:.19em;
+    text-transform:uppercase;
+    padding:9px 20px 8px;
+    border-radius:0;
+    cursor:pointer;
+    line-height:1.2;
+    background:var(--ink);
+    color:var(--paper);
+    border:1.5px solid var(--ink);
+  }
+  .btn--ghost{background:transparent;color:var(--ink)}
+  .btn:hover{box-shadow:inset 0 0 0 999px rgba(230,228,221,.14)}
+  .btn--ghost:hover{box-shadow:inset 0 0 0 999px rgba(20,19,14,.07)}
+  .btn:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+
+  /* ============ ALTERNATE (EMPTY) STATE - a second sheet on the desk ============ */
+  .alt-body{
+    position:relative;
+    padding:26px var(--pad) 30px;
+  }
+  .alt-msg{
+    margin:0;
+    max-width:26em;
+    font-family:var(--entry);
+    font-size:19px;
+    font-weight:600;
+    line-height:1.3;
+  }
+  .alt-sub{
+    margin:10px 0 0;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:1180px){
+    /* the desk must stay visible on either side - the sheet still has an edge */
+    body{padding-left:24px;padding-right:24px}
+    .sheet{margin-top:22px}
+    .desk-cap{margin:34px auto -8px}
+  }
+  @media (max-width:900px){
+    :root{--pad:16px}
+    .standing{grid-template-columns:repeat(2,1fr)}
+    .st-cell:nth-child(3),.st-cell:nth-child(4){border-top:1px solid var(--rule)}
+    .st-cell:nth-child(3){border-left:0}
+    .docket-grid{grid-template-columns:1fr}
+    .field{border-left:0;border-top:1px solid var(--rule)}
+    .field:first-child{border-top:0}
+    .amount-field{border-left:0;border-top:1px solid var(--ink)}
+  }
+  @media (max-width:620px){
+    /* below the sheet's own width the desk is pointless - let the paper fill the screen */
+    body{padding-left:0;padding-right:0}
+    .sheet{margin:0 auto;border-left:0;border-right:0;box-shadow:none}
+    .sheet + .sheet{margin-top:0}
+    .desk-cap{margin:0;padding:16px}
+    .sheet-stamp-no{text-align:left}
+    .att-row{grid-template-columns:minmax(0,1fr)}
+    .att-right{
+      grid-column:1;
+      justify-content:space-between;
+      margin-top:9px;
+      gap:10px;
+    }
+    .att-age{min-width:0}
+    .alarm-head,.risk-head{grid-template-columns:minmax(0,1fr)}
+    .alarm-count,.risk-count{grid-column:1;grid-row:auto;text-align:left;padding-bottom:0;margin-top:10px}
+    .stamp--action{top:auto;bottom:14px}
+    /* the nil-return stamp drops below the message instead of over it */
+    .stamp--clear{position:static;display:inline-block;margin:18px 0 0}
+    .alt-msg{max-width:none}
+    .jobs th,.jobs td{padding-left:12px;padding-right:12px}
+    .jobs th:nth-child(2),.jobs td:nth-child(2){display:none}
+    .job-client{display:block;margin-top:3px}
+    .jobs td:first-child .job-money{
+      display:block;
+      margin-top:6px;
+      font-size:15px;
+    }
+  }
+  @media (min-width:621px){
+    .jobs td:first-child .job-money{display:none}
+    .job-client{display:block;margin-top:3px}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+
+  @media print{
+    body{padding-bottom:0;background:#fff}
+    .sheet{max-width:none;margin:0;border:0;box-shadow:none;background-image:none}
+    .stamp{opacity:1}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     LIVE STATE
+     ============================================================ -->
+<div class="sheet">
+
+  <header class="sheet-head">
+    <div class="sheet-title">
+      <div>
+        <span class="eyebrow">AuraOS - Production operations</span>
+        <h1>Day sheet</h1>
+      </div>
+      <div class="sheet-stamp-no">
+        Sheet 01 of 09<br>
+        Tue 18 Aug 2026<br>
+        <b>Prepared 06:57 ICT</b>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== SECTION A - NEEDS ATTENTION (the focal point) ===== -->
+  <section class="sec sec-close" id="attention" aria-labelledby="h-att">
+    <div class="sec-bar">
+      <h2 id="h-att"><span class="sec-no">A</span>Needs attention</h2>
+      <span class="bar-note">03 items - figures in VND</span>
+    </div>
+
+    <div class="alarm">
+
+      <!-- A.1 money that is already ours and has not arrived -->
+      <div class="alarm-head">
+        <p class="alarm-kind">Past terms <span class="qual">- already ours, not arrived</span></p>
+        <p class="alarm-fig">86,500,000<span class="u">VND</span></p>
+        <span class="alarm-count">02 milestones</span>
+        <span class="stamp stamp--action">
+          <span class="big">Action</span>
+          <span class="sub">Today</span>
+        </span>
+      </div>
+
+      <div class="att-list">
+        <a class="att-row att-row--due" href="#item-1">
+          <span class="att-what">T&#7871;t campaign cutdowns - 50% on delivery</span>
+          <span class="att-right">
+            <span class="att-money">47,500,000<span class="u">VND</span></span>
+            <span class="att-age">12 days past terms</span>
+          </span>
+        </a>
+
+        <a class="att-row att-row--due" href="#item-2">
+          <span class="att-what">Recruitment film - final 30%</span>
+          <span class="att-right">
+            <span class="att-money">39,000,000<span class="u">VND</span></span>
+            <span class="att-age">5 days past terms</span>
+          </span>
+        </a>
+      </div>
+
+      <!-- A.2 money that is only at risk - never printed in red -->
+      <div class="risk-head">
+        <p class="risk-kind">No reply <span class="qual">- at risk, not ours yet</span></p>
+        <p class="risk-fig">95,000,000<span class="u">VND</span></p>
+        <span class="risk-count">01 quote</span>
+      </div>
+
+      <div class="att-list">
+        <a class="att-row att-row--quiet" href="#item-3">
+          <span class="att-what">Social cutdowns x12 - Nh&#7845;t Minh Beverage</span>
+          <span class="att-right">
+            <span class="att-money">95,000,000<span class="u">VND</span></span>
+            <span class="att-age">9 days no reply</span>
+          </span>
+        </a>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== SECTION B - JOBS IN PRODUCTION ===== -->
+  <section class="sec sec-close" id="jobs" aria-labelledby="h-jobs">
+    <div class="sec-bar">
+      <h2 id="h-jobs"><span class="sec-no">B</span>Jobs in production</h2>
+      <span class="bar-note">04 open</span>
+    </div>
+
+    <table class="jobs">
+      <caption>Jobs currently in production, with client, quoted figure and stage</caption>
+      <colgroup>
+        <col>
+        <col style="width:26%">
+        <col style="width:22%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col">Job / client</th>
+          <th scope="col" class="num">Quoted</th>
+          <th scope="col">Stage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <a class="job-link" href="#job-1">Factory safety series
+              <span class="job-client">S&#244;ng H&#224; Logistics</span>
+              <span class="job-money">210,000,000<span class="u">VND</span></span>
+            </a>
+          </td>
+          <td class="num"><span class="job-money">210,000,000</span></td>
+          <td><span class="job-stage">Production</span></td>
+        </tr>
+        <tr>
+          <td>
+            <a class="job-link" href="#job-2">Brand film &ldquo;H&#7841;t G&#7841;o Qu&#234;&rdquo;
+              <span class="job-client">L&#7897;c Tr&#7901;i Agri</span>
+              <span class="job-money">380,000,000<span class="u">VND</span></span>
+            </a>
+          </td>
+          <td class="num"><span class="job-money">380,000,000</span></td>
+          <td><span class="job-stage">Post-production</span></td>
+        </tr>
+        <tr>
+          <td>
+            <a class="job-link" href="#job-3">T&#7871;t campaign cutdowns
+              <span class="job-client">G&#7889;m S&#7913; Minh Long</span>
+              <span class="job-money">95,000,000<span class="u">VND</span></span>
+            </a>
+          </td>
+          <td class="num"><span class="job-money">95,000,000</span></td>
+          <td><span class="job-stage">Delivery</span></td>
+        </tr>
+        <tr>
+          <td>
+            <a class="job-link" href="#job-4">Recruitment film
+              <span class="job-client">&#272;&#7841;i Vi&#7879;t Foods</span>
+              <span class="job-money">130,000,000<span class="u">VND</span></span>
+            </a>
+          </td>
+          <td class="num"><span class="job-money">130,000,000</span></td>
+          <td><span class="job-stage is-hold">Awaiting payment</span></td>
+        </tr>
+        <tr class="blank" aria-hidden="true"><td>05</td><td></td><td></td></tr>
+        <tr class="blank" aria-hidden="true"><td>06</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+
+    <div class="sec-foot">
+      <span class="f-label">04 jobs - quoted</span>
+      <span class="f-sum">815,000,000<span class="u">VND</span></span>
+    </div>
+  </section>
+
+  <!-- ===== SECTION C - STANDING FIGURES (demoted from four hero tiles) ===== -->
+  <section class="sec sec-close" id="standing" aria-labelledby="h-st">
+    <div class="sec-bar">
+      <h2 id="h-st"><span class="sec-no">C</span>Standing figures</h2>
+      <span class="bar-note">As at 06:57 ICT - VND</span>
+    </div>
+
+    <nav class="standing" aria-label="Standing figures">
+      <a class="st-cell" href="#pipeline">
+        <span class="st-lab">Pipeline - open deals</span>
+        <span class="st-fig">1,925,000,000</span>
+        <span class="st-sub">06 open deals</span>
+      </a>
+      <a class="st-cell" href="#jobs">
+        <span class="st-lab">In production</span>
+        <span class="st-fig">815,000,000</span>
+        <span class="st-sub">04 open jobs</span>
+      </a>
+      <a class="st-cell is-alarm" href="#attention">
+        <span class="st-lab">Overdue payments</span>
+        <span class="st-fig">86,500,000</span>
+        <span class="st-sub">See section A</span>
+      </a>
+      <a class="st-cell is-alarm" href="#attention">
+        <span class="st-lab">Quotes gone quiet</span>
+        <span class="st-fig">95,000,000</span>
+        <span class="st-sub">See section A</span>
+      </a>
+    </nav>
+  </section>
+
+  <!-- ===== SECTION D - TEAR-OFF PETTY CASH VOUCHER ===== -->
+  <div class="perf" aria-hidden="true"><span>Detach here</span></div>
+
+  <section class="sec" id="expense" aria-labelledby="h-exp">
+    <form action="#" method="post" onsubmit="return false">
+      <div class="sec-bar">
+        <h2 id="h-exp"><span class="sec-no">D</span>Quick expense</h2>
+        <span class="bar-note">VCH-2026-0418 - unposted</span>
+      </div>
+
+      <div class="docket-grid">
+
+        <div class="field">
+          <label class="label" for="exp-job">Charge to job</label>
+          <span class="pick-wrap">
+            <select class="pick" id="exp-job" name="job">
+              <option>Factory safety series - S&#244;ng H&#224; Logistics</option>
+              <option>Brand film &ldquo;H&#7841;t G&#7841;o Qu&#234;&rdquo; - L&#7897;c Tr&#7901;i Agri</option>
+              <option>T&#7871;t campaign cutdowns - G&#7889;m S&#7913; Minh Long</option>
+              <option>Recruitment film - &#272;&#7841;i Vi&#7879;t Foods</option>
+            </select>
+          </span>
+          <span class="hint">04 open jobs</span>
+        </div>
+
+        <div class="field">
+          <label class="label" for="exp-cat">Category</label>
+          <span class="pick-wrap">
+            <select class="pick" id="exp-cat" name="category">
+              <option>Crew</option>
+              <option>Equipment</option>
+              <option>Art</option>
+              <option>Catering</option>
+              <option>Transport</option>
+              <option selected>Uncategorised</option>
+            </select>
+          </span>
+          <span class="hint">Sort it later if unsure</span>
+        </div>
+
+        <div class="amount-field">
+          <label class="label" for="exp-amount">Amount</label>
+          <span class="amt-line">
+            <input class="amt-in" id="exp-amount" name="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0">
+            <span class="amt-unit">VND</span>
+          </span>
+          <span class="hint">Whole dong - no decimals</span>
+        </div>
+
+        <div class="field" style="grid-column:1 / -1;border-left:0;border-top:1px solid var(--rule)">
+          <label class="label" for="exp-note">Note - optional</label>
+          <input class="note-in" id="exp-note" name="note" type="text" autocomplete="off" placeholder="Who, what, where">
+        </div>
+
+      </div>
+
+      <div class="docket-foot">
+        <span class="docket-note">Filed by <span class="name">Tr&#7847;n Qu&#7889;c B&#7843;o</span> - posts to the job cost sheet on submit</span>
+        <span class="btn-row">
+          <button class="btn btn--ghost" type="reset">Clear</button>
+          <button class="btn" type="submit">File expense</button>
+        </span>
+      </div>
+    </form>
+  </section>
+
+</div>
+
+<!-- ============================================================
+     ALTERNATE STATE - a second sheet on the desk
+     ============================================================ -->
+<p class="desk-cap">Alternate state - section A on a day when nothing is outstanding</p>
+
+<div class="sheet">
+  <section class="sec" aria-labelledby="h-alt">
+    <div class="sec-bar">
+      <h2 id="h-alt"><span class="sec-no">A</span>Needs attention</h2>
+      <span class="bar-note">00 items</span>
+    </div>
+    <div class="alt-body">
+      <p class="alt-msg">Nothing chasing you - the board is quiet.</p>
+      <p class="alt-sub">00 items - last swept 06:57 ICT</p>
+      <span class="stamp stamp--clear">
+        <span class="big">Clear</span>
+        <span class="sub">Nil return</span>
+      </span>
+    </div>
+  </section>
+</div>
+
+<!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
+<div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
+  <button type="button" data-dir="-1" aria-label="Previous screen">&#8592;</button>
+  <span id="proto-label"></span>
+  <button type="button" data-dir="1" aria-label="Next screen">&#8594;</button>
+</div>
+<style>
+  #proto-switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:.4rem;background:#111;color:#fff;border:1px solid #4a4a4a;border-radius:999px;padding:.35rem .45rem;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+  #proto-switcher button{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:999px;color:#fff}
+  #proto-switcher button:hover{background:#333}
+  #proto-switcher button:focus-visible{outline:2px solid #7cd6ff;outline-offset:2px}
+  #proto-label{padding:0 .35rem;white-space:nowrap}
+  @media print{#proto-switcher{display:none}}
+</style>
+<script>
+(function(){
+  var V=[{k:'1',n:'Pipeline',f:'pipeline-call-sheet.html'},
+         {k:'2',n:'Breakdown',f:'dense-breakdown-call-sheet.html'},
+         {k:'3',n:'Quote builder',f:'dense-quote-call-sheet.html'},
+         {k:'4',n:'Dashboard',f:'dense-dashboard-call-sheet.html'}];
+  var CURRENT=3;
+  document.getElementById('proto-label').textContent=V[CURRENT].k+' - '+V[CURRENT].n+'  ('+(CURRENT+1)+'/'+V.length+')';
+  function go(d){location.href=V[(CURRENT+d+V.length)%V.length].f;}
+  document.querySelectorAll('#proto-switcher button').forEach(function(b){b.addEventListener('click',function(){go(+b.dataset.dir);});});
+  document.addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);
+  });
+})();
+</script>
+</body>
+</html>

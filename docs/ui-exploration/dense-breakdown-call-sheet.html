@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AuraOS breakdown - Call sheet</title>
+<style>
+  :root{
+    --paper:#E6E4DD;
+    --paper-2:#DCDAD2;
+    --paper-3:#D5D3CA;
+    --hover:#DEDCD3;
+    --ink:#14130E;
+    --ink-mid:#6E6B60;
+    --rule:#B9B6AA;
+    --hair:rgba(20,19,14,.10);
+    --stamp-red:#A81F16;
+    --stamp-green:#1D5535;
+
+    --form: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace;
+    --entry: system-ui, -apple-system, "Segoe UI", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+
+    /* column widths - sticky offsets and table width are derived from these, keep in step */
+    --w-no:36px;    --w-desc:250px;
+    --w-cat:100px;  --w-phase:124px; --w-src:90px; --w-contact:186px;
+    --w-pkg:44px;   --w-q1:54px;  --w-u1:62px;  --w-q2:54px;  --w-u2:62px;
+    --w-price:108px;--w-tax:124px;--w-mf:66px;  --w-mu:66px;
+    --w-sub:122px;  --w-quote:128px; --w-margin:156px; --w-act:88px;
+    /* sum of all 19 columns, and the four optional detail columns */
+    --w-total:1920px;
+    --w-detail:500px;
+
+    --band-h:22px;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+
+  body{
+    margin:0;
+    padding-bottom:90px;
+    min-height:100vh;
+    /* the sheet is a fixed frame: the table scrolls inside it, so the pinned
+       head, stub, money block and totals never leave the screen */
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--entry);
+    font-size:15px;
+    line-height:1.35;
+    background-image:repeating-linear-gradient(180deg, rgba(20,19,14,.022) 0 1px, transparent 1px 26px);
+  }
+
+  .sans{font-family:var(--entry)}
+  .vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+
+  /* ============ HEADER BAND ============ */
+  .sheet-head{
+    flex:0 0 auto;
+    position:sticky;
+    top:0;
+    z-index:20;
+    background:var(--paper);
+    border-bottom:3px solid var(--ink);
+  }
+
+  a.back{
+    color:var(--ink);
+    text-decoration:none;
+    border-bottom:1px solid var(--ink);
+    padding-bottom:1px;
+  }
+  a.back:hover{background:rgba(20,19,14,.07)}
+  a.back:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .crumb-sep{color:var(--rule);margin:0 .15rem}
+
+  .sheet-title{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:.6rem 1.4rem;
+    padding:10px 14px 10px;
+  }
+  .eyebrow{
+    display:block;
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin-bottom:6px;
+  }
+  .eyebrow b{color:var(--ink);font-weight:700}
+  .sheet-title h1{
+    margin:0;
+    font-family:var(--entry);
+    font-size:clamp(19px,2.6vw,25px);
+    font-weight:700;
+    letter-spacing:-.01em;
+    line-height:1.1;
+  }
+  .t-meta{
+    margin:6px 0 0;
+    font-size:12.5px;
+    line-height:1.35;
+    color:var(--ink-mid);
+  }
+  .t-meta .sep{color:var(--rule);margin:0 .45rem}
+
+  .t-right{
+    display:flex;
+    align-items:center;
+    gap:.7rem;
+    margin-left:auto;
+  }
+  .autosave{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.15em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    display:inline-flex;
+    align-items:center;
+    gap:.45rem;
+    white-space:nowrap;
+  }
+  .autosave::before{
+    content:"";
+    width:7px;height:7px;
+    background:var(--stamp-green);
+    display:inline-block;
+  }
+  .autosave b{color:var(--ink);font-weight:700;letter-spacing:.08em}
+
+  .btn{
+    font-family:var(--form);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    padding:7px 15px 6px;
+    border:1px solid var(--ink);
+    background:var(--paper);
+    color:var(--ink);
+    border-radius:0;
+    cursor:pointer;
+    line-height:1.2;
+    white-space:nowrap;
+  }
+  .btn:hover{background:rgba(20,19,14,.08)}
+  .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .btn-ink{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .btn-ink:hover{background:#000}
+
+  /* ============ INFO STRIP ============ */
+  .info-strip{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    border-top:1px solid var(--ink);
+    margin:0;
+  }
+  .info-cell{
+    padding:7px 14px 8px;
+    border-left:1px solid var(--rule);
+    min-width:0;
+  }
+  .info-cell:first-child{border-left:0}
+  .info-cell dt{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    margin:0 0 4px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .info-cell dd{
+    margin:0;
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:clamp(13px,1.4vw,17px);
+    letter-spacing:-.015em;
+    white-space:nowrap;
+  }
+  .info-cell dd .u{font-size:.62em;font-weight:600;letter-spacing:.09em;color:var(--ink-mid);margin-left:.28em}
+  .info-cell dd .pc{font-size:.66em;font-weight:700;letter-spacing:.02em;color:var(--ink-mid);margin-left:.4em}
+
+  /* ============ TOOLBAR ============ */
+  .toolbar{
+    border-top:1px solid var(--rule);
+    padding:6px 14px 6px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:.5rem 1.5rem;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.15em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  .toolbar .grow{margin-left:auto}
+
+  .detail-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:.5rem;
+    cursor:pointer;
+    color:var(--ink);
+    letter-spacing:.15em;
+    user-select:none;
+  }
+  .detail-toggle::before{
+    content:"";
+    width:12px;height:12px;
+    flex:0 0 12px;
+    border:1px solid var(--ink);
+    background:var(--paper);
+  }
+  .detail-toggle span{color:var(--ink-mid);font-weight:600}
+  .detail-toggle:hover::before{background:rgba(20,19,14,.12)}
+  #detailcols:checked ~ .sheet-head .detail-toggle::before{
+    background:var(--ink);
+    box-shadow:inset 0 0 0 2px var(--paper);
+  }
+  #detailcols:focus-visible ~ .sheet-head .detail-toggle{outline:2px solid var(--ink);outline-offset:3px}
+  #detailcols:not(:checked) ~ .sheet-wrap .col-detail{display:none}
+
+  .key{display:inline-flex;align-items:center;gap:.45rem}
+  .key i{display:inline-block;font-style:normal}
+  .key i.sw-nil{color:var(--rule);font-family:var(--form);font-weight:700}
+  .key i.sw-calc{width:12px;height:11px;background:var(--paper-3);border:1px solid var(--rule)}
+  .key i.sw-risk{width:12px;height:11px;border:1px solid var(--stamp-red);background-image:repeating-linear-gradient(45deg, rgba(168,31,22,.28) 0 1px, transparent 1px 3px)}
+
+  /* ============ SHEET / TABLE ============ */
+  .sheet-wrap{
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    /* keep tabbing into a cell from parking it under the pinned stub or money block */
+    scroll-padding-left:calc(var(--w-no) + var(--w-desc));
+    scroll-padding-right:calc(var(--w-sub) + var(--w-quote) + var(--w-margin) + var(--w-act));
+    scroll-padding-top:calc(var(--band-h) + 37px);
+    scroll-padding-bottom:40px;
+    border-bottom:3px solid var(--ink);
+    scrollbar-width:thin;
+    scrollbar-color:var(--ink-mid) transparent;
+  }
+  .sheet-wrap::-webkit-scrollbar{width:10px;height:10px}
+  .sheet-wrap::-webkit-scrollbar-thumb{background:var(--ink-mid)}
+  .sheet-wrap::-webkit-scrollbar-track{background:transparent}
+  .sheet-wrap::-webkit-scrollbar-corner{background:var(--paper)}
+
+  table.lines{
+    border-collapse:separate;
+    border-spacing:0;
+    /* fixed layout: every column keeps the exact width the pinned offsets assume */
+    table-layout:fixed;
+    width:var(--w-total);
+    font-family:var(--form);
+    font-variant-numeric:tabular-nums;
+    font-size:12.5px;
+  }
+  #detailcols:not(:checked) ~ .sheet-wrap table.lines{width:calc(var(--w-total) - var(--w-detail))}
+
+  table.lines th,
+  table.lines td{
+    padding:5px 8px 4px;
+    text-align:left;
+    vertical-align:middle;
+    white-space:nowrap;
+    overflow:hidden;
+    border-right:1px solid var(--hair);
+    border-bottom:1px solid var(--rule);
+    background:var(--paper);
+  }
+
+  /* zero-height first row: it is what fixed layout measures the columns from */
+  tr.spec th{height:0;padding:0;border:0;font-size:0;line-height:0}
+
+  /* column widths */
+  .c-no{width:var(--w-no);min-width:var(--w-no);padding-left:6px;padding-right:6px}
+  table.lines .c-desc{width:var(--w-desc);min-width:var(--w-desc);white-space:normal}
+  .c-cat{width:var(--w-cat);min-width:var(--w-cat)}
+  .c-phase{width:var(--w-phase);min-width:var(--w-phase)}
+  .c-src{width:var(--w-src);min-width:var(--w-src)}
+  .c-contact{width:var(--w-contact);min-width:var(--w-contact)}
+  .c-pkg{width:var(--w-pkg);min-width:var(--w-pkg)}
+  .c-q1{width:var(--w-q1);min-width:var(--w-q1)}
+  .c-u1{width:var(--w-u1);min-width:var(--w-u1)}
+  .c-q2{width:var(--w-q2);min-width:var(--w-q2)}
+  .c-u2{width:var(--w-u2);min-width:var(--w-u2)}
+  .c-price{width:var(--w-price);min-width:var(--w-price)}
+  .c-tax{width:var(--w-tax);min-width:var(--w-tax)}
+  .c-mf{width:var(--w-mf);min-width:var(--w-mf)}
+  .c-mu{width:var(--w-mu);min-width:var(--w-mu)}
+  .c-sub{width:var(--w-sub);min-width:var(--w-sub)}
+  .c-quote{width:var(--w-quote);min-width:var(--w-quote)}
+  .c-margin{width:var(--w-margin);min-width:var(--w-margin)}
+  .c-act{width:var(--w-act);min-width:var(--w-act);padding-left:6px;padding-right:6px}
+
+  /* pinned stub (left) and pinned money block (right) */
+  .sticky-l{position:sticky;z-index:2}
+  .sticky-r{position:sticky;z-index:2}
+  .c-no.sticky-l{left:0}
+  .c-desc.sticky-l{left:var(--w-no)}
+  .c-act.sticky-r{right:0}
+  .c-margin.sticky-r{right:var(--w-act)}
+  .c-quote.sticky-r{right:calc(var(--w-act) + var(--w-margin))}
+  .c-sub.sticky-r{right:calc(var(--w-act) + var(--w-margin) + var(--w-quote))}
+
+  /* band-row spanning heads share the pinned geometry */
+  .b-stub{left:0;width:calc(var(--w-no) + var(--w-desc));min-width:calc(var(--w-no) + var(--w-desc))}
+  .b-calc{right:var(--w-act);width:calc(var(--w-sub) + var(--w-quote) + var(--w-margin));min-width:calc(var(--w-sub) + var(--w-quote) + var(--w-margin))}
+
+  /* The fold: where the pinned stock meets the scrolling middle band. Perforated
+     like the pipeline board's tear-off, so a column cut in half at this line
+     reads as paper running under a fold, not as a truncated figure. */
+  .c-desc,.b-stub{border-right:1px dashed var(--ink)}
+  .c-sub,.b-calc{border-left:1px dashed var(--ink);padding-left:12px}
+  .c-desc::after,
+  .b-stub::after,
+  .c-sub::before,
+  .b-calc::before{
+    content:"";
+    position:absolute;
+    top:0;bottom:0;
+    width:5px;
+    background-image:radial-gradient(circle at 2.5px 50%, var(--ink) 1.1px, transparent 1.3px);
+    background-size:100% 9px;
+    background-repeat:repeat-y;
+    pointer-events:none;
+  }
+  .c-desc::after,.b-stub::after{right:0}
+  .c-sub::before,.b-calc::before{left:0}
+  tr.spec th::before,tr.spec th::after{display:none}
+  /* band separators */
+  .c-cat,.c-pkg{border-left:1px solid var(--ink)}
+
+  /* ---- head ---- */
+  table.lines thead th{
+    position:sticky;
+    z-index:3;
+    font-weight:700;
+    font-size:9.5px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    white-space:normal;
+    line-height:1.15;
+    vertical-align:bottom;
+  }
+  thead tr.band th{
+    top:0;
+    height:var(--band-h);
+    padding:4px 8px 3px;
+    font-size:9px;
+    letter-spacing:.24em;
+    color:var(--ink);
+    border-bottom:1px solid var(--ink);
+    background:var(--paper-2);
+  }
+  thead tr.head th{
+    top:var(--band-h);
+    padding-top:8px;
+    padding-bottom:5px;
+    border-bottom:2px solid var(--ink);
+  }
+  table.lines thead th.sticky-l,
+  table.lines thead th.sticky-r{z-index:6}
+  thead .num{text-align:right}
+
+  /* ---- body ---- */
+  tbody tr.line td{height:29px}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .lno{font-size:10.5px;font-weight:700;color:var(--ink-mid);letter-spacing:.04em}
+  .desc{font-family:var(--entry);font-size:13px;font-weight:600;letter-spacing:-.005em;line-height:1.25}
+  .contact{font-family:var(--entry);font-size:12px;line-height:1.25}
+  .enum{font-size:11.5px;color:var(--ink)}
+  .unit{font-size:11.5px;color:var(--ink-mid)}
+  .nil{color:var(--rule);font-weight:700}
+  .money{font-weight:700;letter-spacing:-.015em}
+  .pct{font-size:11.5px;font-weight:700}
+
+  /* computed block - machine printed, not hand written */
+  .calc{background:var(--paper-3)}
+  td.c-sub,td.c-quote,td.c-margin{background:var(--paper-3)}
+  td.c-quote{font-weight:700;font-size:13px;letter-spacing:-.02em}
+  td.c-sub{font-weight:700}
+  td.c-margin .pc{
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--ink-mid);
+    letter-spacing:.02em;
+    margin-left:.5em;
+  }
+  td.c-margin.thin .pc{color:var(--stamp-red)}
+
+  /* editable cells: written on the rule */
+  td.cell{cursor:text}
+  td.cell:hover{background:rgba(20,19,14,.07)}
+  td.cell:focus-visible{
+    outline:2px solid var(--ink);
+    outline-offset:-2px;
+    background:rgba(20,19,14,.09);
+  }
+  td.pick{position:relative;padding-right:16px}
+  td.pick::after{
+    content:"";
+    position:absolute;
+    right:5px;
+    top:50%;
+    margin-top:-2px;
+    width:0;height:0;
+    border-left:3.5px solid transparent;
+    border-right:3.5px solid transparent;
+    border-top:4px solid var(--ink-mid);
+    opacity:0;
+  }
+  td.pick:hover::after,
+  td.pick:focus-visible::after{opacity:1}
+
+  tbody tr.line:hover > td{background:var(--hover)}
+  tbody tr.line:hover > td.c-sub,
+  tbody tr.line:hover > td.c-quote,
+  tbody tr.line:hover > td.c-margin{background:#D2D0C7}
+  tbody tr.line:focus-within > td{background:var(--hover)}
+
+  /* tax type marks */
+  .tax{
+    font-family:var(--entry);
+    font-size:11px;
+    line-height:1.4;
+    display:inline-block;
+    padding:1px 0;
+  }
+  .tax-ca{
+    border:1px solid var(--rule);
+    padding:1px 5px 0;
+    color:var(--ink-mid);
+  }
+  .tax-kh{
+    border:1px solid var(--stamp-red);
+    color:var(--stamp-red);
+    padding:1px 5px 0;
+    font-weight:600;
+    background-image:repeating-linear-gradient(45deg, rgba(168,31,22,.16) 0 1px, transparent 1px 3px);
+  }
+
+  /* per row actions */
+  .acts{display:inline-flex;gap:3px}
+  .ibtn{
+    width:22px;height:20px;
+    display:inline-grid;
+    place-items:center;
+    border:1px solid var(--rule);
+    background:var(--paper);
+    color:var(--ink-mid);
+    font-family:var(--entry);
+    font-size:11px;
+    line-height:1;
+    padding:0;
+    border-radius:0;
+    cursor:pointer;
+  }
+  .ibtn:hover{border-color:var(--ink);color:var(--ink);background:rgba(20,19,14,.08)}
+  .ibtn:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  .ibtn.rm:hover{border-color:var(--stamp-red);color:var(--stamp-red)}
+
+  /* ---- group rows ---- */
+  tr.grp td{
+    background:var(--paper-2);
+    border-top:2px solid var(--ink);
+    border-bottom:1px solid var(--ink);
+    padding-top:7px;
+    padding-bottom:6px;
+  }
+  tr.grp .gcode{
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.14em;
+    border:1px solid var(--ink);
+    padding:1px 4px 0;
+    margin-right:.55rem;
+  }
+  tr.grp .gline{display:flex;align-items:baseline}
+  tr.grp .gtitle{font-family:var(--entry);font-size:12.5px;font-weight:700;letter-spacing:-.005em}
+  tr.grp .gnote{
+    display:block;
+    margin-top:3px;
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:.13em;
+    white-space:nowrap;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+
+  tr.gsum td{
+    background:var(--paper);
+    border-top:1px solid var(--ink);
+    border-bottom:2px solid var(--ink);
+    font-weight:700;
+  }
+  tr.gsum .glabel{
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.17em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  tr.gsum td.c-sub,
+  tr.gsum td.c-quote,
+  tr.gsum td.c-margin{background:var(--paper-3)}
+  tr.gsum td.c-quote{font-size:13.5px}
+
+  /* ---- blank ruled write-in line ---- */
+  tr.blankline td{
+    height:30px;
+    border-bottom:1px dashed var(--ink-mid);
+    background:var(--paper);
+  }
+  .addrow{
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    background:transparent;
+    border:0;
+    border-bottom:1px solid transparent;
+    padding:2px 0 1px;
+    cursor:pointer;
+    border-radius:0;
+  }
+  .addrow:hover{color:var(--ink);border-bottom-color:var(--ink)}
+  .addrow:focus-visible{outline:2px solid var(--ink);outline-offset:2px;color:var(--ink)}
+
+  /* ---- foot ---- */
+  tfoot td{
+    position:sticky;
+    bottom:0;
+    z-index:3;
+    background:var(--paper);
+    border-top:3px solid var(--ink);
+    border-bottom:0;
+    padding-top:9px;
+    padding-bottom:9px;
+  }
+  tfoot td.sticky-l,
+  tfoot td.sticky-r{z-index:5}
+  tfoot .flabel{
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.19em;
+    text-transform:uppercase;
+  }
+  tfoot .fnote{
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+  }
+  tfoot td.c-sub,
+  tfoot td.c-quote,
+  tfoot td.c-margin{background:var(--paper-3)}
+  tfoot td.c-sub,
+  tfoot td.c-quote{font-size:15px;font-weight:700;letter-spacing:-.025em}
+  tfoot td.c-margin{font-size:14px;font-weight:700;letter-spacing:-.02em}
+  tfoot td.c-margin .pc{font-size:11px;color:var(--ink-mid);margin-left:.45em;letter-spacing:.02em}
+
+  /* ============ SIGNATURE: RUBBER STAMP OVERPRINT ============ */
+  .stamp{
+    position:relative;
+    display:inline-block;
+    padding:4px 10px 3px;
+    border:2.5px solid currentColor;
+    box-shadow:inset 0 0 0 1px currentColor;
+    font-family:var(--form);
+    font-weight:700;
+    text-transform:uppercase;
+    line-height:1.15;
+    text-align:center;
+    opacity:.88;
+    mix-blend-mode:multiply;
+    pointer-events:none;
+    align-self:center;
+  }
+  .stamp::after{
+    content:"";
+    position:absolute;
+    inset:-3px;
+    background:
+      repeating-linear-gradient(112deg, rgba(230,228,221,.62) 0 1px, transparent 1px 5px),
+      repeating-linear-gradient(31deg, rgba(230,228,221,.34) 0 1px, transparent 1px 9px);
+    pointer-events:none;
+  }
+  .stamp .big{display:block;font-size:15px;letter-spacing:.22em}
+  .stamp .sub{
+    display:block;
+    font-size:8px;
+    letter-spacing:.14em;
+    font-weight:600;
+    margin-top:1px;
+    padding-top:2px;
+    border-top:1px solid currentColor;
+  }
+  .stamp--stage{color:var(--ink);transform:rotate(-3.2deg)}
+
+  /* ============ FOOT KEY STRIP ============ */
+  .key-strip{
+    flex:0 0 auto;
+    padding:8px 14px 10px;
+    font-family:var(--form);
+    font-size:9.5px;
+    font-weight:600;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--ink-mid);
+    display:flex;
+    flex-wrap:wrap;
+    gap:.4rem 1.5rem;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:1100px){
+    .info-strip{grid-template-columns:repeat(3,1fr)}
+    .info-cell:nth-child(n+4){border-top:1px solid var(--rule)}
+    .info-cell:nth-child(4){border-left:0}
+  }
+
+  /* Below this the two pinned gutters (286 + 494) leave no working band between
+     them, so the money block gives up its pin and the sheet is simply panned. */
+  @media (max-width:1080px){
+    .c-sub.sticky-r,
+    .c-quote.sticky-r,
+    .c-margin.sticky-r,
+    .c-act.sticky-r,
+    .b-calc{right:auto}
+    .sheet-wrap{scroll-padding-right:0}
+  }
+  /* Narrower still and even the line stub has to let go. */
+  @media (max-width:700px){
+    .c-no.sticky-l,
+    .c-desc.sticky-l,
+    .b-stub{left:auto}
+    .sheet-wrap{scroll-padding-left:0}
+  }
+  @media (max-width:760px){
+    body{height:auto}
+    .sheet-head{position:static}
+    .sheet-title{padding:8px 12px 10px}
+    .t-right{margin-left:0}
+    .info-strip{grid-template-columns:repeat(2,1fr)}
+    .info-cell:nth-child(n+3){border-top:1px solid var(--rule)}
+    .info-cell:nth-child(odd){border-left:0}
+    .sheet-wrap{min-height:60vh}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+
+  @media print{
+    body{padding-bottom:0;background:#fff;background-image:none;display:block}
+    .sheet-head{position:static}
+    .sheet-wrap{overflow:visible;border-bottom:0}
+    .sticky-l,.sticky-r,thead th,tfoot td{position:static}
+    table.lines{width:100%;font-size:8.5px}
+    .stamp{opacity:1}
+  }
+</style>
+</head>
+<body>
+
+<input type="checkbox" id="detailcols" class="vh" checked>
+
+<header class="sheet-head">
+
+  <div class="sheet-title">
+    <div>
+      <span class="eyebrow"><a class="back" href="pipeline-call-sheet.html">&#8592; Pipeline</a> <span class="crumb-sep" aria-hidden="true">/</span> AuraOS cost breakdown <span class="crumb-sep" aria-hidden="true">/</span> Deal <b>DEAL-0182</b> <span class="crumb-sep" aria-hidden="true">/</span> Rev 04</span>
+      <h1 class="sans">TVC T&#7871;t 2027 &ldquo;V&#7883; Xu&#226;n&rdquo;</h1>
+      <p class="t-meta sans">Nh&#7845;t Minh Beverage <span class="sep" aria-hidden="true">|</span> Ch&#7883; Ph&#7841;m Thu H&#224;, Marketing Director <span class="sep" aria-hidden="true">|</span> Owner Tr&#7847;n Qu&#7889;c B&#7843;o</p>
+    </div>
+
+    <span class="stamp stamp--stage">
+      <span class="big">Breakdown</span>
+      <span class="sub">Stage 03 of 07</span>
+    </span>
+
+    <div class="t-right">
+      <span class="autosave">All changes saved <b>06:57 ICT</b></span>
+      <button type="button" class="btn btn-ink">Save</button>
+    </div>
+  </div>
+
+  <dl class="info-strip">
+    <div class="info-cell">
+      <dt>Lines on sheet</dt>
+      <dd>17</dd>
+    </div>
+    <div class="info-cell">
+      <dt>Total cost</dt>
+      <dd>530,600,000<span class="u">VND</span></dd>
+    </div>
+    <div class="info-cell">
+      <dt>Quote price - lines</dt>
+      <dd>617,590,000<span class="u">VND</span></dd>
+    </div>
+    <div class="info-cell">
+      <dt>Line margin</dt>
+      <dd>86,990,000<span class="u">VND</span><span class="pc">14.1%</span></dd>
+    </div>
+    <div class="info-cell">
+      <dt>Client budget</dt>
+      <dd>850,000,000<span class="u">VND</span></dd>
+    </div>
+  </dl>
+
+  <div class="toolbar">
+    <label class="detail-toggle" for="detailcols">Detail columns <span>(4)</span></label>
+    <span>Grouped by package = cost phase</span>
+    <span class="key"><i class="sw-calc" aria-hidden="true"></i> Computed</span>
+    <span class="key"><i class="sw-nil" aria-hidden="true">-</i> Nil</span>
+    <span class="key"><i class="sw-risk" aria-hidden="true"></i> No invoice</span>
+    <span class="grow"></span>
+    <button type="button" class="btn">+ Add line</button>
+  </div>
+</header>
+
+<main class="sheet-wrap">
+<table class="lines">
+  <caption class="vh">Cost lines for deal DEAL-0182. Line and money columns stay pinned, the middle band scrolls horizontally.</caption>
+
+  <thead>
+    <tr class="spec" aria-hidden="true">
+      <th class="c-no"></th>
+      <th class="c-desc"></th>
+      <th class="c-cat col-detail"></th>
+      <th class="c-phase col-detail"></th>
+      <th class="c-src col-detail"></th>
+      <th class="c-contact col-detail"></th>
+      <th class="c-pkg"></th>
+      <th class="c-q1"></th>
+      <th class="c-u1"></th>
+      <th class="c-q2"></th>
+      <th class="c-u2"></th>
+      <th class="c-price"></th>
+      <th class="c-tax"></th>
+      <th class="c-mf"></th>
+      <th class="c-mu"></th>
+      <th class="c-sub"></th>
+      <th class="c-quote"></th>
+      <th class="c-margin"></th>
+      <th class="c-act"></th>
+    </tr>
+    <tr class="band">
+      <th class="b-stub sticky-l" colspan="2" scope="colgroup">Line</th>
+      <th class="col-detail" colspan="4" scope="colgroup">Detail</th>
+      <th colspan="9" scope="colgroup">Measure &amp; rate</th>
+      <th class="b-calc sticky-r" colspan="3" scope="colgroup">Computed - VND</th>
+      <th class="c-act sticky-r" scope="col">Order</th>
+    </tr>
+    <tr class="head">
+      <th class="c-no sticky-l num" scope="col">#</th>
+      <th class="c-desc sticky-l" scope="col">Description</th>
+      <th class="c-cat col-detail" scope="col">Item category</th>
+      <th class="c-phase col-detail" scope="col">Cost phase</th>
+      <th class="c-src col-detail" scope="col">Source type</th>
+      <th class="c-contact col-detail" scope="col">Source contact</th>
+      <th class="c-pkg" scope="col">Pkg</th>
+      <th class="c-q1 num" scope="col">Qty 1</th>
+      <th class="c-u1" scope="col">Unit 1</th>
+      <th class="c-q2 num" scope="col">Qty 2</th>
+      <th class="c-u2" scope="col">Unit 2</th>
+      <th class="c-price num" scope="col">Unit price</th>
+      <th class="c-tax" scope="col">Tax type</th>
+      <th class="c-mf num" scope="col">Vendor MF %</th>
+      <th class="c-mu num" scope="col">Markup %</th>
+      <th class="c-sub sticky-r num" scope="col">Subtotal</th>
+      <th class="c-quote sticky-r num" scope="col">Quote price</th>
+      <th class="c-margin sticky-r num" scope="col">Margin</th>
+      <th class="c-act sticky-r" scope="col">Actions</th>
+    </tr>
+  </thead>
+
+  <tbody>
+
+    <!-- ============ GROUP P1 ============ -->
+    <tr class="grp">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l">
+        <span class="gline"><span class="gcode">P1</span><span class="gtitle">Pre-production &amp; concept</span></span>
+        <span class="gnote">Phase: pre-production - 04 lines</span>
+      </td>
+      <td class="col-detail" colspan="4"></td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r"></td>
+      <td class="c-quote sticky-r"></td>
+      <td class="c-margin sticky-r"></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">01</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Creative concept &amp; script</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Creative</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Pre-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Internal</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Studio</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P1</td>
+      <td class="c-q1 cell num" tabindex="0">1</td>
+      <td class="c-u1 cell pick unit" tabindex="0">job</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">25,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">20%</td>
+      <td class="c-sub sticky-r num">25,000,000</td>
+      <td class="c-quote sticky-r num">30,000,000</td>
+      <td class="c-margin sticky-r num">5,000,000<span class="pc">16.7%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 01 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 01 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 01">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">02</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Storyboard artist</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Creative</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Pre-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Freelancer</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">L&#234; Minh Khoa</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P1</td>
+      <td class="c-q1 cell num" tabindex="0">12</td>
+      <td class="c-u1 cell pick unit" tabindex="0">frames</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">800,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-ca">C&#225; nh&#226;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">9,600,000</td>
+      <td class="c-quote sticky-r num">11,040,000</td>
+      <td class="c-margin sticky-r num">1,440,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 02 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 02 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 02">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">03</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Location scouting &amp; permits</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Pre-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">An L&#7897;c Location</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P1</td>
+      <td class="c-q1 cell num" tabindex="0">3</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">4,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-kh">Kh&#244;ng ho&#225; &#273;&#417;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">10%</td>
+      <td class="c-sub sticky-r num">12,000,000</td>
+      <td class="c-quote sticky-r num">13,200,000</td>
+      <td class="c-margin sticky-r num">1,200,000<span class="pc">9.1%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 03 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 03 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 03">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">04</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Casting - talent search</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Talent</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Pre-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Casting S&#224;i G&#242;n</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P1</td>
+      <td class="c-q1 cell num" tabindex="0">1</td>
+      <td class="c-u1 cell pick unit" tabindex="0">job</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">15,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">15,000,000</td>
+      <td class="c-quote sticky-r num">17,250,000</td>
+      <td class="c-margin sticky-r num">2,250,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 04 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 04 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 04">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="blankline">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><button type="button" class="addrow">+ Add line to P1</button></td>
+      <td class="c-cat col-detail"></td>
+      <td class="c-phase col-detail"></td>
+      <td class="c-src col-detail"></td>
+      <td class="c-contact col-detail"></td>
+      <td class="c-pkg"></td>
+      <td class="c-q1"></td>
+      <td class="c-u1"></td>
+      <td class="c-q2"></td>
+      <td class="c-u2"></td>
+      <td class="c-price"></td>
+      <td class="c-tax"></td>
+      <td class="c-mf"></td>
+      <td class="c-mu"></td>
+      <td class="c-sub sticky-r"></td>
+      <td class="c-quote sticky-r"></td>
+      <td class="c-margin sticky-r"></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <tr class="gsum">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><span class="glabel">Subtotal P1 - 04 lines</span></td>
+      <td class="col-detail" colspan="4"></td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r num">61,600,000</td>
+      <td class="c-quote sticky-r num">71,490,000</td>
+      <td class="c-margin sticky-r num">9,890,000<span class="pc">13.8%</span></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <!-- ============ GROUP P2 ============ -->
+    <tr class="grp">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l">
+        <span class="gline"><span class="gcode">P2</span><span class="gtitle">Production - 2 shoot days</span></span>
+        <span class="gnote">Phase: production - 08 lines</span>
+      </td>
+      <td class="col-detail" colspan="4"></td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r"></td>
+      <td class="c-quote sticky-r"></td>
+      <td class="c-margin sticky-r"></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">05</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Director</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Crew</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Freelancer</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Nguy&#7877;n Ho&#224;ng Duy</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">18,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-ca">C&#225; nh&#226;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">36,000,000</td>
+      <td class="c-quote sticky-r num">41,400,000</td>
+      <td class="c-margin sticky-r num">5,400,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 05 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 05 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 05">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">06</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">DOP + camera team</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Crew</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Freelancer</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">V&#361; &#272;&#236;nh Nam</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0">4</td>
+      <td class="c-u2 cell pick unit" tabindex="0">crew</td>
+      <td class="c-price cell num money" tabindex="0">22,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-ca">C&#225; nh&#226;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">44,000,000</td>
+      <td class="c-quote sticky-r num">50,600,000</td>
+      <td class="c-margin sticky-r num">6,600,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 06 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 06 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 06">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">07</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Camera package - Alexa Mini LF</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Equipment</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">H&#7843;i &#272;&#259;ng Rental</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">28,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">20%</td>
+      <td class="c-sub sticky-r num">56,000,000</td>
+      <td class="c-quote sticky-r num">67,200,000</td>
+      <td class="c-margin sticky-r num">11,200,000<span class="pc">16.7%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 07 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 07 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 07">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">08</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Lighting &amp; grip package</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Equipment</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">H&#7843;i &#272;&#259;ng Rental</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">19,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">20%</td>
+      <td class="c-sub sticky-r num">38,000,000</td>
+      <td class="c-quote sticky-r num">45,600,000</td>
+      <td class="c-margin sticky-r num">7,600,000<span class="pc">16.7%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 08 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 08 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 08">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">09</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Art department &amp; set build</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Art</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">X&#432;&#7903;ng M&#7897;c T&#226;n Ph&#250;</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">1</td>
+      <td class="c-u1 cell pick unit" tabindex="0">job</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">85,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">18%</td>
+      <td class="c-sub sticky-r num">85,000,000</td>
+      <td class="c-quote sticky-r num">100,300,000</td>
+      <td class="c-margin sticky-r num">15,300,000<span class="pc">15.3%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 09 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 09 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 09">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">10</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Lead talent - 3 cast</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Talent</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Freelancer</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Various</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">3</td>
+      <td class="c-u1 cell pick unit" tabindex="0">cast</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">12,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-ca">C&#225; nh&#226;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">36,000,000</td>
+      <td class="c-quote sticky-r num">41,400,000</td>
+      <td class="c-margin sticky-r num">5,400,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 10 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 10 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 10">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">11</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Studio rental</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Location</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Phim Tr&#432;&#7901;ng &#272;&#244;ng S&#224;i G&#242;n</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">15,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">30,000,000</td>
+      <td class="c-quote sticky-r num">34,500,000</td>
+      <td class="c-margin sticky-r num">4,500,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 11 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 11 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 11">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">12</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Catering &amp; transport</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">B&#7871;p Nh&#224; Mai</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P2</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0">35</td>
+      <td class="c-u2 cell pick unit" tabindex="0">pax</td>
+      <td class="c-price cell num money" tabindex="0">8,500,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-kh">Kh&#244;ng ho&#225; &#273;&#417;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">10%</td>
+      <td class="c-sub sticky-r num">17,000,000</td>
+      <td class="c-quote sticky-r num">18,700,000</td>
+      <td class="c-margin sticky-r num">1,700,000<span class="pc">9.1%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 12 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 12 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 12">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="blankline">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><button type="button" class="addrow">+ Add line to P2</button></td>
+      <td class="c-cat col-detail"></td>
+      <td class="c-phase col-detail"></td>
+      <td class="c-src col-detail"></td>
+      <td class="c-contact col-detail"></td>
+      <td class="c-pkg"></td>
+      <td class="c-q1"></td>
+      <td class="c-u1"></td>
+      <td class="c-q2"></td>
+      <td class="c-u2"></td>
+      <td class="c-price"></td>
+      <td class="c-tax"></td>
+      <td class="c-mf"></td>
+      <td class="c-mu"></td>
+      <td class="c-sub sticky-r"></td>
+      <td class="c-quote sticky-r"></td>
+      <td class="c-margin sticky-r"></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <tr class="gsum">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><span class="glabel">Subtotal P2 - 08 lines</span></td>
+      <td class="col-detail" colspan="4"></td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r num">342,000,000</td>
+      <td class="c-quote sticky-r num">399,700,000</td>
+      <td class="c-margin sticky-r num">57,700,000<span class="pc">14.4%</span></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <!-- ============ GROUP P3 ============ -->
+    <tr class="grp">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l">
+        <span class="gline"><span class="gcode">P3</span><span class="gtitle">Post-production &amp; delivery</span></span>
+        <span class="gnote">Phase: post-production - 05 lines</span>
+      </td>
+      <td class="col-detail" colspan="4"></td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r"></td>
+      <td class="c-quote sticky-r"></td>
+      <td class="c-margin sticky-r"></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">13</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Offline edit</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Post</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Post-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Freelancer</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">&#272;&#7863;ng Thu Trang</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P3</td>
+      <td class="c-q1 cell num" tabindex="0">8</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">3,500,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-ca">C&#225; nh&#226;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">28,000,000</td>
+      <td class="c-quote sticky-r num">32,200,000</td>
+      <td class="c-margin sticky-r num">4,200,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 13 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 13 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 13">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">14</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Colour grading</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Post</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Post-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">S&#7855;c M&#224;u Post</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P3</td>
+      <td class="c-q1 cell num" tabindex="0">2</td>
+      <td class="c-u1 cell pick unit" tabindex="0">days</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">12,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">20%</td>
+      <td class="c-sub sticky-r num">24,000,000</td>
+      <td class="c-quote sticky-r num">28,800,000</td>
+      <td class="c-margin sticky-r num">4,800,000<span class="pc">16.7%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 14 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 14 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 14">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">15</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Sound design &amp; mix</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Post</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Post-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">&#194;m Thanh Vi&#7879;t</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P3</td>
+      <td class="c-q1 cell num" tabindex="0">1</td>
+      <td class="c-u1 cell pick unit" tabindex="0">job</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">18,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">20%</td>
+      <td class="c-sub sticky-r num">18,000,000</td>
+      <td class="c-quote sticky-r num">21,600,000</td>
+      <td class="c-margin sticky-r num">3,600,000<span class="pc">16.7%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 15 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 15 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 15">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">16</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">Music licence</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Post</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Post-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Vendor</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Universal Production Music</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P3</td>
+      <td class="c-q1 cell num" tabindex="0">1</td>
+      <td class="c-u1 cell pick unit" tabindex="0">track</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">35,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax">C&#244;ng ty</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">10%</td>
+      <td class="c-sub sticky-r num">35,000,000</td>
+      <td class="c-quote sticky-r num">38,500,000</td>
+      <td class="c-margin sticky-r num">3,500,000<span class="pc">9.1%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 16 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 16 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 16">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="line">
+      <td class="c-no sticky-l num"><span class="lno">17</span></td>
+      <td class="c-desc sticky-l cell" tabindex="0"><span class="desc">VFX &amp; motion graphics</span></td>
+      <td class="c-cat col-detail cell pick enum" tabindex="0">Post</td>
+      <td class="c-phase col-detail cell pick enum" tabindex="0">Post-production</td>
+      <td class="c-src col-detail cell pick enum" tabindex="0">Freelancer</td>
+      <td class="c-contact col-detail cell" tabindex="0"><span class="contact">Studio B&#7889;n M&#249;a</span></td>
+      <td class="c-pkg cell pick enum" tabindex="0">P3</td>
+      <td class="c-q1 cell num" tabindex="0">1</td>
+      <td class="c-u1 cell pick unit" tabindex="0">job</td>
+      <td class="c-q2 cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-u2 cell pick unit" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-price cell num money" tabindex="0">22,000,000</td>
+      <td class="c-tax cell pick" tabindex="0"><span class="tax tax-ca">C&#225; nh&#226;n</span></td>
+      <td class="c-mf cell num" tabindex="0"><span class="nil">-</span></td>
+      <td class="c-mu cell num pct" tabindex="0">15%</td>
+      <td class="c-sub sticky-r num">22,000,000</td>
+      <td class="c-quote sticky-r num">25,300,000</td>
+      <td class="c-margin sticky-r num">3,300,000<span class="pc">13.0%</span></td>
+      <td class="c-act sticky-r">
+        <span class="acts">
+          <button type="button" class="ibtn" aria-label="Move line 17 up">&#8593;</button>
+          <button type="button" class="ibtn" aria-label="Move line 17 down">&#8595;</button>
+          <button type="button" class="ibtn rm" aria-label="Remove line 17">&#10005;</button>
+        </span>
+      </td>
+    </tr>
+
+    <tr class="blankline">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><button type="button" class="addrow">+ Add line to P3</button></td>
+      <td class="c-cat col-detail"></td>
+      <td class="c-phase col-detail"></td>
+      <td class="c-src col-detail"></td>
+      <td class="c-contact col-detail"></td>
+      <td class="c-pkg"></td>
+      <td class="c-q1"></td>
+      <td class="c-u1"></td>
+      <td class="c-q2"></td>
+      <td class="c-u2"></td>
+      <td class="c-price"></td>
+      <td class="c-tax"></td>
+      <td class="c-mf"></td>
+      <td class="c-mu"></td>
+      <td class="c-sub sticky-r"></td>
+      <td class="c-quote sticky-r"></td>
+      <td class="c-margin sticky-r"></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+    <tr class="gsum">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><span class="glabel">Subtotal P3 - 05 lines</span></td>
+      <td class="col-detail" colspan="4"></td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r num">127,000,000</td>
+      <td class="c-quote sticky-r num">146,400,000</td>
+      <td class="c-margin sticky-r num">19,400,000<span class="pc">13.3%</span></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+
+  </tbody>
+
+  <tfoot>
+    <tr class="total">
+      <td class="c-no sticky-l"></td>
+      <td class="c-desc sticky-l"><span class="flabel">Total - 17 lines</span></td>
+      <td class="col-detail fnote" colspan="4">03 packages - P1, P2, P3 - 03 cost phases</td>
+      <td colspan="9"></td>
+      <td class="c-sub sticky-r num">530,600,000</td>
+      <td class="c-quote sticky-r num">617,590,000</td>
+      <td class="c-margin sticky-r num">86,990,000<span class="pc">14.1%</span></td>
+      <td class="c-act sticky-r"></td>
+    </tr>
+  </tfoot>
+
+</table>
+</main>
+
+<div class="key-strip">
+  <span>All figures in VND - never abbreviated</span>
+  <span>Line and money columns stay pinned - the middle band scrolls</span>
+  <span>Quote price = subtotal + markup</span>
+  <span>Qty 2 is informational - it does not multiply</span>
+  <span>Line margin is before the 10% management fee added at quote level</span>
+  <span>Sheet 01 of 01 - Rev 04 - 18 Aug 2026</span>
+</div>
+
+<!-- PROTOTYPE SWITCHER - not part of the design being evaluated -->
+<div id="proto-switcher" role="navigation" aria-label="Prototype screen switcher">
+  <button type="button" data-dir="-1" aria-label="Previous screen">&#8592;</button>
+  <span id="proto-label"></span>
+  <button type="button" data-dir="1" aria-label="Next screen">&#8594;</button>
+</div>
+<style>
+  #proto-switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:.4rem;background:#111;color:#fff;border:1px solid #4a4a4a;border-radius:999px;padding:.35rem .45rem;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+  #proto-switcher button{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:999px;color:#fff}
+  #proto-switcher button:hover{background:#333}
+  #proto-switcher button:focus-visible{outline:2px solid #7cd6ff;outline-offset:2px}
+  #proto-label{padding:0 .35rem;white-space:nowrap}
+  @media print{#proto-switcher{display:none}}
+</style>
+<script>
+(function(){
+  var V=[{k:'1',n:'Pipeline',f:'pipeline-call-sheet.html'},
+         {k:'2',n:'Breakdown',f:'dense-breakdown-call-sheet.html'},
+         {k:'3',n:'Quote builder',f:'dense-quote-call-sheet.html'},
+         {k:'4',n:'Dashboard',f:'dense-dashboard-call-sheet.html'}];
+  var CURRENT=1;
+  document.getElementById('proto-label').textContent=V[CURRENT].k+' - '+V[CURRENT].n+'  ('+(CURRENT+1)+'/'+V.length+')';
+  function go(d){location.href=V[(CURRENT+d+V.length)%V.length].f;}
+  document.querySelectorAll('#proto-switcher button').forEach(function(b){b.addEventListener('click',function(){go(+b.dataset.dir);});});
+  document.addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);
+  });
+})();
+</script>
+</body>
+</html>
