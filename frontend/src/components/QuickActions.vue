@@ -9,7 +9,7 @@
       v-model="query"
       type="text"
       :placeholder="placeholder"
-      class="w-full rounded-[10px] border border-hairline bg-surface py-1.5 pl-8 pr-12 text-sm text-ink placeholder:text-faint focus:border-accent/40 focus:aura-focus"
+      class="w-full rounded-[10px] border border-hairline bg-paper py-1.5 pl-8 pr-12 text-sm text-carbon placeholder:text-faint focus:border-accent/40 focus:aura-focus"
       @keydown.esc="clear"
       @keydown.enter="submit"
     />

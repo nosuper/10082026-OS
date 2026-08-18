@@ -2,7 +2,7 @@
   <div class="space-y-4">
     <!-- Page head: what the founder opens the app for, in words, before numbers. -->
     <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
-      <h1 class="text-xl font-semibold text-ink">Today</h1>
+      <h1 class="text-xl font-semibold text-carbon">Today</h1>
       <p class="text-sm text-muted">
         {{ openDeals.length }} open deal{{ openDeals.length === 1 ? "" : "s" }} ·
         {{ openJobs.length }} in production
@@ -43,7 +43,7 @@
       </BentoCard>
 
       <BentoCard title="Quotes gone quiet" to="/deals" :attention="silent.length > 0">
-        <span class="aura-num text-2xl font-medium" :class="silent.length ? 'text-accent' : 'text-ink'">
+        <span class="aura-num text-2xl font-medium" :class="silent.length ? 'text-accent' : 'text-carbon'">
           {{ silent.length }}
         </span>
         <template #footer>
@@ -64,7 +64,7 @@
         <ul v-if="attention.length" class="divide-y divide-hairline">
           <li v-for="item in attention" :key="item.key" class="flex items-baseline gap-2 py-2 first:pt-0">
             <StatusPill :label="item.kind" :tone="item.tone" />
-            <router-link :to="item.to" class="min-w-0 truncate text-sm font-medium text-ink hover:text-accent">
+            <router-link :to="item.to" class="min-w-0 truncate text-sm font-medium text-carbon hover:text-accent">
               {{ item.title }}
             </router-link>
             <span class="min-w-0 truncate text-xs text-muted">{{ item.detail }}</span>
@@ -112,7 +112,7 @@
     >
       <template #cell-title="{ row }">
         <div class="min-w-0">
-          <div class="truncate text-sm font-medium text-ink">{{ row.title || row.name }}</div>
+          <div class="truncate text-sm font-medium text-carbon">{{ row.title || row.name }}</div>
           <div class="aura-num text-[11px] text-faint">{{ row.name }}</div>
         </div>
       </template>
@@ -130,7 +130,7 @@
         <div class="grid gap-2">
           <select
             v-model="expenseJob"
-            class="w-full rounded-[10px] border border-hairline bg-surface py-2 pl-2 pr-8 text-sm text-ink"
+            class="w-full rounded-[10px] border border-hairline bg-paper py-2 pl-2 pr-8 text-sm text-carbon"
           >
             <option value="">Which job…</option>
             <option v-for="job in openJobs" :key="job.name" :value="job.name">
@@ -145,7 +145,7 @@
           <select
             v-model="expenseCategory"
             :disabled="!expenseJob"
-            class="w-full rounded-[10px] border border-hairline bg-surface py-2 pl-2 pr-8 text-sm text-ink disabled:text-faint"
+            class="w-full rounded-[10px] border border-hairline bg-paper py-2 pl-2 pr-8 text-sm text-carbon disabled:text-faint"
           >
             <option value="">Uncategorised</option>
             <option v-for="title in categories.data || []" :key="title" :value="title">
@@ -173,7 +173,7 @@
       <BentoCard class="lg:col-span-2" title="Cash flow · next milestones">
         <ul v-if="upcoming.length" class="divide-y divide-hairline">
           <li v-for="row in upcoming" :key="row.name" class="flex items-baseline gap-2 py-2 first:pt-0">
-            <router-link :to="`/jobs/${row.job}`" class="min-w-0 truncate text-sm font-medium text-ink hover:text-accent">
+            <router-link :to="`/jobs/${row.job}`" class="min-w-0 truncate text-sm font-medium text-carbon hover:text-accent">
               {{ row.job_title || row.job }}
             </router-link>
             <span class="min-w-0 truncate text-xs text-muted">{{ row.title }}</span>

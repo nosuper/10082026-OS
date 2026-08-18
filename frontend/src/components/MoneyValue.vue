@@ -24,7 +24,7 @@ const SIZES = {
 }
 
 const TONES = {
-  ink: "text-ink",
+  ink: "text-carbon",
   muted: "text-muted",
   accent: "text-accent",
   inverse: "text-white",

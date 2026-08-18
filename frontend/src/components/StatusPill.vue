@@ -19,7 +19,7 @@ const props = defineProps({
 
 const TONES = {
   neutral: "border-hairline bg-canvas text-muted",
-  ink: "border-ink bg-ink text-white",
+  ink: "border-carbon bg-carbon text-white",
   accent: "border-accent/30 bg-accent-soft text-accent-ink",
   warn: "border-warn/25 bg-warn-soft text-warn",
   ok: "border-ok/25 bg-ok/5 text-ok",

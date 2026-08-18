@@ -1,7 +1,7 @@
 <template>
-  <div class="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
+  <div class="overflow-hidden rounded-card border border-hairline bg-paper shadow-card">
     <div v-if="title || $slots.action" class="flex items-center gap-2 border-b border-hairline px-4 py-3">
-      <h2 class="font-display text-sm font-semibold text-ink">{{ title }}</h2>
+      <h2 class="font-display text-sm font-semibold text-carbon">{{ title }}</h2>
       <span v-if="count !== null" class="aura-num text-xs text-faint">{{ count }}</span>
       <div class="ml-auto"><slot name="action" /></div>
     </div>
@@ -36,7 +36,7 @@
               :class="col.align === 'right' ? 'text-right' : ''"
             >
               <slot :name="`cell-${col.key}`" :row="row" :value="row[col.key]">
-                <span class="text-ink">{{ row[col.key] ?? "—" }}</span>
+                <span class="text-carbon">{{ row[col.key] ?? "—" }}</span>
               </slot>
             </td>
           </tr>

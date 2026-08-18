@@ -14,7 +14,7 @@
         class="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-hairline bg-canvas/85 px-4 backdrop-blur"
       >
         <div class="min-w-0 lg:hidden">
-          <span class="font-display text-sm font-semibold text-ink">AuraOS</span>
+          <span class="font-display text-sm font-semibold text-carbon">AuraOS</span>
         </div>
         <div class="min-w-0 flex-1">
           <QuickActions @submit="$emit('search', $event)" />

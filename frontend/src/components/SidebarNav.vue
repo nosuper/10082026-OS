@@ -1,12 +1,12 @@
 <template>
   <aside
-    class="flex w-sidebar shrink-0 flex-col border-r border-hairline bg-surface/80 backdrop-blur"
+    class="flex w-sidebar shrink-0 flex-col border-r border-hairline bg-paper/80 backdrop-blur"
   >
     <div class="flex h-14 items-center gap-2 px-4">
       <span class="flex h-5 w-5 items-center justify-center rounded-[6px] bg-accent">
         <span class="h-1.5 w-1.5 rounded-full bg-white"></span>
       </span>
-      <span class="font-display text-base font-semibold text-ink">AuraOS</span>
+      <span class="font-display text-base font-semibold text-carbon">AuraOS</span>
     </div>
 
     <nav class="flex-1 space-y-0.5 px-2 py-2">
@@ -18,7 +18,7 @@
             v-for="child in item.children"
             :key="child.route"
             :to="child.route"
-            class="block rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink"
+            class="block rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-carbon"
             active-class="bg-accent-soft text-accent-ink"
           >
             {{ child.label }}
@@ -28,7 +28,7 @@
         <router-link
           v-else
           :to="item.route"
-          class="block rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-ink"
+          class="block rounded-[8px] px-2 py-1.5 text-sm text-muted transition-colors hover:bg-canvas hover:text-carbon"
           active-class="bg-accent-soft text-accent-ink"
         >
           {{ item.label }}
@@ -40,11 +40,11 @@
       <div class="flex items-center gap-2">
         <span class="h-7 w-7 shrink-0 rounded-full border border-hairline bg-canvas"></span>
         <div class="min-w-0">
-          <div class="truncate text-sm font-medium text-ink">{{ userName }}</div>
+          <div class="truncate text-sm font-medium text-carbon">{{ userName }}</div>
           <div class="aura-eyebrow">{{ isFounder ? "Founder" : "Producer" }}</div>
         </div>
         <button
-          class="ml-auto rounded-[8px] p-1 text-faint transition-colors hover:bg-canvas hover:text-ink"
+          class="ml-auto rounded-[8px] p-1 text-faint transition-colors hover:bg-canvas hover:text-carbon"
           title="Log out"
           @click="$emit('logout')"
         >

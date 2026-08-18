@@ -1,5 +1,12 @@
 // Attio Clean / Producer Desk tokens. Every colour, radius and shadow the new UI
 // uses lives here - components never hardcode a hex.
+// `carbon`, not `ink`: frappe-ui's preset owns `ink` as a nested scale
+// (ink-gray-1, ink-amber-2 and friends) in the textColor, fill, stroke and
+// placeholder namespaces, and a namespace entry beats theme.extend.colors. A
+// colors.ink of our own therefore yields bg-ink and border-ink but no bare
+// text-ink, so the build dies on @apply text-ink. Their scale is not reachable
+// either - frappe-ui's exports map only publishes ./tailwind. Renaming our
+// token is the supportable fix; text-ink-gray-5 stays theirs.
 module.exports = {
   presets: [require("frappe-ui/tailwind")],
   content: [
@@ -11,9 +18,9 @@ module.exports = {
     extend: {
       colors: {
         canvas: "#fbfbfa",
-        surface: "#ffffff",
-        ink: "#1a1a1a",
-        "ink-soft": "#2d2d2d",
+        paper: "#ffffff",
+        carbon: "#1a1a1a",
+        "carbon-soft": "#2d2d2d",
         muted: "#6b6b6b",
         faint: "#9a9a98",
         hairline: "#e8e8e7",

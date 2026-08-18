@@ -35,9 +35,21 @@ const routes = [
     name: "JobExpense",
     component: () => import("./pages/JobExpensePage.vue"),
   },
+  // The sidebar splits the directory into Companies and People. Both land on
+  // the same page until Phase 4 builds them properly; the page already opens
+  // on its Companies tab, so /contacts keeps working as the shorter address.
   {
     path: "/contacts",
-    name: "Contacts",
+    redirect: "/contacts/companies",
+  },
+  {
+    path: "/contacts/companies",
+    name: "ContactsCompanies",
+    component: () => import("./pages/ContactsPage.vue"),
+  },
+  {
+    path: "/contacts/people",
+    name: "ContactsPeople",
     component: () => import("./pages/ContactsPage.vue"),
   },
   {

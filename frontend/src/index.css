@@ -15,7 +15,7 @@
   }
 
   body {
-    @apply bg-canvas font-sans text-ink;
+    @apply bg-canvas font-sans text-carbon;
   }
 
   h1,
@@ -45,13 +45,13 @@
   }
 
   .aura-card {
-    @apply rounded-card border border-hairline bg-surface shadow-card;
+    @apply rounded-card border border-hairline bg-paper shadow-card;
   }
 
   /* Founder-only surfaces invert, so margin numbers never sit in the same
      visual register as producer-safe data. */
   .aura-card-founder {
-    @apply rounded-card border border-ink bg-ink text-white shadow-card;
+    @apply rounded-card border border-carbon bg-carbon text-white shadow-card;
   }
 
   .aura-focus {
