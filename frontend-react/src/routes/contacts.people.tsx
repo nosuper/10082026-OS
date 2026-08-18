@@ -1,252 +1,227 @@
+// People, on real data.
+//
+// The other half of the directory: Party Contact, the company each person
+// belongs to, and the paperwork a freelancer contract needs from them. Same
+// role filter and same form as contacts.companies.tsx.
+
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Plus, Search, X, Phone, Mail } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Mail, Phone, Plus } from "lucide-react";
+
 import { AppShell } from "@/components/aura/AppShell";
-import { Card, Pill, Td, Th } from "@/components/aura/primitives";
+import {
+  ContactsTabs,
+  Paperwork,
+  PartyFormDialog,
+  RoleChips,
+  SearchBox,
+  haystack,
+  paperworkLabel,
+  personPaperwork,
+  roleTagFilter,
+  useCompanyOptions,
+  usePartyRoles,
+  type PersonRow,
+} from "@/components/aura/PartyDirectory";
+import { Card, Td, Th } from "@/components/aura/primitives";
+import { QueryStates } from "@/components/aura/states";
+import { countLabel } from "@/lib/format";
+import { useList } from "@/lib/queries";
 
 export const Route = createFileRoute("/contacts/people")({
   head: () => ({
     meta: [
-      { title: "People — AuraOS contacts" },
+      { title: "People - AuraOS contacts" },
       {
         name: "description",
         content:
-          "Individual contacts with phone, email, role tags and the company they belong to, plus roles across deals.",
+          "Individual contacts with phone, email, role tags, the company they belong to and the paperwork still missing.",
       },
-      { property: "og:title", content: "People — AuraOS contacts" },
+      { property: "og:title", content: "People - AuraOS contacts" },
       {
         property: "og:description",
-        content: "Crew, clients and freelancers with their roles across deals.",
+        content: "Clients, crew and freelancers with their role tags and paperwork gaps.",
       },
     ],
   }),
   component: PeoplePage,
 });
 
-type Person = {
-  name: string;
-  phone: string;
-  email: string;
-  company: string;
-  tags: string[];
-  roles: { role: string; deal: string }[];
-};
-
-const people: Person[] = [
-  {
-    name: "Phạm Thu Hà",
-    phone: "0903 118 224",
-    email: "ha.pham@nhatminh.vn",
-    company: "Nhất Minh Beverage",
-    tags: ["Client"],
-    roles: [
-      { role: "Client contact", deal: 'TVC Tết 2027 "Vị Xuân"' },
-      { role: "Client contact", deal: "KV Summer 2026" },
-    ],
-  },
-  {
-    name: "Nguyễn Hoàng Duy",
-    phone: "0938 447 010",
-    email: "duy.nguyen@gmail.com",
-    company: "—",
-    tags: ["Crew", "Director"],
-    roles: [{ role: "Director", deal: 'TVC Tết 2027 "Vị Xuân"' }],
-  },
-  {
-    name: "Vũ Đình Nam",
-    phone: "0977 220 561",
-    email: "nam.vu.dop@gmail.com",
-    company: "—",
-    tags: ["Crew", "DOP"],
-    roles: [
-      { role: "DOP", deal: 'TVC Tết 2027 "Vị Xuân"' },
-      { role: "DOP", deal: "Brand film Sài Gòn Xanh" },
-    ],
-  },
-  {
-    name: "Trần Mỹ Linh",
-    phone: "0912 003 887",
-    email: "linh.tran@aura.vn",
-    company: "Aura Production",
-    tags: ["Internal", "Producer"],
-    roles: [{ role: "Producer", deal: 'TVC Tết 2027 "Vị Xuân"' }],
-  },
-  {
-    name: "Đặng Thu Trang",
-    phone: "0965 771 402",
-    email: "trang.dang.edit@gmail.com",
-    company: "—",
-    tags: ["Crew", "Editor"],
-    roles: [{ role: "Offline editor", deal: 'TVC Tết 2027 "Vị Xuân"' }],
-  },
-  {
-    name: "Lê Hải Đăng",
-    phone: "0908 555 121",
-    email: "dang@haidangrental.vn",
-    company: "Hải Đăng Rental",
-    tags: ["Vendor"],
-    roles: [{ role: "Equipment vendor", deal: 'TVC Tết 2027 "Vị Xuân"' }],
-  },
-];
-
-const tagTone: Record<string, string> = {
-  Client: "ink",
-  Crew: "outline",
-  Vendor: "neutral",
-  Internal: "ember",
+type Listed = PersonRow & {
+  companyLabel: string;
+  missing: string[];
+  search: string;
 };
 
 function PeoplePage() {
-  const [q, setQ] = useState("");
-  const [tag, setTag] = useState("All");
-  const [open, setOpen] = useState<Person | null>(null);
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("");
+  const [dialog, setDialog] = useState<{ open: boolean; name: string | null }>({
+    open: false,
+    name: null,
+  });
 
-  const rows = people.filter(
-    (p) =>
-      (tag === "All" || p.tags.includes(tag)) &&
-      (p.name.toLowerCase().includes(q.toLowerCase()) ||
-        p.company.toLowerCase().includes(q.toLowerCase())),
+  const roles = usePartyRoles();
+  // Same arguments as the form's own company read, so the two share a request.
+  const companies = useCompanyOptions();
+
+  const people = useList<PersonRow>({
+    doctype: "Party Contact",
+    fields: [
+      "name",
+      "full_name",
+      "company",
+      "phone",
+      "email",
+      "id_number",
+      "tax_code",
+      "bank_account_number",
+    ],
+    ...roleTagFilter(role),
+    // Qualified on purpose: with a role chip on, the server joins Party Role
+    // Tag, which has a `modified` of its own, and a bare "modified desc" comes
+    // back as "Column 'modified' in ORDER BY is ambiguous".
+    orderBy: "`tabParty Contact`.modified desc",
+  });
+
+  const companyName = useMemo(
+    () => new Map((companies.data ?? []).map((c) => [c.name, c.company_name ?? c.name])),
+    [companies.data],
   );
+
+  const listed: Listed[] = useMemo(
+    () =>
+      (people.data ?? []).map((row) => {
+        const missing = personPaperwork(row);
+        const label = paperworkLabel(missing);
+        const companyLabel = row.company ? (companyName.get(row.company) ?? row.company) : "";
+        return {
+          ...row,
+          companyLabel,
+          missing,
+          search: haystack(
+            row.name,
+            row.full_name,
+            companyLabel,
+            row.phone,
+            row.email,
+            row.id_number,
+            row.tax_code,
+            row.bank_account_number,
+            label,
+          ),
+        };
+      }),
+    [people.data, companyName],
+  );
+
+  const term = query.trim().toLowerCase();
+  const rows = term ? listed.filter((row) => row.search.includes(term)) : listed;
+  const incomplete = listed.filter((row) => row.missing.length).length;
+
+  const meta = people.isSuccess
+    ? [
+        countLabel(listed.length, "person", "people"),
+        incomplete ? `${incomplete} missing paperwork` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
 
   return (
     <AppShell
       title="People"
-      meta={`${people.length} contacts · roles resolved across deals`}
+      meta={meta}
       actions={
-        <button className="inline-flex items-center gap-1.5 rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90">
+        <button
+          type="button"
+          onClick={() => setDialog({ open: true, name: null })}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90"
+        >
           <Plus className="size-3.5" /> New person
         </button>
       }
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
-            <Search className="size-3.5 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search people or company"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
-          </div>
-          {["All", "Client", "Crew", "Vendor", "Internal"].map((t) => (
-            <button
-              key={t}
-              onClick={() => setTag(t)}
-              className={
-                tag === t
-                  ? "rounded-lg bg-primary px-2.5 py-2 text-xs font-medium text-primary-foreground"
-                  : "rounded-lg border border-border bg-card px-2.5 py-2 text-xs text-muted-foreground hover:text-foreground"
-              }
-            >
-              {t}
-            </button>
-          ))}
+          <ContactsTabs />
+          <SearchBox value={query} onChange={setQuery} placeholder="Search people or company" />
         </div>
 
-        <Card title="Directory">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px]">
-              <thead className="border-b border-border">
-                <tr>
-                  <Th>Name</Th>
-                  <Th>Phone</Th>
-                  <Th>Email</Th>
-                  <Th>Company</Th>
-                  <Th>Roles</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((p) => (
-                  <tr
-                    key={p.name}
-                    onClick={() => setOpen(p)}
-                    className="cursor-pointer hover:bg-secondary/50"
-                  >
-                    <Td className="font-medium">{p.name}</Td>
-                    <Td className="num text-muted-foreground">{p.phone}</Td>
-                    <Td className="text-muted-foreground">{p.email}</Td>
-                    <Td className="text-muted-foreground">{p.company}</Td>
-                    <Td>
-                      <span className="flex flex-wrap gap-1">
-                        {p.tags.map((t) => (
-                          <Pill key={t} tone={tagTone[t] ?? "neutral"}>
-                            {t}
-                          </Pill>
-                        ))}
-                      </span>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <RoleChips roles={(roles.data ?? []).map((r) => r.name)} value={role} onChange={setRole} />
+
+        <Card
+          title="Directory"
+          subtitle={people.isSuccess ? countLabel(rows.length, "person", "people") : undefined}
+        >
+          <QueryStates
+            queries={[people, companies]}
+            isEmpty={() => rows.length === 0}
+            empty={{
+              title: "Nothing here yet.",
+              detail:
+                term || role
+                  ? "No person matches this search or role."
+                  : "Create the first person with the button above.",
+            }}
+          >
+            {() => (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px]">
+                  <thead className="border-b border-border">
+                    <tr>
+                      <Th>Name</Th>
+                      <Th>Company</Th>
+                      <Th>Phone</Th>
+                      <Th>Email</Th>
+                      <Th>Paperwork</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {rows.map((row) => (
+                      <tr
+                        key={row.name}
+                        tabIndex={0}
+                        onClick={() => setDialog({ open: true, name: row.name })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") setDialog({ open: true, name: row.name });
+                        }}
+                        className="cursor-pointer hover:bg-secondary/50"
+                      >
+                        <Td className="font-medium">{row.full_name || row.name}</Td>
+                        <Td className="text-muted-foreground">{row.companyLabel || "-"}</Td>
+                        <Td>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Phone className="size-3 shrink-0" aria-hidden="true" />
+                            <span className="num text-xs">{row.phone || "-"}</span>
+                          </span>
+                        </Td>
+                        <Td>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Mail className="size-3 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{row.email || "-"}</span>
+                          </span>
+                        </Td>
+                        <Td>
+                          <Paperwork missing={row.missing} />
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </QueryStates>
         </Card>
       </div>
 
-      {open ? (
-        <div className="fixed inset-0 z-50 flex">
-          <button
-            aria-label="Close"
-            onClick={() => setOpen(null)}
-            className="flex-1 bg-primary/20 backdrop-blur-[1px]"
-          />
-          <aside className="w-full max-w-md overflow-y-auto border-l border-border bg-card p-5">
-            <div className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <h2 className="font-display text-lg font-semibold">{open.name}</h2>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {open.tags.map((t) => (
-                    <Pill key={t} tone={tagTone[t] ?? "neutral"}>
-                      {t}
-                    </Pill>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={() => setOpen(null)}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Phone className="size-3.5 text-muted-foreground" />
-                <span className="num">{open.phone}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="size-3.5 text-muted-foreground" />
-                <span>{open.email}</span>
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <label className="label-caps" htmlFor="company">
-                Company
-              </label>
-              <input
-                id="company"
-                defaultValue={open.company}
-                className="mt-1.5 w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-ember"
-              />
-            </div>
-
-            <div className="mt-5">
-              <div className="label-caps">Roles across deals</div>
-              <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
-                {open.roles.map((r) => (
-                  <li key={r.role + r.deal} className="px-3 py-2.5">
-                    <div className="text-sm font-medium">{r.role}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">{r.deal}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      <PartyFormDialog
+        open={dialog.open}
+        doctype="Party Contact"
+        name={dialog.name}
+        onClose={() => setDialog({ open: false, name: null })}
+        onSaved={() => setDialog({ open: false, name: null })}
+      />
     </AppShell>
   );
 }
