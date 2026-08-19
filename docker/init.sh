@@ -51,16 +51,31 @@ fi
 
 bench use "$SITE"
 
-# Build the frappe-ui page so /aura serves (skipped if already built).
-if [ ! -f "apps/auraos/auraos/www/aura.html" ]; then
-    (cd apps/auraos/frontend && npm install --no-audit --no-fund && npm run build)
-fi
+# Build a frontend only when its source is actually in the app clone.
+#
+# `bench get-app` clones once and init.sh never updates it, so a bench
+# created before a frontend existed has no directory to build from. The
+# `cd` then fails, `set -e` ends the script, and a container with a
+# restart policy crash-loops on every boot instead of serving the site
+# it already has. Skipping loudly is the honest behaviour: the page
+# 404s, the log says why, and the site stays up.
+build_frontend() {
+    local dir="$1" page="$2" route="$3"
+    if [ -f "apps/auraos/auraos/www/$page" ]; then
+        return 0
+    fi
+    if [ ! -d "apps/auraos/$dir" ]; then
+        echo "init.sh: apps/auraos has no $dir, so $route will not serve." >&2
+        echo "init.sh: update the app clone (git pull in apps/auraos) and restart to build it." >&2
+        return 0
+    fi
+    (cd "apps/auraos/$dir" && npm install --no-audit --no-fund && npm run build)
+}
 
-# Build the React SPA so /aura-next serves (skipped if already built).
-# It coexists with /aura until the React app reaches parity.
-if [ ! -f "apps/auraos/auraos/www/aura-next.html" ]; then
-    (cd apps/auraos/frontend-react && npm install --no-audit --no-fund && npm run build)
-fi
+# The frappe-ui page at /aura, and the React SPA at /aura-next. The two
+# coexist until #103 retires the Vue app; /aura is the rollback path.
+build_frontend frontend aura.html /aura
+build_frontend frontend-react aura-next.html /aura-next
 
 # Ensure the app's assets symlink exists - without it the built
 # frontend 404s and /aura renders as a white page.
