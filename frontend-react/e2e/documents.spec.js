@@ -119,7 +119,12 @@ test("the Documents nav item stays lit on both tabs", async ({ page }) => {
     [LIBRARY_URL, "Library"],
   ]) {
     await openTab(page, url, tab);
-    const item = page.getByRole("navigation").getByRole("link", { name: "Documents", exact: true });
+    // Not scoped through getByRole("navigation"): the sidebar is a <nav> and
+    // so is the tab strip, so that locator matches two landmarks and a strict
+    // mode violation is a crash, not a failure. The nav item is the only link
+    // on the page whose whole name is "Documents" - the tabs say Paperwork and
+    // Library - so it can be named directly.
+    const item = page.getByRole("link", { name: "Documents", exact: true });
     await expect(item, `the section light went out on the ${tab} tab`).toHaveClass(/bg-secondary/);
   }
 });
