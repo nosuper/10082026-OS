@@ -488,6 +488,13 @@ function DealPage() {
     invalidate: [...dealWrites, resultOf("auraos.api.jobs_by_deal")],
     hasJob: (deal) => Boolean(jobs.data?.[deal]),
     onWrite: () => setFailure(null),
+    // This screen renders from serverDoc, a snapshot seeded once per deal so
+    // that a refetch cannot overwrite what has been typed since. That guard
+    // also means no amount of invalidating reaches the header: the stage moved
+    // on the server and the select snapped back to the snapshot. Take the
+    // saved copy the same way a form save does, and leave the draft alone -
+    // stage is not a field anybody types here.
+    onSaved: (saved) => setServerDoc(saved as DealDoc),
   });
 
   useEffect(() => {

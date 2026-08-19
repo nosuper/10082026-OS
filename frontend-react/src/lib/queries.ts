@@ -39,6 +39,15 @@ export function resultOf(method: string): QueryKey {
   return ["method", method];
 }
 
+/**
+ * The key useDoc reads under. A write that changes one document invalidates
+ * this rather than the whole list: the detail screen is the only reader, and a
+ * list refetch would not reach it.
+ */
+export function docOf(doctype: string, name: string): QueryKey {
+  return ["doc", doctype, name];
+}
+
 function methodKey(method: string, args: unknown): QueryKey {
   return ["method", method, args ?? null];
 }

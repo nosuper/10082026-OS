@@ -12,13 +12,15 @@
 // a deal, not of any one screen, which is why they live here rather than on the
 // board that happened to implement them first.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Modal, inputClass, pillToneClass } from "@/components/aura/primitives";
 import { cn } from "@/lib/utils";
-import { listsOf, resultOf, useMethodMutation } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { docOf, listsOf, resultOf, useMethodMutation } from "@/lib/queries";
 
 export const DEAL_STAGES = [
   "Brief Received",
@@ -68,14 +70,29 @@ export function useDealStageChange({
   invalidate,
   hasJob,
   onWrite,
+  onSaved,
 }: {
   invalidate: (readonly unknown[])[];
   /** True when this deal already has a job, so Won does not offer a second. */
   hasJob?: (deal: string) => boolean;
   /** Fires the moment the write is sent, for optimistic screens. */
   onWrite?: (deal: string, stage: string) => void;
+  /**
+   * The saved document, for a screen holding its own copy of it. The deal
+   * detail seeds a snapshot once per deal and renders from that, so a refetch
+   * behind it changes nothing on screen - it has to be handed the new copy.
+   */
+  onSaved?: (doc: unknown, deal: string) => void;
 }): StageChange {
   const navigate = useNavigate();
+  const client = useQueryClient();
+
+  // The title of each in-flight move, so the Won prompt can name the deal
+  // without the title riding along in the write. It used to be sent as a
+  // `_title` key inside the set_value payload, which Frappe drops on the floor
+  // because Deal has no such field - a fake field on the wire, working only by
+  // the server's good manners.
+  const titles = useRef(new Map<string, string>());
   const [pendingLost, setPendingLost] = useState<{ name: string; title: string } | null>(null);
   const [pendingJob, setPendingJob] = useState<{ name: string; title: string } | null>(null);
 
@@ -84,12 +101,22 @@ export function useDealStageChange({
     { doctype: string; name: string; fieldname: Record<string, unknown> }
   >("frappe.client.set_value", {
     invalidate,
-    onSuccess: (_result, args) => {
+    onSuccess: (result, args) => {
+      const title = titles.current.get(args.name) ?? args.name;
+      titles.current.delete(args.name);
+
+      // set_value returns the whole saved document. Hand it to the doc cache
+      // and to any screen rendering its own copy, then invalidate so a reader
+      // that has neither still refetches.
+      client.setQueryData(docOf("Deal", args.name), result);
+      onSaved?.(result, args.name);
+      void client.invalidateQueries({ queryKey: docOf("Deal", args.name) });
+
       if (args.fieldname["stage"] !== "Won") return;
       if (hasJob?.(args.name)) return;
       // Winning a deal is where the job is created; ask right here rather than
       // leaving it to be remembered later.
-      setPendingJob({ name: args.name, title: String(args.fieldname["_title"] ?? args.name) });
+      setPendingJob({ name: args.name, title });
     },
   });
 
@@ -105,8 +132,9 @@ export function useDealStageChange({
   );
 
   function write(name: string, title: string, fieldname: Record<string, unknown>) {
+    titles.current.set(name, title);
     onWrite?.(name, String(fieldname["stage"]));
-    setStage.mutate({ doctype: "Deal", name, fieldname: { ...fieldname, _title: title } });
+    setStage.mutate({ doctype: "Deal", name, fieldname });
   }
 
   function request(deal: { name: string; title?: string | null; stage: string }, stage: string) {
