@@ -110,20 +110,31 @@ test("the two halves are two lists, on the screen and in the payloads", async ({
 // it spends two nav items on two tabs.
 //
 // The active state is expressed only through Tailwind classes today - there is
-// no aria-current, which #136 is open to add. **So the assertion is "unchanged",
-// not a class name**: capture whatever the lit value is on the tab where the
-// section is unambiguously current, and require the other tab to match it. That
-// survives a restyle, where naming `bg-secondary` would turn a colour change
-// into a red about navigation.
+// no aria-current, which #136 is open to add.
 //
-// This approach is the #115 lane's, from their own draft of this file. Two
-// lanes were sent #128 by mistake and theirs is being dropped; this assertion
-// was better than the one I wrote and is worth more than the tidiness of a
-// file with one author.
+// **The first version of this test could not fail.** It asserted
+// `toHaveClass(/bg-secondary/)`, and the *inactive* branch of the same
+// className in AppShell is `text-muted-foreground hover:bg-secondary/70
+// hover:text-foreground` - in which `hover:bg-secondary/70` contains the
+// substring `bg-secondary`. Delete the `match` prop, let the section light go
+// out on Library exactly as it did before #66, and the assertion still passed.
+// The one test written for that regression could not see it, and it went green.
 //
-// The sibling check is what makes the captured value trustworthy. Without it
+// The general form, worth more than this file: **a substring regex over a
+// Tailwind class list is not an assertion about state, because the hover
+// variant of a colour contains the colour.**
+//
+// So the assertion is "unchanged" and names no class: capture whatever the lit
+// value is where the section is unambiguously current, and require the other
+// tab to match it. A restyle then leaves this test alone.
+//
+// The sibling check is what makes the captured value mean anything. Without it
 // the test would pass just as happily against a nav that lit nothing at all,
-// because "unchanged" is also true of two identical unlit items.
+// because "unchanged" is also true of two identically dark items.
+//
+// Both halves are the #115 lane's, from their own draft of this file - two
+// lanes were sent #128 by mistake, and they found the vacuity by writing the
+// assertion the other way and going looking for the difference.
 test("the Documents nav item stays lit on both tabs", async ({ page }) => {
   // Not scoped through getByRole("navigation"): the sidebar is a <nav> and so
   // is the tab strip, so that locator matches two landmarks and a strict mode
