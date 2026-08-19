@@ -122,7 +122,7 @@ echo "  AURA_BACKUP_PROJECT=aura-prod AURA_BACKUP_DEST=/var/backups/auraos AURA_
 
 say "6/6 · Settings the new site does NOT inherit"
 cat <<TEXT
-Frappe never migrates Single defaults - on https://$AURA_SITE/aura/settings
+Frappe never migrates Single defaults - on https://$AURA_SITE/aura-next/settings
 enter these by hand (the go-live checklist, issue #67):
   - Global margin floor %: 20
   - Quote silence nudge: 5 days

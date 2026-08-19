@@ -133,7 +133,7 @@ up() {
     seed "$ticket"
 
     echo
-    echo "  $ticket → http://$(hostname -I | awk '{print $1}'):$(( 8000 + n ))/aura"
+    echo "  $ticket → http://$(hostname -I | awk '{print $1}'):$(( 8000 + n ))/aura-next"
     echo "  login Administrator / admin"
 }
 
@@ -177,7 +177,7 @@ list() {
         n="$(port_offset "$ticket")"
         printf '%-12s %-8s %-24s %s\n' \
             "$ticket" "$(( 8000 + n ))" \
-            "http://$(hostname -I | awk '{print $1}'):$(( 8000 + n ))/aura" \
+            "http://$(hostname -I | awk '{print $1}'):$(( 8000 + n ))/aura-next" \
             "$(date -d "@$(last_used "$ticket")" '+%Y-%m-%d %H:%M' 2>/dev/null || echo unknown)"
     done
 }

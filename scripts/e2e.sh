@@ -84,23 +84,18 @@ seed() {
 
 seed
 
-# Two suites against one seeded stack: the Vue app at /aura and the React app
-# at /aura-next. Both run even if the first fails, so one red suite does not
-# hide the state of the other, and the script still exits non-zero.
-vue_status=0
+# One suite now. There were two - the Vue app at /aura and the React app at
+# /aura-next - and this ran both even when the first failed, so a red suite
+# could not hide the state of the other. #103 retired the Vue app.
+#
+# The re-seed that used to sit between the two suites has gone with them. It
+# existed because they shared one site: the Vue breakdown spec edited the
+# seeded cost line and restored it at the end, so a Vue failure in between left
+# the React suite reading a price the Vue spec typed. That is what run 8
+# caught. With one suite there is nothing in between - but the reason survives
+# in seed() itself, which now states what the seeded values are rather than
+# only creating them when absent, and in the re-seed before E2E_AFTER below.
 react_status=0
-
-"${COMPOSE[@]}" run --rm playwright \
-  bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || vue_status=$?
-
-# Re-seed between the suites. They share one site, and the Vue breakdown spec
-# edits the seeded cost line and puts it back afterwards - so a Vue failure in
-# between leaves the React suite reading a price the Vue spec typed. That is
-# what run 8 caught: Vue died waiting for "All changes saved", never reached its
-# restore, and React then read a 11.000.000 subtotal where the seed says
-# 8.000.000. Cheaper and more honest than asking every spec to clean up after
-# itself on the way out of a failure.
-seed
 
 "${COMPOSE[@]}" run --rm playwright-react \
   bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || react_status=$?
@@ -114,22 +109,21 @@ seed
 if [ -n "${E2E_AFTER:-}" ]; then
   after_status=0
   # Seed again first. This hook's own contract says "against the same seeded
-  # stack", and by the time it runs, two suites have edited that stack - which
-  # is the mistake this script was just fixed for, repeated one step further
-  # down. Run 9 caught it: the repeats failed 10 out of 10 at the same save,
+  # stack", and by the time it runs the suite has edited that stack. Run 9
+  # caught it: the repeats failed 10 out of 10 at the same save,
   # deterministically, on a site the seed had not touched since before the
   # React suite.
   seed
-  # Which suite the follow-up belongs to. Defaults to the Vue container
-  # because the first use of this hook asked for breakdown.spec.js and got
-  # "No tests found" - that spec lives in frontend/, and the hook had the
-  # React container hardcoded.
-  "${COMPOSE[@]}" run --rm "${E2E_AFTER_SERVICE:-playwright}" \
+  # Only one runner exists now. The variable stays rather than being
+  # hardcoded so that an invocation still passing E2E_AFTER_SERVICE=playwright
+  # - the Vue container, which #103 removed - fails loudly on an unknown
+  # service instead of being silently ignored.
+  "${COMPOSE[@]}" run --rm "${E2E_AFTER_SERVICE:-playwright-react}" \
     bash -lc "npm ci --no-audit --no-fund && ${E2E_AFTER}" || after_status=$?
   echo "e2e: follow-up exit ${after_status}"
 fi
 
-echo "e2e: vue suite exit ${vue_status}, react suite exit ${react_status}"
-if [ "$vue_status" -ne 0 ] || [ "$react_status" -ne 0 ]; then
+echo "e2e: react suite exit ${react_status}"
+if [ "$react_status" -ne 0 ]; then
   exit 1
 fi
