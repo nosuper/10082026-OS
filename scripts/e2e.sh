@@ -107,6 +107,13 @@ seed
 # not a gate.
 if [ -n "${E2E_AFTER:-}" ]; then
   after_status=0
+  # Seed again first. This hook's own contract says "against the same seeded
+  # stack", and by the time it runs, two suites have edited that stack - which
+  # is the mistake this script was just fixed for, repeated one step further
+  # down. Run 9 caught it: the repeats failed 10 out of 10 at the same save,
+  # deterministically, on a site the seed had not touched since before the
+  # React suite.
+  seed
   # Which suite the follow-up belongs to. Defaults to the Vue container
   # because the first use of this hook asked for breakdown.spec.js and got
   # "No tests found" - that spec lives in frontend/, and the hook had the
