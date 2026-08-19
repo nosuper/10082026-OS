@@ -112,6 +112,24 @@ function planOf(row: {
   return [row.name ?? "", row.title ?? "", Number(row.pct) || 0, row.trigger_stage ?? ""];
 }
 
+/**
+ * Everything on a row a person types, plan or not.
+ *
+ * Deliberately a second function rather than four more fields inside planOf.
+ * `planOf` answers "does Save plan have anything to send", which is what
+ * lights the button; this answers "would a refetch overwrite something
+ * somebody typed", which is a wider question and always will be - the invoice
+ * number is saved through set_milestone_status, not through the plan.
+ *
+ * #137: the two used to be one, and a milestone's invoice number was thrown
+ * away by the refetch the status change itself triggers. Marking a milestone
+ * invoiced is what opens the field, so the refetch was always racing the
+ * typing it had just invited, and it won often enough to be the normal case.
+ */
+function typedOf(row: { invoice_no: string | null }) {
+  return row.invoice_no ?? "";
+}
+
 export function JobMilestonesPanel({ job }: { job: string }) {
   const milestones = useMethod<MilestonesPayload>("auraos.api.job_milestones", { job });
 
@@ -123,6 +141,8 @@ export function JobMilestonesPanel({ job }: { job: string }) {
 
   const stored = milestones.data?.milestones ?? [];
   const dirty = JSON.stringify(rows.map(planOf)) !== JSON.stringify(stored.map(planOf));
+  // What Save plan would send, plus what it would not. See typedOf.
+  const edited = dirty || JSON.stringify(rows.map(typedOf)) !== JSON.stringify(stored.map(typedOf));
 
   // Seed the editable plan from the server, and re-seed whenever the server
   // answers differently - except while there are unsaved edits, which is the
@@ -130,12 +150,12 @@ export function JobMilestonesPanel({ job }: { job: string }) {
   useEffect(() => {
     const data = milestones.data;
     if (!data || data === seeded.current) return;
-    if (seeded.current !== null && dirty) return;
+    if (seeded.current !== null && edited) return;
     seeded.current = data;
     setRows(
       data.milestones.map((row) => ({ ...row, key: row.name ?? `new-${nextKey.current++}` })),
     );
-  }, [milestones.data, dirty]);
+  }, [milestones.data, edited]);
 
   const plannedPct = rows.reduce((total, row) => total + pctOf(row), 0);
   const lockedPct = rows.filter(isLocked).reduce((total, row) => total + pctOf(row), 0);
