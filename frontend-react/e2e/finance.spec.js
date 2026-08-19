@@ -33,8 +33,12 @@ test("income and expenses render a range with no activity as zero, not as a gap"
 producerTest("a producer sees margin but no commission or net profit", async ({ page }) => {
   await page.goto("/aura-next/finance/receivables")
 
-  const body = await page.locator("body").innerText()
-  for (const forbidden of ["Commission", "CMF", "Net profit", "TNDN"]) {
-    expect(body).not.toContain(forbidden)
+  // Exact matches only. These are data labels; the screen also explains in
+  // prose that commission and net profit live behind a different door, and a
+  // substring check fails on the sentence that says so.
+  for (const label of ["Commission", "CMF", "Net profit", "TNDN"]) {
+    await expect(page.getByText(label, { exact: true })).toHaveCount(0)
   }
+  // And the producer does get what they are entitled to.
+  await expect(page.getByText("Margin", { exact: false }).first()).toBeVisible()
 })
