@@ -30,7 +30,7 @@ import { Bar, FinanceTabs } from "@/components/aura/FinanceTabs";
 import { scaleOf } from "@/components/aura/FinanceRange";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
 import { Figure, QueryState } from "@/components/aura/states";
-import { countLabel, formatDate, overdueLabel } from "@/lib/format";
+import { countLabel, formatDate, overdueLabel, percent } from "@/lib/format";
 import { useMethod } from "@/lib/queries";
 
 // -- what the server sends --
@@ -134,22 +134,6 @@ function bucketTone(key: string): "ink" | "ember" | "muted" {
   if (key === "not_due") return "muted";
   if (key === "1-30") return "ink";
   return "ember";
-}
-
-/**
- * A percentage, to one decimal, grouped the Vietnamese way like every other
- * number on the screen. It lives here rather than in lib/format.ts because
- * this is the only screen with a percentage on it so far; the moment a second
- * one needs it, it belongs in the shared formatter.
- */
-const PERCENT = new Intl.NumberFormat("vi-VN", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-
-function percent(value: number | null | undefined, blank = "-"): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return blank;
-  return `${PERCENT.format(value)}%`;
 }
 
 /**
