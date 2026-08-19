@@ -54,6 +54,15 @@ test("publishing mints the next sequential version with a public link", async ({
   const label = await publish.innerText()
   await publish.click()
 
+  // If publishing is refused, the screen shows the server's own sentence.
+  // Surface it, because "v1 not found" says nothing about why - the first
+  // version of this assertion timed out for fifteen seconds and told me
+  // only that a thing was absent.
+  const refusal = page.getByText(/Nothing to publish|not permitted|error/i).first()
+  if (await refusal.isVisible().catch(() => false)) {
+    throw new Error(`publish refused: ${await refusal.innerText()}`)
+  }
+
   await expect(page.getByText(/v1\b/).first()).toBeVisible({ timeout: 15000 })
   // The button counts up rather than branching: v2 next, never v1-B.
   await expect(page.getByRole("button", { name: /Publish version/ })).not.toHaveText(label)
