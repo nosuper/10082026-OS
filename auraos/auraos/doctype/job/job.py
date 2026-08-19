@@ -259,6 +259,13 @@ class Job(Document):
         # After validation, so a rejected transition is never logged.
         append_stage_change(self)
 
+    def on_update(self):
+        # After the save, because a milestone row has no name to post
+        # against until it has been written. The ledger sits beside the
+        # job rather than inside it: nothing here changes what a job is,
+        # and a company with no cash account posts nothing at all.
+        job_payment_milestone.post_collections(self)
+
     def log_revision(self, note):
         """Record a revision round and send the work back for the redo it asks for.
 

@@ -15,6 +15,9 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from auraos.auraos.doctype.cash_account.cash_account import default_account
+from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+from auraos.lib import ledger
 from auraos.lib.milestones import (
     INVOICE_FIELDS,
     NOT_REQUESTED,
@@ -128,6 +131,36 @@ def validate_plan(rows, stages):
                 "client agreed to"
             ).format(format_pct(allocated)),
             frappe.ValidationError,
+        )
+
+
+def post_collections(job):
+    """Record where each collected milestone's money landed (#99).
+
+    Hung off the job's save rather than off the endpoint that marks a
+    milestone paid, for the same reason the stamps are: the status is
+    written by whoever saves the Job, and an endpoint is only the door we
+    happen to have built. A posting that lives in the endpoint is a
+    posting the Desk form walks straight past.
+
+    Saving twice is not paying twice. Every save asks the same question
+    of every milestone - what should the ledger say about this money -
+    and auraos.lib.ledger.posting answers "nothing" as soon as the ledger
+    already says it. That is also what makes the walk back work: a
+    milestone dragged out of đã thanh toán takes its entry with it.
+
+    The account is chosen per collection and falls back to the company's
+    default. An entry already on file keeps the account it was posted to;
+    only a movement being recorded for the first time uses this one.
+    """
+    account = job.flags.get("cash_account") or default_account()
+    for row in job.get("payment_milestones") or []:
+        values = row.as_dict()
+        cash_ledger_entry.sync(
+            flow=ledger.CLIENT_PAYMENT,
+            source_name=row.name,
+            wanted=ledger.client_payment(values, account, job=job.name),
+            moved=ledger.collected(values),
         )
 
 

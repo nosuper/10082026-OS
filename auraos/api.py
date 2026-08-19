@@ -948,7 +948,7 @@ def save_job_milestones(job, milestones):
 
 
 @frappe.whitelist()
-def set_milestone_status(job, milestone, status, invoice_no=None):
+def set_milestone_status(job, milestone, status, invoice_no=None, account=None):
     """Move one milestone along (or back along) the collection flow.
 
     Back along on purpose: a status set by mistake would otherwise be a
@@ -962,6 +962,14 @@ def set_milestone_status(job, milestone, status, invoice_no=None):
     still invoiced corrects a mistyped number without disturbing the day
     the invoice went out. The VAT rate is never accepted from a caller -
     like the amount, it is derived on save, from the job.
+
+    Collecting is the same shape: `account` says which pot of money the
+    payment landed in, and belongs to đã thanh toán the way the invoice
+    number belongs to đã xuất HĐ. It is optional at every level - omitted
+    it falls back to the company's default account, and a company that
+    has named no account collects exactly as it did before the ledger
+    existed. The posting itself happens on the save; see
+    job_payment_milestone.post_collections.
     """
     _check_job_permission(job, "write")
     if invoice_no is not None and status != MILESTONE_INVOICED:
@@ -971,11 +979,22 @@ def set_milestone_status(job, milestone, status, invoice_no=None):
             ),
             frappe.ValidationError,
         )
+    if account is not None and status != MILESTONE_PAID:
+        frappe.throw(
+            _("An account belongs to a milestone marked {0}").format(MILESTONE_PAID),
+            frappe.ValidationError,
+        )
+    if account and not frappe.db.exists("Cash Account", account):
+        frappe.throw(
+            _("{0} is not a cash account").format(account), frappe.DoesNotExistError
+        )
     doc = frappe.get_doc("Job", job)
     row = job_payment_milestone.find(doc, milestone)
     row.status = status
     if invoice_no is not None:
         row.invoice_no = (invoice_no or "").strip()
+    # Where this collection landed, carried to the save that posts it.
+    doc.flags.cash_account = account or None
     doc.save()
     # The save recomputed the row's stamps in place, so this is the
     # stored milestone, not the one the caller described.
