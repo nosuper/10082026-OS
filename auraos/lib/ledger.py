@@ -49,6 +49,7 @@ from typing import Any, Iterable, Mapping
 
 from auraos.lib.milestones import PAID
 from auraos.lib.money import round_vnd
+from auraos.lib.settlement import FROM_COMPANY
 
 # Which way the money went, as a human reads it. Derived from the sign
 # of the amount, never stored independently of it.
@@ -57,10 +58,10 @@ OUT = "Out"
 
 DIRECTIONS = (IN, OUT)
 
-# The movements that reach the ledger. All four are named now, though
-# only the first posts in #99: a Select the next ticket has to widen is a
-# migration, and the vocabulary is the part of this design that has to
-# survive #100 unchanged.
+# The movements that reach the ledger. All four were named in #99,
+# before three of them posted: a Select the next ticket has to widen is a
+# migration, and the vocabulary is the part of this design that had to
+# survive #100 unchanged. It did.
 CLIENT_PAYMENT = "Client payment"  # a milestone the client paid
 JOB_EXPENSE = "Job expense"  # the company paid a vendor itself
 CREW_ADVANCE = "Crew advance"  # cash handed to whoever is spending it
@@ -251,6 +252,126 @@ def client_payment(
         source_name=milestone.get("name"),
         job=job,
         description=milestone.get("title"),
+    )
+
+
+# -- money out: what the company paid --
+
+
+def paid_by_company(expense: Mapping[str, Any]) -> bool:
+    """Whether this expense moved money out of an account of ours.
+
+    Only the ones the company paid the vendor itself. An expense paid
+    out of a float spends đồng that already left the company the day the
+    advance was transferred; posting it again would have the same money
+    leaving twice, and a double-counted ledger is worse than a thin one.
+    A float's own arithmetic is closed by its settlement, which is the
+    entry that records the rest of that money moving.
+
+    Blank is a float expense, the same reading auraos.lib.settlement
+    gives it - the column has a default and pre-existing rows may not.
+    """
+    return bool(
+        expense.get("paid_from") == FROM_COMPANY
+        and as_date(expense.get("spent_on"))
+        and round_vnd(expense.get("amount") or 0)
+    )
+
+
+def job_expense(expense: Mapping[str, Any], account: str | None) -> Entry | None:
+    """The ledger entry a vendor payment earns, or None.
+
+    Negative: this is money leaving. The job comes off the record rather
+    than from the caller - unlike a milestone, an expense is a record of
+    its own and knows which job it is on, so there is no second opinion
+    to keep in step.
+    """
+    if not paid_by_company(expense) or not account:
+        return None
+    return Entry(
+        account=account,
+        amount=-round_vnd(expense.get("amount") or 0),
+        entry_date=as_date(expense.get("spent_on")),
+        flow=JOB_EXPENSE,
+        source_doctype=SOURCES[JOB_EXPENSE],
+        source_name=expense.get("name"),
+        job=expense.get("job"),
+        description=expense.get("description") or expense.get("category"),
+    )
+
+
+def transferred(advance: Mapping[str, Any]) -> bool:
+    """Whether the cash in this advance has actually changed hands.
+
+    The day it was transferred is what says so, and nothing else can: an
+    amount column is never null, so 0 would have to mean both "no money"
+    and "nobody has recorded this yet". An advance planned and not yet
+    handed over is money still in the company's account.
+    """
+    return bool(
+        as_date(advance.get("transferred_on"))
+        and round_vnd(advance.get("amount") or 0)
+    )
+
+
+def crew_advance(advance: Mapping[str, Any], account: str | None) -> Entry | None:
+    """The ledger entry an advance earns, or None.
+
+    Negative: cash handed to whoever is spending it has left the company,
+    whatever they go on to spend it on. Described by its recipient,
+    because "who is holding it" is the only thing anybody asks of a row
+    like this without opening it.
+    """
+    if not transferred(advance) or not account:
+        return None
+    return Entry(
+        account=account,
+        amount=-round_vnd(advance.get("amount") or 0),
+        entry_date=as_date(advance.get("transferred_on")),
+        flow=CREW_ADVANCE,
+        source_doctype=SOURCES[CREW_ADVANCE],
+        source_name=advance.get("name"),
+        job=advance.get("job"),
+        description=advance.get("recipient"),
+    )
+
+
+def settled(row: Mapping[str, Any]) -> bool:
+    """Whether this settlement's transfer has been made.
+
+    A settlement is a transfer recorded after the fact - the doctype
+    freezes its numbers precisely because it describes money already
+    moved - so the day it was settled on is the whole test. A float that
+    turns out to be wrong is corrected by settling again, never by
+    rewriting this row; a settlement that never happened is deleted, and
+    then nothing moved and the entry comes back out.
+    """
+    return bool(
+        as_date(row.get("settled_on")) and round_vnd(row.get("amount") or 0)
+    )
+
+
+def float_settlement(row: Mapping[str, Any], account: str | None) -> Entry | None:
+    """The ledger entry closing a float earns, or None.
+
+    The amount is taken exactly as stored, sign and all. A settlement is
+    already signed the way this ledger signs money - positive when the
+    holder hands the remainder back, negative when the company tops them
+    up - because auraos.lib.settlement reads that same sign to close the
+    float. Re-deriving it here would be a second opinion about which way
+    the cash went, and two opinions is one too many.
+    """
+    if not settled(row) or not account:
+        return None
+    return Entry(
+        account=account,
+        amount=round_vnd(row.get("amount") or 0),
+        entry_date=as_date(row.get("settled_on")),
+        flow=FLOAT_SETTLEMENT,
+        source_doctype=SOURCES[FLOAT_SETTLEMENT],
+        source_name=row.get("name"),
+        job=row.get("job"),
+        description=row.get("recipient"),
     )
 
 

@@ -80,6 +80,23 @@ def sync(flow, source_name, wanted, moved):
     return action
 
 
+def backfill(wanted):
+    """Post one movement that predates the ledger, or leave it alone (#100).
+
+    Deliberately not `sync`: reconciliation restates an entry whose
+    amount or day no longer match, and a backfill has no business doing
+    that. Anything already on file was posted by the save path from the
+    same record and is the more recent reading of it - a patch sweeping
+    the whole history is filling in what was missed, not auditing what
+    was not.
+
+    Which is also what makes running it twice free.
+    """
+    if wanted is None or stored(ledger.entry_name(wanted.flow, wanted.source_name)):
+        return None
+    return _insert(wanted)
+
+
 def stored(name):
     """The entry on file for one movement, as the rules read it."""
     row = frappe.db.get_value(

@@ -11,6 +11,9 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from auraos.auraos.doctype.cash_account.cash_account import default_account
+from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+from auraos.lib import ledger
 from auraos.lib.settlement import direction_of
 
 FROZEN_FIELDS = ("job", "recipient", "amount", "direction", "advanced", "spent")
@@ -29,6 +32,16 @@ class JobSettlement(Document):
         # a real transfer, because "Even" is not one of the options.
         self.direction = direction_of(self.amount)
         self.reject_changes()
+
+    def on_update(self):
+        # After the save, like every other posting here: the entry is
+        # named after the record, which has no name until it is written.
+        post_settlement(self)
+
+    def on_trash(self):
+        # The only way a settlement can be walked back - its numbers are
+        # frozen - and a transfer that was undone did not move money.
+        post_settlement(self, moved=False)
 
     def validate_amount(self):
         if not self.amount or float(self.amount) == 0:
@@ -50,3 +63,23 @@ class JobSettlement(Document):
                     ).format(_(self.meta.get_label(field))),
                     frappe.ValidationError,
                 )
+
+
+def post_settlement(settlement, moved=True):
+    """Record the transfer that closed a float (#100).
+
+    Hung off the save rather than off auraos.api.settle_job, so a
+    settlement written any other way still reaches the ledger.
+
+    Either direction, from one entry: the amount is already signed the
+    way the ledger signs money, so a holder returning the remainder is
+    money in and the company topping them up is money out, with no case
+    analysis here or in the balance that sums it.
+    """
+    values = settlement.as_dict()
+    cash_ledger_entry.sync(
+        flow=ledger.FLOAT_SETTLEMENT,
+        source_name=settlement.name,
+        wanted=ledger.float_settlement(values, default_account()),
+        moved=moved and ledger.settled(values),
+    )

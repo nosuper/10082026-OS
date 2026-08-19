@@ -1,8 +1,8 @@
 """Pure-python tests for auraos.lib.ledger - no Frappe required.
 
-Issue #99. The ledger is the one record in this app that reads as
-authoritative about money, so the four decisions it rests on are pinned
-here rather than only in the Frappe-side test:
+Issues #99 and #100. The ledger is the one record in this app that reads
+as authoritative about money, so the four decisions it rests on are
+pinned here rather than only in the Frappe-side test:
 
 - **The sign is the direction**, so a balance is a sum. `direction_of`
   reads the word off the number, and zero is refused rather than given
@@ -18,6 +18,12 @@ here rather than only in the Frappe-side test:
   its entry back out. The two are told apart by `moved`, which is judged
   without an account at all.
 
+#100 adds the other three flows and with them the question each one has
+to answer for itself: what "moved" means here. An expense logged against
+a float moved nobody's money out of an account, an advance nobody has
+transferred yet is still in the company's hands, and a settlement is a
+transfer recorded after the fact. Each is pinned below.
+
 The Frappe-side test (auraos/auraos/doctype/cash_ledger_entry/
 test_cash_ledger.py) proves the doctype and the save path go through
 this module.
@@ -29,6 +35,8 @@ import pytest
 
 from auraos.lib.ledger import (
     CLIENT_PAYMENT,
+    CREW_ADVANCE,
+    FLOAT_SETTLEMENT,
     FLOWS,
     IN,
     JOB_EXPENSE,
@@ -42,13 +50,20 @@ from auraos.lib.ledger import (
     balance,
     client_payment,
     collected,
+    crew_advance,
     direction_of,
     entry_name,
+    float_settlement,
+    job_expense,
+    paid_by_company,
     posting,
     restated,
     restates,
+    settled,
+    transferred,
 )
 from auraos.lib.milestones import INVOICED, PAID, REQUESTED
+from auraos.lib.settlement import FROM_ADVANCE, FROM_COMPANY
 
 PAID_MILESTONE = {
     "name": "abc123",
@@ -260,6 +275,275 @@ def test_a_repost_lands_back_in_the_account_it_came_from():
 
     assert restated(on_file, today).account == ACCOUNT
     assert restated(on_file, today).amount == 60_000_000
+
+
+# -- money out: the vendors the company paid itself --
+
+COMPANY_EXPENSE = {
+    "name": "EXP-00007",
+    "job": "JOB-0001",
+    "amount": 3_000_000,
+    "spent_on": date(2026, 8, 10),
+    "paid_from": FROM_COMPANY,
+    "category": "Thiết bị",
+    "description": "Thuê ống kính Sigma",
+}
+
+
+def expense(**changes):
+    return {**COMPANY_EXPENSE, **changes}
+
+
+def paid(**changes):
+    return job_expense(expense(**changes), ACCOUNT)
+
+
+def test_an_expense_the_company_paid_moved_the_companys_money():
+    assert paid_by_company(COMPANY_EXPENSE)
+
+
+def test_an_expense_paid_out_of_a_float_moved_none_of_it():
+    """The đồng left the company the day the advance was transferred.
+
+    Posting it again here would have the same money leaving twice, and
+    the float's own arithmetic is closed by its settlement.
+    """
+    assert not paid_by_company(expense(paid_from=FROM_ADVANCE))
+    assert job_expense(expense(paid_from=FROM_ADVANCE), ACCOUNT) is None
+
+
+def test_an_expense_naming_no_source_of_funds_is_a_float_expense():
+    """What the column defaults to, and what a row older than it means."""
+    assert not paid_by_company(expense(paid_from=None))
+
+
+def test_an_expense_nobody_dated_has_not_been_paid_yet():
+    assert not paid_by_company(expense(spent_on=None))
+
+
+def test_an_expense_of_nothing_is_not_a_payment():
+    assert not paid_by_company(expense(amount=0))
+
+
+def test_paying_a_vendor_records_amount_date_account_and_origin():
+    entry = paid()
+
+    assert entry.amount == -3_000_000
+    assert entry.direction == OUT
+    assert entry.entry_date == date(2026, 8, 10)
+    assert entry.account == ACCOUNT
+    assert entry.flow == JOB_EXPENSE
+    assert entry.source_doctype == "Job Expense"
+    assert entry.source_name == "EXP-00007"
+    assert entry.job == "JOB-0001"
+    assert entry.description == "Thuê ống kính Sigma"
+
+
+def test_an_expense_nobody_described_reads_as_its_category():
+    assert paid(description=None).description == "Thiết bị"
+
+
+def test_an_expense_with_no_account_earns_no_entry_either():
+    assert job_expense(COMPANY_EXPENSE, None) is None
+    assert paid_by_company(COMPANY_EXPENSE)
+
+
+def test_an_expense_entry_is_named_after_the_expense():
+    assert entry_name(JOB_EXPENSE, "EXP-00007") == "EXP-EXP-00007"
+
+
+def test_paying_the_same_vendor_payment_twice_posts_once():
+    assert posting(wanted=paid(), existing=paid(), moved=True) == NOTHING
+
+
+def test_correcting_an_expense_onto_a_float_takes_its_entry_back():
+    """It was never the company account's money that moved; the advance was."""
+    corrected = expense(paid_from=FROM_ADVANCE)
+
+    assert posting(
+        wanted=job_expense(corrected, ACCOUNT),
+        existing=paid(),
+        moved=paid_by_company(corrected),
+    ) == UNPOST
+
+
+def test_a_restated_expense_amount_is_reposted():
+    assert posting(wanted=paid(amount=3_500_000), existing=paid(), moved=True) == REPOST
+
+
+# -- money out: cash handed to whoever is spending it --
+
+ADVANCE = {
+    "name": "ADV-00003",
+    "job": "JOB-0001",
+    "amount": 10_000_000,
+    "transferred_on": date(2026, 8, 1),
+    "recipient": "linh@auraos.test",
+}
+
+
+def advance(**changes):
+    return {**ADVANCE, **changes}
+
+
+def handed_over(**changes):
+    return crew_advance(advance(**changes), ACCOUNT)
+
+
+def test_an_advance_that_was_transferred_moved_money():
+    assert transferred(ADVANCE)
+
+
+def test_an_advance_nobody_transferred_is_still_the_companys_cash():
+    """A day is what says the cash changed hands; an amount cannot.
+
+    A Currency column is never null, so 0 would have to mean both "no
+    money" and "nobody has recorded this yet".
+    """
+    assert not transferred(advance(transferred_on=None))
+    assert crew_advance(advance(transferred_on=None), ACCOUNT) is None
+
+
+def test_issuing_an_advance_records_amount_date_account_and_origin():
+    entry = handed_over()
+
+    assert entry.amount == -10_000_000
+    assert entry.direction == OUT
+    assert entry.entry_date == date(2026, 8, 1)
+    assert entry.account == ACCOUNT
+    assert entry.flow == CREW_ADVANCE
+    assert entry.source_doctype == "Job Advance"
+    assert entry.source_name == "ADV-00003"
+    assert entry.job == "JOB-0001"
+    assert entry.description == "linh@auraos.test"
+
+
+def test_an_advance_with_no_account_earns_no_entry_either():
+    assert crew_advance(ADVANCE, None) is None
+    assert transferred(ADVANCE)
+
+
+def test_an_advance_entry_is_named_after_the_advance():
+    assert entry_name(CREW_ADVANCE, "ADV-00003") == "ADV-ADV-00003"
+
+
+def test_issuing_the_same_advance_twice_posts_once():
+    assert posting(wanted=handed_over(), existing=handed_over(), moved=True) == NOTHING
+
+
+def test_an_advance_deleted_was_an_advance_never_handed_over():
+    assert posting(wanted=None, existing=handed_over(), moved=False) == UNPOST
+
+
+# -- either way: closing a float --
+
+RETURNED = {
+    "name": "STL-00002",
+    "job": "JOB-0001",
+    "amount": 2_000_000,
+    "settled_on": datetime(2026, 8, 20, 17, 5),
+    "recipient": "linh@auraos.test",
+}
+
+
+def closing(**changes):
+    return {**RETURNED, **changes}
+
+
+def closed(**changes):
+    return float_settlement(closing(**changes), ACCOUNT)
+
+
+def test_a_holder_handing_the_remainder_back_is_money_in():
+    entry = closed()
+
+    assert entry.amount == 2_000_000
+    assert entry.direction == IN
+
+
+def test_the_company_topping_a_holder_up_is_money_out():
+    """One entry either way: the settlement is already signed the way the
+    ledger signs money, so nothing here decides the direction twice."""
+    entry = closed(amount=-1_500_000)
+
+    assert entry.amount == -1_500_000
+    assert entry.direction == OUT
+
+
+def test_settling_records_the_day_the_transfer_was_made():
+    assert closed().entry_date == date(2026, 8, 20)
+
+
+def test_settling_records_account_and_origin():
+    entry = closed()
+
+    assert entry.account == ACCOUNT
+    assert entry.flow == FLOAT_SETTLEMENT
+    assert entry.source_doctype == "Job Settlement"
+    assert entry.source_name == "STL-00002"
+    assert entry.job == "JOB-0001"
+    assert entry.description == "linh@auraos.test"
+
+
+def test_a_settlement_nobody_made_moved_nothing():
+    assert not settled(closing(settled_on=None))
+    assert float_settlement(closing(settled_on=None), ACCOUNT) is None
+
+
+def test_an_even_float_has_nothing_to_settle():
+    assert not settled(closing(amount=0))
+
+
+def test_a_settlement_with_no_account_earns_no_entry_either():
+    assert float_settlement(RETURNED, None) is None
+    assert settled(RETURNED)
+
+
+def test_a_settlement_entry_is_named_after_the_settlement():
+    assert entry_name(FLOAT_SETTLEMENT, "STL-00002") == "STL-STL-00002"
+
+
+def test_settling_the_same_float_twice_posts_once():
+    assert posting(wanted=closed(), existing=closed(), moved=True) == NOTHING
+
+
+def test_a_settlement_reversed_takes_its_entry_back():
+    """Its numbers are frozen, so deleting it is the only way back."""
+    assert posting(wanted=None, existing=closed(), moved=False) == UNPOST
+
+
+# -- the four flows in one account --
+
+
+def test_every_flow_writes_its_own_entry_for_the_same_record_name():
+    """Doctypes number their own rows; the pair is what keeps them apart."""
+    assert len({entry_name(flow, "0001") for flow in FLOWS}) == len(FLOWS)
+
+
+def test_a_float_advanced_spent_and_settled_leaves_the_company_out_what_was_spent():
+    """The whole reason a float expense posts nothing of its own.
+
+    10M handed over, 12M spent out of it, the shortfall topped up: the
+    company is out 12M, counted once.
+    """
+    entries = [
+        handed_over(),
+        job_expense(expense(amount=12_000_000, paid_from=FROM_ADVANCE), ACCOUNT),
+        closed(amount=-2_000_000),
+    ]
+
+    assert balance([entry for entry in entries if entry]) == -12_000_000
+
+
+def test_the_four_flows_add_up_in_one_column():
+    entries = [
+        client_payment(PAID_MILESTONE, ACCOUNT),
+        paid(),
+        handed_over(),
+        closed(),
+    ]
+
+    assert balance(entries) == 55_000_000 - 3_000_000 - 10_000_000 + 2_000_000
 
 
 # -- what a stored row reads back as --
