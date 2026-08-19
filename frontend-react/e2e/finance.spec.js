@@ -13,7 +13,7 @@ test("receivables renders every ageing rung even with nothing owed", async ({ pa
 
   await page.goto("/aura-next/finance/receivables")
 
-  for (const rung of ["Not due", "1-30", "31-60", "61-90", "90"]) {
+  for (const rung of ["Not yet due", "1-30 days", "31-60 days", "61-90 days", "Over 90 days"]) {
     await expect(page.getByText(rung, { exact: false }).first()).toBeVisible()
   }
   expect(failures).toEqual([])

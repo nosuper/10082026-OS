@@ -9,7 +9,7 @@ const seededCompany = "Playwright Client"
 // content. This is the spec that must fail if that ever comes back.
 test("the deal you open is the deal you get", async ({ page }) => {
   await page.goto("/aura-next/deals")
-  await page.getByRole("button", { name: seededDeal }).first().click()
+  await page.getByRole("link", { name: seededDeal }).first().click()
 
   await expect(page).toHaveURL(/\/aura-next\/deals\/DEAL-/)
   await expect(page.getByText(seededDeal).first()).toBeVisible()
@@ -18,7 +18,7 @@ test("the deal you open is the deal you get", async ({ page }) => {
 
 test("no deal page shows the fixture that used to be hardcoded here", async ({ page }) => {
   await page.goto("/aura-next/deals")
-  await page.getByRole("button", { name: seededDeal }).first().click()
+  await page.getByRole("link", { name: seededDeal }).first().click()
   await expect(page).toHaveURL(/\/aura-next\/deals\/DEAL-/)
 
   const body = await page.locator("body").innerText()
@@ -31,6 +31,6 @@ test("a deal code that does not exist is a calm state, not a crash", async ({ pa
   page.on("pageerror", (error) => failures.push(error.message))
 
   await page.goto("/aura-next/deals/DEAL-does-not-exist")
-  await expect(page.locator("body")).toContainText(/not found|no deal|does not exist/i)
+  await expect(page.locator("body")).toContainText(/no such deal|nothing on this site is filed/i)
   expect(failures).toEqual([])
 })

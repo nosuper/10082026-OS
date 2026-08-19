@@ -7,7 +7,7 @@ const producerTest = test.extend({ storageState: producerState })
 
 async function openQuote(page) {
   await page.goto("/aura-next/deals")
-  await page.getByRole("button", { name: seededDeal }).first().click()
+  await page.getByRole("link", { name: seededDeal }).first().click()
   await expect(page).toHaveURL(/\/aura-next\/deals\/DEAL-/)
   const url = new URL(page.url())
   await page.goto(`${url.pathname}/quote`)
@@ -17,7 +17,7 @@ async function openQuote(page) {
 test("the breakdown shows the seeded line and prices it on the server", async ({ page }) => {
   await openQuote(page)
 
-  await expect(page.getByText("Playwright director")).toBeVisible()
+  await expect(page.getByDisplayValue("Playwright director").first()).toBeVisible()
   // 1 x 2 x 4.000.000 with 20 percent markup. The figures are the engine's;
   // asserting one of them proves the screen is not doing its own arithmetic.
   await expect(page.locator("body")).toContainText("8.000.000")
@@ -26,7 +26,7 @@ test("the breakdown shows the seeded line and prices it on the server", async ({
 
 test("packages carry the blank-versus-zero override distinction", async ({ page }) => {
   await openQuote(page)
-  await expect(page.getByText("Crew", { exact: true }).first()).toBeVisible()
+  await expect(page.getByDisplayValue("Crew").first()).toBeVisible()
 })
 
 // Publishing is irreversible, so it is exercised here and nowhere else: this
