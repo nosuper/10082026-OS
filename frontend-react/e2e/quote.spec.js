@@ -54,16 +54,27 @@ test("publishing mints the next sequential version with a public link", async ({
   const label = await publish.innerText()
   await publish.click()
 
-  // If publishing is refused, the screen shows the server's own sentence.
-  // Surface it, because "v1 not found" says nothing about why - the first
-  // version of this assertion timed out for fifteen seconds and told me
-  // only that a thing was absent.
-  const refusal = page.getByText(/Nothing to publish|not permitted|error/i).first()
-  if (await refusal.isVisible().catch(() => false)) {
-    throw new Error(`publish refused: ${await refusal.innerText()}`)
-  }
+  // Match the role, not the wording. ErrorState carries role="alert" and its
+  // five faces in states.tsx are sentences - "That did not work.", "This did
+  // not load." - none of which contain the word "error". The previous version
+  // of this grepped /Nothing to publish|not permitted|error/i and so could not
+  // have matched any refusal the app is capable of rendering. It was a
+  // diagnostic that could only ever come back silent.
+  const alert = page.getByRole("alert").first()
+  const minted = page.getByText(/v1\b/).first()
 
-  await expect(page.getByText(/v1\b/).first()).toBeVisible({ timeout: 15000 })
+  await expect(
+    alert.or(minted).first(),
+    // Neither appearing is its own finding: publish() returns silently when the
+    // document is dirty and the save ahead of it fails, so nothing renders at
+    // all. That is the third outcome, and it needs saying rather than showing
+    // up as a bare missing element.
+    "publish produced neither a version nor a refusal - the save ahead of it likely failed silently",
+  ).toBeVisible({ timeout: 15000 })
+
+  if (await alert.isVisible().catch(() => false)) {
+    throw new Error(`publish refused: ${(await alert.innerText()).replace(/\n/g, " / ")}`)
+  }
   // The button counts up rather than branching: v2 next, never v1-B.
   await expect(page.getByRole("button", { name: /Publish version/ })).not.toHaveText(label)
 })
