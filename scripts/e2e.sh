@@ -68,11 +68,15 @@ if [ "$warm" != true ]; then
   exit 1
 fi
 
-printf '%s\n' \
-  'namespace = {}; exec(compile(open("/workspace/repo/frontend/e2e/seed.py", "rb").read(), "seed.py", "exec"), namespace); namespace["run"]()' \
-  | "${COMPOSE[@]}" exec --no-TTY \
-  frappe bash -lc \
-  'cd /home/frappe/frappe-bench && bench --site dev.localhost console'
+seed() {
+  printf '%s\n' \
+    'namespace = {}; exec(compile(open("/workspace/repo/frontend/e2e/seed.py", "rb").read(), "seed.py", "exec"), namespace); namespace["run"]()' \
+    | "${COMPOSE[@]}" exec --no-TTY \
+    frappe bash -lc \
+    'cd /home/frappe/frappe-bench && bench --site dev.localhost console'
+}
+
+seed
 
 # Two suites against one seeded stack: the Vue app at /aura and the React app
 # at /aura-next. Both run even if the first fails, so one red suite does not
@@ -82,6 +86,15 @@ react_status=0
 
 "${COMPOSE[@]}" run --rm playwright \
   bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || vue_status=$?
+
+# Re-seed between the suites. They share one site, and the Vue breakdown spec
+# edits the seeded cost line and puts it back afterwards - so a Vue failure in
+# between leaves the React suite reading a price the Vue spec typed. That is
+# what run 8 caught: Vue died waiting for "All changes saved", never reached its
+# restore, and React then read a 11.000.000 subtotal where the seed says
+# 8.000.000. Cheaper and more honest than asking every spec to clean up after
+# itself on the way out of a failure.
+seed
 
 "${COMPOSE[@]}" run --rm playwright-react \
   bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || react_status=$?
@@ -94,7 +107,11 @@ react_status=0
 # not a gate.
 if [ -n "${E2E_AFTER:-}" ]; then
   after_status=0
-  "${COMPOSE[@]}" run --rm playwright-react \
+  # Which suite the follow-up belongs to. Defaults to the Vue container
+  # because the first use of this hook asked for breakdown.spec.js and got
+  # "No tests found" - that spec lives in frontend/, and the hook had the
+  # React container hardcoded.
+  "${COMPOSE[@]}" run --rm "${E2E_AFTER_SERVICE:-playwright}" \
     bash -lc "npm ci --no-audit --no-fund && ${E2E_AFTER}" || after_status=$?
   echo "e2e: follow-up exit ${after_status}"
 fi
