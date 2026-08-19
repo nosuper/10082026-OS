@@ -8,6 +8,12 @@
 // Generating a paper is not here: it happens on a job, against that job's
 // records (auraos.api.generate_job_paperwork). This screen owns what a paper is
 // made *from*, and what has been made.
+//
+// It moved from /paperwork to /documents/paperwork in #66, when the Library
+// tab arrived beside it and the nav item became Documents. Nothing on this
+// screen changed with the move except its address and the tab row at the top:
+// the two lists are deliberately not merged, because a paper belongs to a job
+// and an SOP belongs to nobody.
 
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -20,10 +26,11 @@ import {
   Pencil,
   Printer,
   Search,
-  X,
 } from "lucide-react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { DocumentsTabs } from "@/components/aura/DocumentsTabs";
+import { DIALOG_BUTTON, Modal } from "@/components/aura/Modal";
 import { EditorToolbar } from "@/components/aura/RichText";
 import {
   PAPER_STATUSES,
@@ -39,7 +46,7 @@ import { countLabel, formatDateTime } from "@/lib/format";
 import { FrappeError, uploadFile, type UploadedFile } from "@/lib/frappe";
 import { resultOf, useMethod, useMethodMutation } from "@/lib/queries";
 
-export const Route = createFileRoute("/paperwork")({
+export const Route = createFileRoute("/documents/paperwork")({
   head: () => ({
     meta: [
       { title: "Paperwork - template library and generated papers | AuraOS" },
@@ -75,7 +82,11 @@ type TemplateRow = {
   needs_freelancer: boolean;
 };
 
-type Library = {
+/** The *template* library, which is not the Library tab next door. Both words
+ *  are the founder's and both are right in their own half: this one is the set
+ *  of .docx a job can be papered from, that one is knowledge nobody generates
+ *  anything from. Named apart here so a reader never has to work out which. */
+type TemplateLibrary = {
   /** The founder gate, decided by the server. Never inferred in the browser. */
   can_manage: boolean;
   placeholders: string[];
@@ -104,7 +115,7 @@ type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 type Preview = { html: string | null; web?: boolean; file_url?: string | null };
 
-const LIBRARY = "auraos.api.paperwork_library";
+const TEMPLATE_LIBRARY = "auraos.api.paperwork_library";
 const PAPERS = "auraos.api.generated_papers";
 const PREVIEW_TEMPLATE = "auraos.api.preview_template";
 const PREVIEW_PAPER = "auraos.api.preview_paper";
@@ -227,7 +238,7 @@ type EditorDraft = { key: number; name: string | null; templateName: string; sou
 type WindowState = { kind: "template"; row: TemplateRow } | { kind: "paper"; row: PaperRow } | null;
 
 function PaperworkPage() {
-  const library = useMethod<Library>(LIBRARY);
+  const library = useMethod<TemplateLibrary>(TEMPLATE_LIBRARY);
   const papers = useMethod<PaperRow[]>(PAPERS);
 
   const [paperWindow, setPaperWindow] = useState<WindowState>(null);
@@ -291,10 +302,12 @@ function PaperworkPage() {
   }
 
   return (
-    <AppShell title="Paperwork" meta={meta}>
+    <AppShell title="Documents" meta={meta}>
       <style>{PAPER_CSS}</style>
 
       <div className="space-y-5">
+        <DocumentsTabs />
+
         <p className="max-w-3xl text-sm text-muted-foreground">
           Design each paper once in Word - letterhead, clauses, signature block - and type{" "}
           <code className="num rounded border border-border bg-secondary px-1 py-0.5 text-[11px] text-foreground">
@@ -573,10 +586,10 @@ function TemplateItem({
   onEdit: () => void;
 }) {
   const retire = useMethodMutation<unknown, Record<string, unknown>>("frappe.client.set_value", {
-    invalidate: [resultOf(LIBRARY)],
+    invalidate: [resultOf(TEMPLATE_LIBRARY)],
   });
   const remove = useMethodMutation<unknown, Record<string, unknown>>("frappe.client.delete", {
-    invalidate: [resultOf(LIBRARY)],
+    invalidate: [resultOf(TEMPLATE_LIBRARY)],
   });
 
   const busy = retire.isPending || remove.isPending;
@@ -702,7 +715,7 @@ function NewTemplateCard({ onWriteOne }: { onWriteOne: () => void }) {
   const picker = useRef<HTMLInputElement>(null);
 
   const add = useMethodMutation<unknown, Record<string, unknown>>("frappe.client.insert", {
-    invalidate: [resultOf(LIBRARY)],
+    invalidate: [resultOf(TEMPLATE_LIBRARY)],
     onSuccess: () => {
       setName("");
       setUploaded(null);
@@ -790,63 +803,6 @@ function NewTemplateCard({ onWriteOne }: { onWriteOne: () => void }) {
 }
 
 // -- the modal shell both windows sit in --
-
-function Modal({
-  title,
-  onClose,
-  children,
-  footer,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-  footer: React.ReactNode;
-}) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="fixed inset-0 bg-primary/25 backdrop-blur-[1px]"
-      />
-      <div
-        role="dialog"
-        aria-label={title}
-        className="relative z-10 w-full max-w-4xl rounded-xl border border-border bg-card shadow-lg"
-      >
-        <header className="flex items-start gap-3 border-b border-border px-5 py-4">
-          <h2 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-tight">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
-        <div className="px-5 py-5">{children}</div>
-        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-4">
-          {footer}
-        </footer>
-      </div>
-    </div>
-  );
-}
-
-const DIALOG_BUTTON =
-  "rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-secondary";
 
 /**
  * One window for every paper-shaped thing: a template, or a document already
@@ -1002,7 +958,7 @@ function TemplateEditorDialog({
   // field it does not carry - the notes, the retired flag, the file.
   // The reading window is a cached read of the same template, so a save has to
   // drop it too or the founder reopens what they just rewrote.
-  const written = [resultOf(LIBRARY), resultOf(PREVIEW_TEMPLATE)];
+  const written = [resultOf(TEMPLATE_LIBRARY), resultOf(PREVIEW_TEMPLATE)];
 
   const update = useMethodMutation<unknown, Record<string, unknown>>("frappe.client.set_value", {
     invalidate: written,

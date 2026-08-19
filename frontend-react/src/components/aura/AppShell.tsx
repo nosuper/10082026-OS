@@ -18,14 +18,28 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/components/aura/SessionProvider";
 
-type NavItem = { to: string; label: string; icon: typeof Home; founder?: boolean };
+/** `match` is for a nav item that owns more of the app than it links to.
+ *  Documents links at its Paperwork tab but stays lit on the Library one,
+ *  and without this it would go dark the moment you switched tabs - the
+ *  active test is a prefix match on `to`, which the sibling tab fails.
+ *  Contacts never needed it because it spends two nav items on two tabs. */
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof Home;
+  founder?: boolean;
+  match?: string;
+};
 
 const primaryNav: NavItem[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/deals", label: "Deals", icon: Handshake },
   { to: "/quotations", label: "Quotations", icon: FileSpreadsheet },
   { to: "/jobs", label: "Jobs", icon: Clapperboard },
-  { to: "/paperwork", label: "Paperwork", icon: FileText },
+  // Points at the Paperwork tab rather than a bare /documents, the way
+  // contactsNav points at a tab rather than a bare /contacts. Paperwork is
+  // first because it is the half people open daily.
+  { to: "/documents/paperwork", label: "Documents", icon: FileText, match: "/documents" },
   { to: "/finance", label: "Finance", icon: Wallet },
 ];
 
@@ -43,7 +57,8 @@ const footNav: NavItem[] = [
 
 function NavLink({ item }: { item: NavItem }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+  const prefix = item.match ?? item.to;
+  const active = item.to === "/" ? pathname === "/" : pathname.startsWith(prefix);
   const Icon = item.icon;
   return (
     <Link

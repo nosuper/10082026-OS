@@ -204,3 +204,19 @@
 .aura-rich ol { list-style: decimal; padding-left: 1.25rem; margin: 0 0 0.4em; }
 .aura-rich li { margin: 0.1em 0; }
 .aura-rich b, .aura-rich strong { font-weight: 600; }
+
+/* Tables are the one block the toolbar cannot make, and they are here anyway:
+ * a Library document seeded from somewhere else can carry one, and the first
+ * one does - the deal SOP's tier matrix, which is the densest thing on that
+ * page. Same argument as the headings above. An unstyled table is four columns
+ * of text with no grid, which does not read as a table that needs styling, it
+ * reads as a paragraph that has gone wrong. Frappe's sanitiser keeps these
+ * tags, so what is stored is what renders. */
+.aura-rich table { width: 100%; border-collapse: collapse; margin: 0 0 0.6em; }
+.aura-rich th, .aura-rich td {
+  border: 1px solid var(--color-border);
+  padding: 0.35em 0.5em;
+  text-align: left;
+  vertical-align: top;
+}
+.aura-rich th { font-weight: 600; background: var(--color-secondary); }

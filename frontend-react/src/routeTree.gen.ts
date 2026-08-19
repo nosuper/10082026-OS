@@ -10,15 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ExpenseRouteImport } from './routes/expense'
 import { Route as FinanceRouteImport } from './routes/finance'
-import { Route as PaperworkRouteImport } from './routes/paperwork'
 import { Route as QuotationsRouteImport } from './routes/quotations'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ContactsCompaniesRouteImport } from './routes/contacts.companies'
 import { Route as ContactsPeopleRouteImport } from './routes/contacts.people'
 import { Route as DealsIndexRouteImport } from './routes/deals.index'
 import { Route as DealsDealCodeRouteImport } from './routes/deals.$dealCode'
+import { Route as DocumentsLibraryRouteImport } from './routes/documents.library'
+import { Route as DocumentsPaperworkRouteImport } from './routes/documents.paperwork'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
 import { Route as FinanceAccountsRouteImport } from './routes/finance.accounts'
 import { Route as FinanceExpensesRouteImport } from './routes/finance.expenses'
@@ -38,6 +40,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocumentsRoute = DocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ExpenseRoute = ExpenseRouteImport.update({
   id: '/expense',
   path: '/expense',
@@ -46,11 +53,6 @@ const ExpenseRoute = ExpenseRouteImport.update({
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PaperworkRoute = PaperworkRouteImport.update({
-  id: '/paperwork',
-  path: '/paperwork',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuotationsRoute = QuotationsRouteImport.update({
@@ -82,6 +84,16 @@ const DealsDealCodeRoute = DealsDealCodeRouteImport.update({
   id: '/deals/$dealCode',
   path: '/deals/$dealCode',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DocumentsLibraryRoute = DocumentsLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => DocumentsRoute,
+} as any)
+const DocumentsPaperworkRoute = DocumentsPaperworkRouteImport.update({
+  id: '/paperwork',
+  path: '/paperwork',
+  getParentRoute: () => DocumentsRoute,
 } as any)
 const FinanceIndexRoute = FinanceIndexRouteImport.update({
   id: '/',
@@ -151,14 +163,16 @@ const DealsDealCodeQuoteRoute = DealsDealCodeQuoteRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/documents': typeof DocumentsRouteWithChildren
   '/expense': typeof ExpenseRoute
   '/finance': typeof FinanceRouteWithChildren
-  '/paperwork': typeof PaperworkRoute
   '/quotations': typeof QuotationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
+  '/documents/library': typeof DocumentsLibraryRoute
+  '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
@@ -176,11 +190,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/documents': typeof DocumentsRouteWithChildren
   '/expense': typeof ExpenseRoute
-  '/paperwork': typeof PaperworkRoute
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
+  '/documents/library': typeof DocumentsLibraryRoute
+  '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
@@ -199,14 +215,16 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/documents': typeof DocumentsRouteWithChildren
   '/expense': typeof ExpenseRoute
   '/finance': typeof FinanceRouteWithChildren
-  '/paperwork': typeof PaperworkRoute
   '/quotations': typeof QuotationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
+  '/documents/library': typeof DocumentsLibraryRoute
+  '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
@@ -226,14 +244,16 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/documents'
     | '/expense'
     | '/finance'
-    | '/paperwork'
     | '/quotations'
     | '/settings'
     | '/contacts/companies'
     | '/contacts/people'
     | '/deals/$dealCode'
+    | '/documents/library'
+    | '/documents/paperwork'
     | '/finance/accounts'
     | '/finance/expenses'
     | '/finance/forecast'
@@ -251,11 +271,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/documents'
     | '/expense'
-    | '/paperwork'
     | '/settings'
     | '/contacts/companies'
     | '/contacts/people'
+    | '/documents/library'
+    | '/documents/paperwork'
     | '/finance/accounts'
     | '/finance/expenses'
     | '/finance/forecast'
@@ -273,14 +295,16 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/documents'
     | '/expense'
     | '/finance'
-    | '/paperwork'
     | '/quotations'
     | '/settings'
     | '/contacts/companies'
     | '/contacts/people'
     | '/deals/$dealCode'
+    | '/documents/library'
+    | '/documents/paperwork'
     | '/finance/accounts'
     | '/finance/expenses'
     | '/finance/forecast'
@@ -299,9 +323,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DocumentsRoute: typeof DocumentsRouteWithChildren
   ExpenseRoute: typeof ExpenseRoute
   FinanceRoute: typeof FinanceRouteWithChildren
-  PaperworkRoute: typeof PaperworkRoute
   QuotationsRoute: typeof QuotationsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   ContactsCompaniesRoute: typeof ContactsCompaniesRoute
@@ -321,6 +345,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/documents': {
+      id: '/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof DocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/expense': {
       id: '/expense'
       path: '/expense'
@@ -333,13 +364,6 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance'
       preLoaderRoute: typeof FinanceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/paperwork': {
-      id: '/paperwork'
-      path: '/paperwork'
-      fullPath: '/paperwork'
-      preLoaderRoute: typeof PaperworkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quotations': {
@@ -383,6 +407,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/deals/$dealCode'
       preLoaderRoute: typeof DealsDealCodeRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/documents/library': {
+      id: '/documents/library'
+      path: '/library'
+      fullPath: '/documents/library'
+      preLoaderRoute: typeof DocumentsLibraryRouteImport
+      parentRoute: typeof DocumentsRoute
+    }
+    '/documents/paperwork': {
+      id: '/documents/paperwork'
+      path: '/paperwork'
+      fullPath: '/documents/paperwork'
+      preLoaderRoute: typeof DocumentsPaperworkRouteImport
+      parentRoute: typeof DocumentsRoute
     }
     '/finance/': {
       id: '/finance/'
@@ -478,6 +516,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DocumentsRouteChildren {
+  DocumentsLibraryRoute: typeof DocumentsLibraryRoute
+  DocumentsPaperworkRoute: typeof DocumentsPaperworkRoute
+}
+
+const DocumentsRouteChildren: DocumentsRouteChildren = {
+  DocumentsLibraryRoute: DocumentsLibraryRoute,
+  DocumentsPaperworkRoute: DocumentsPaperworkRoute,
+}
+
+const DocumentsRouteWithChildren = DocumentsRoute._addFileChildren(
+  DocumentsRouteChildren,
+)
+
 interface FinanceRouteChildren {
   FinanceAccountsRoute: typeof FinanceAccountsRoute
   FinanceExpensesRoute: typeof FinanceExpensesRoute
@@ -531,9 +583,9 @@ const DealsDealCodeRouteWithChildren = DealsDealCodeRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DocumentsRoute: DocumentsRouteWithChildren,
   ExpenseRoute: ExpenseRoute,
   FinanceRoute: FinanceRouteWithChildren,
-  PaperworkRoute: PaperworkRoute,
   QuotationsRoute: QuotationsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   ContactsCompaniesRoute: ContactsCompaniesRoute,
