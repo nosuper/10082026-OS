@@ -68,9 +68,15 @@ if [ "$warm" != true ]; then
   exit 1
 fi
 
+# The seed belongs to the stack, not to either app. It lived in frontend/e2e/
+# because the Vue suite was the first caller, and it stayed there after the
+# React suite started depending on it too - so `rm -rf frontend/` in #103 would
+# have deleted the React suite's seed. The failure would have been a stack that
+# boots, a suite that runs, and assertions failing against data nobody created,
+# which reads as "the React app broke" rather than "the seed is gone".
 seed() {
   printf '%s\n' \
-    'namespace = {}; exec(compile(open("/workspace/repo/frontend/e2e/seed.py", "rb").read(), "seed.py", "exec"), namespace); namespace["run"]()' \
+    'namespace = {}; exec(compile(open("/workspace/repo/scripts/e2e-seed.py", "rb").read(), "e2e-seed.py", "exec"), namespace); namespace["run"]()' \
     | "${COMPOSE[@]}" exec --no-TTY \
     frappe bash -lc \
     'cd /home/frappe/frappe-bench && bench --site dev.localhost console'
