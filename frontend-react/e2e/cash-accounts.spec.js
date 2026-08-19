@@ -142,7 +142,14 @@ function parseVnd(text) {
   return Number(last.replace(/\./g, ""));
 }
 
-/** One record's name, or null. Filters are a JSON list, the way Frappe takes them. */
+/**
+ * One record's name, or null. Filters are a JSON list, the way Frappe takes them.
+ *
+ * A near-duplicate of `records.js`'s `firstName`, kept separate on purpose
+ * while run 16's repeat-safety claims about this file are still unmeasured -
+ * folding them together first would make that result describe a file that
+ * never ran. Fold after run 16 is re-run, not before.
+ */
 async function firstName(page, doctype, filters) {
   return page.evaluate(
     async ({ doctype, filters }) => {
@@ -166,6 +173,24 @@ async function firstName(page, doctype, filters) {
  * Log a company-paid expense against the seeded **open** job, through the API
  * the app itself calls. Frappe refuses a POST without the CSRF token the page
  * holds, so it is read out of the live page rather than guessed.
+ *
+ * **Do not convert this to `page.request` for consistency with `records.js`.**
+ * That helper moved to `page.request` because it GETs, needs no token, and
+ * could not resolve a relative URL from `about:blank`. **A POST is the
+ * opposite case.** `page.request` carries the context's session cookie but
+ * **not** `window.csrf_token`, which exists only on a document Frappe served,
+ * so Frappe would refuse the POST outright.
+ *
+ * **And this test would go green on that refusal.** `response.ok` would be
+ * false and `postExpense` would return false - and the only thing between a
+ * tidy-up and a test reporting a derived balance without ever posting an entry
+ * is the single `expect(posted).toBeTruthy()` below. A permission spec has it
+ * worse: it reads a refusal as a pass, and would keep passing on the day the
+ * permission check was deleted.
+ *
+ * The two helpers look gratuitously different. They are, because a GET and a
+ * POST need different things - "resolve relative URLs against baseURL" is not
+ * the universal rule it reads as.
  *
  * Named rather than "whatever job comes back first", and that is not fussiness.
  * The seed converts the closed job last, so it is the most recently modified
