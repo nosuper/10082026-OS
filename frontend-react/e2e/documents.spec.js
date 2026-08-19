@@ -135,6 +135,34 @@ test("the two halves are two lists, on the screen and in the payloads", async ({
 // Both halves are the #115 lane's, from their own draft of this file - two
 // lanes were sent #128 by mistake, and they found the vacuity by writing the
 // assertion the other way and going looking for the difference.
+//
+// **And comparing the whole attribute failed in run 19, correctly.** TanStack
+// appends its own `active` token to a Link whose `to` matches the URL exactly
+// (link.js: `STATIC_ACTIVE_OBJECT = { className: "active" }`), and this nav
+// item points at `/documents/paperwork` - so it carries the token on Paperwork
+// and not on Library, while the app's own lit classes are on both. The nav was
+// working; the assertion was comparing the router's opinion along with the
+// app's, and its failure message said the light had gone out when it had not.
+//
+// **A red that lies about what is wrong is worse than a noisy one**, because
+// the next person goes and looks at the nav. So the comparison is over the
+// app's tokens only: split on whitespace, drop what the router owns, compare
+// as sets. Whole tokens rather than a substring, which is what the first
+// version got wrong in the other direction.
+
+/** Tokens the router writes, which say nothing about how the app styles state.
+ *  `active` is TanStack's default `activeProps.className`; nothing in
+ *  styles.css defines a rule for it. */
+const ROUTER_TOKENS = new Set(["active"]);
+
+/** A link's classes as the app set them, order-independent. */
+async function appTokens(link) {
+  const raw = (await link.getAttribute("class")) ?? "";
+  return raw
+    .split(/\s+/)
+    .filter((token) => token && !ROUTER_TOKENS.has(token))
+    .sort();
+}
 test("the Documents nav item stays lit on both tabs", async ({ page }) => {
   // Not scoped through getByRole("navigation"): the sidebar is a <nav> and so
   // is the tab strip, so that locator matches two landmarks and a strict mode
@@ -143,15 +171,12 @@ test("the Documents nav item stays lit on both tabs", async ({ page }) => {
   const navItem = () => page.getByRole("link", { name: "Documents", exact: true });
 
   await openTab(page, PAPERWORK_URL, "Paperwork");
-  const lit = await navItem().getAttribute("class");
-  const dark = await page.getByRole("link", { name: "Deals", exact: true }).getAttribute("class");
-  expect(lit, "the current section looks the same as one nobody is in").not.toBe(dark);
+  const lit = await appTokens(navItem());
+  const dark = await appTokens(page.getByRole("link", { name: "Deals", exact: true }));
+  expect(lit, "the current section looks the same as one nobody is in").not.toEqual(dark);
 
   await openTab(page, LIBRARY_URL, "Library");
-  expect(
-    await navItem().getAttribute("class"),
-    "the section light went out on the Library tab",
-  ).toBe(lit);
+  expect(await appTokens(navItem()), "the section light went out on the Library tab").toEqual(lit);
 });
 
 // -- the document that used to be a page --
