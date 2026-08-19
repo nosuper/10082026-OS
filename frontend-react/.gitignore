@@ -30,3 +30,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright: signed-in state, run artefacts and the HTML report
+.playwright-auth/
+test-results/
+playwright-report/

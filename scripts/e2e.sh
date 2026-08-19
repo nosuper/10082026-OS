@@ -74,5 +74,19 @@ printf '%s\n' \
   frappe bash -lc \
   'cd /home/frappe/frappe-bench && bench --site dev.localhost console'
 
+# Two suites against one seeded stack: the Vue app at /aura and the React app
+# at /aura-next. Both run even if the first fails, so one red suite does not
+# hide the state of the other, and the script still exits non-zero.
+vue_status=0
+react_status=0
+
 "${COMPOSE[@]}" run --rm playwright \
-  bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e'
+  bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || vue_status=$?
+
+"${COMPOSE[@]}" run --rm playwright-react \
+  bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || react_status=$?
+
+echo "e2e: vue suite exit ${vue_status}, react suite exit ${react_status}"
+if [ "$vue_status" -ne 0 ] || [ "$react_status" -ne 0 ]; then
+  exit 1
+fi
