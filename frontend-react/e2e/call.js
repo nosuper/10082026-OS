@@ -26,6 +26,28 @@
  * served, not in the bundle.
  */
 export async function callAs(page, method, args = {}) {
+  // Run 17 lost eight tests to a relative fetch on about:blank: with no origin
+  // to resolve against, fetch cannot parse the URL and the error names the URL
+  // rather than the mistake. The tempting fix is to resolve against the
+  // config's baseURL so the helper stops caring where the page is. **That fix
+  // would be wrong here**, and dangerously so: this transport carries
+  // window.csrf_token, which only exists on a document Frappe served. A call
+  // from about:blank would send an empty token, Frappe would refuse it, and a
+  // permission spec reads a refusal as a pass. The ordering is not incidental
+  // to this helper, it is what the helper is for - so it is stated as a
+  // precondition rather than engineered away.
+  //
+  // records.js has no such constraint: get_list is a GET and carries no token,
+  // so resolving against baseURL there is a real fix rather than a disguise.
+  const at = page.url();
+  if (!/^https?:/i.test(at)) {
+    throw new Error(
+      `callAs("${method}") was called on ${at || "about:blank"}. It has to run ` +
+        `inside a page the app has served - it reads window.csrf_token from ` +
+        `that document, and a tokenless POST comes back as a refusal that ` +
+        `looks exactly like a passing permission test. Navigate first.`,
+    );
+  }
   return await page.evaluate(
     async ({ method, args }) => {
       const response = await fetch(`/api/method/${method}`, {
