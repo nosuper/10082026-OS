@@ -527,16 +527,17 @@ function PositioningCard({ initial }: { initial: PositioningRules }) {
           </span>
           <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
             The cash / bridge / brand allocation lens - tune it as the company moves phases. The
-            deal form and the{" "}
+            deal form reads these live. The{" "}
             <a
-              href="/aura/sop/deals"
+              href="/aura-next/documents/library"
               target="_blank"
               rel="noopener noreferrer"
               className="text-ember underline underline-offset-2"
             >
-              SOP page
+              classification SOP
             </a>{" "}
-            read these live.
+            points here for the numbers rather than repeating them, so it cannot fall out of date
+            with this screen.
           </p>
         </div>
 

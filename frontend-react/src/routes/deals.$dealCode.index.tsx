@@ -835,8 +835,9 @@ function DealPage() {
                   label="Positioning"
                   hint={
                     // New tab on purpose: the half-edited deal stays behind.
+                    // The SOP is a Library document since #66, not a page.
                     <a
-                      href="/aura/sop/deals"
+                      href="/aura-next/documents/library"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 underline decoration-border underline-offset-2 hover:text-ember"
