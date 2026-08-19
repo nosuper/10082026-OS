@@ -17,9 +17,12 @@
 #   AURA_BACKUP_OFFSITE=/mnt/synology/auraos \
 #     scripts/backup.sh
 #
-# AURA_BACKUP_OFFSITE may be a local path (a mounted Synology share) or
-# an rsync-over-ssh target (user@nas:/volume1/auraos). Empty skips the
-# offsite copy - acceptable on dev only.
+# AURA_BACKUP_OFFSITE may be:
+#   - smb://host/share/dir - pushed with smbclient, credentials read
+#     from /root/.aura-nas-user + /root/.aura-nas-pass (chmod 600).
+#     Userland on purpose: an unprivileged LXC cannot mount anything.
+#   - a local path (a mounted share) or rsync target - synced with rsync.
+# Empty skips the offsite copy - acceptable on dev only.
 set -euo pipefail
 
 PROJECT="${AURA_BACKUP_PROJECT:-docker}"
@@ -61,7 +64,21 @@ size=$(du -h "$ARCHIVE" | cut -f1)
 find "$DEST" -maxdepth 1 -name 'auraos-*.tar' -mtime "+$KEEP_DAYS" -delete
 
 if [ -n "$OFFSITE" ]; then
-  rsync -a "$ARCHIVE" "$OFFSITE/"
+  case "$OFFSITE" in
+    smb://*)
+      rest="${OFFSITE#smb://}"
+      host="${rest%%/*}"
+      rest="${rest#*/}"
+      share="${rest%%/*}"
+      dir="${rest#*/}"
+      smbclient "//$host/$share" "$(cat /root/.aura-nas-pass)" \
+        -U "$(cat /root/.aura-nas-user)" \
+        -c "cd $dir; put $ARCHIVE $(basename "$ARCHIVE")" > /dev/null
+      ;;
+    *)
+      rsync -a "$ARCHIVE" "$OFFSITE/"
+      ;;
+  esac
   log "OK $SITE → $ARCHIVE ($size), offsite → $OFFSITE"
 else
   log "OK $SITE → $ARCHIVE ($size), no offsite target configured"
