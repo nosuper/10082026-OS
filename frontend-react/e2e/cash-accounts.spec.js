@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { BANK, JOB_DEAL, PETTY } from "./fixture.js";
+
 // #115, the spec for the cash accounts screen (#101).
 //
 // The screen's whole claim is that **no balance is stored or hand editable** -
@@ -14,6 +16,12 @@ import { expect, test } from "@playwright/test";
 // create is the property that makes it worth anything. The exception is the
 // derivation test below, which has to write and then look - proving a number is
 // derived means changing the thing it derives from.
+//
+// The names come from e2e/fixture.js, which is guarded against the seed. The
+// first draft of this file spelled them out instead and spelled out the wrong
+// ones - the *dev walkthrough* accounts, from a file the E2E stack has never
+// run. The header above already claimed this dependency, in prose, correctly.
+// Claiming it is not having it.
 //
 // Selector note, learned before running rather than after: the stat labels and
 // several table cells carry `label-caps`, which is `text-transform: uppercase`
@@ -47,11 +55,11 @@ test("an account with no entries reads zero rather than breaking", async ({ page
   await page.goto(ACCOUNTS);
 
   // The regression that would embarrass us with a new studio: a company that
-  // has never posted anything opens Finance on its first day. The seed carries
-  // two accounts and posts against one, so the other is exactly this case
-  // without anyone having to arrange it.
-  await expect(page.getByText("Quỹ tiền mặt").first()).toBeVisible();
-  await page.getByText("Quỹ tiền mặt").first().click();
+  // has never posted anything opens Finance on its first day. The seed makes
+  // BANK the default and every posting flow writes to the default, so PETTY is
+  // exactly this case without anyone having to arrange it.
+  await expect(page.getByText(PETTY).first()).toBeVisible();
+  await page.getByText(PETTY).first().click();
 
   await expect(page.getByText("No money has moved through this account yet.")).toBeVisible();
   // "Zero, which is a fact about the account rather than a problem with it."
@@ -72,8 +80,8 @@ test("every account is listed with its movement count and a total across them", 
 
   // Both seeded accounts, not just the one with money in it. An account is a
   // thing the company holds whether or not anything has moved through it.
-  await expect(page.getByText("Tài khoản VCB").first()).toBeVisible();
-  await expect(page.getByText("Quỹ tiền mặt").first()).toBeVisible();
+  await expect(page.getByText(BANK).first()).toBeVisible();
+  await expect(page.getByText(PETTY).first()).toBeVisible();
   expect(failures).toEqual([]);
 });
 
@@ -81,13 +89,14 @@ test("an entry is listed with its date, its source and where it came from", asyn
   const failures = watchForCrashes(page);
 
   await page.goto(ACCOUNTS);
-  await page.getByText("Tài khoản VCB").first().click();
+  await page.getByText(BANK).first().click();
 
   for (const column of ["Date", "Source", "Flow", "Amount"]) {
     await expect(page.getByText(column, { exact: true }).first()).toBeVisible();
   }
   // The seed posts through the real #99/#100 flows, so the flow names are the
-  // ledger's own rather than strings this screen invented.
+  // ledger's own rather than strings this screen invented. These four are the
+  // Select options on Cash Ledger Entry.flow.
   await expect(page.getByText(/Job expense|Client payment|Crew advance/).first()).toBeVisible();
   expect(failures).toEqual([]);
 });
@@ -96,7 +105,7 @@ test("the balance is derived: post an entry and it moves", async ({ page }) => {
   const failures = watchForCrashes(page);
 
   await page.goto(ACCOUNTS);
-  await page.getByText("Tài khoản VCB").first().click();
+  await page.getByText(BANK).first().click();
   const before = await readBalance(page);
 
   // Through the app's own endpoint rather than by inserting a ledger row.
@@ -108,7 +117,7 @@ test("the balance is derived: post an entry and it moves", async ({ page }) => {
   expect(posted, "the expense endpoint should accept a company-paid spend").toBeTruthy();
 
   await page.reload();
-  await page.getByText("Tài khoản VCB").first().click();
+  await page.getByText(BANK).first().click();
   const after = await readBalance(page);
 
   // Money out, so the balance falls by exactly what was spent. Asserting the
@@ -121,7 +130,7 @@ test("the balance is derived: post an entry and it moves", async ({ page }) => {
 
 /** The selected account's balance, as an integer of đồng. */
 async function readBalance(page) {
-  const text = await page.getByRole("row").filter({ hasText: "Tài khoản VCB" }).last().innerText();
+  const text = await page.getByRole("row").filter({ hasText: BANK }).last().innerText();
   return parseVnd(text);
 }
 
@@ -133,20 +142,42 @@ function parseVnd(text) {
   return Number(last.replace(/\./g, ""));
 }
 
+/** One record's name, or null. Filters are a JSON list, the way Frappe takes them. */
+async function firstName(page, doctype, filters) {
+  return page.evaluate(
+    async ({ doctype, filters }) => {
+      const query = new URLSearchParams({
+        doctype,
+        filters: JSON.stringify(filters),
+        limit_page_length: "1",
+      });
+      const response = await fetch(`/api/method/frappe.client.get_list?${query}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return null;
+      const body = await response.json();
+      return body?.message?.[0]?.name ?? null;
+    },
+    { doctype, filters },
+  );
+}
+
 /**
- * Log a company-paid expense against the seeded job, through the API the app
- * itself calls. Frappe refuses a POST without the CSRF token the page holds,
- * so it is read out of the live page rather than guessed.
+ * Log a company-paid expense against the seeded **open** job, through the API
+ * the app itself calls. Frappe refuses a POST without the CSRF token the page
+ * holds, so it is read out of the live page rather than guessed.
+ *
+ * Named rather than "whatever job comes back first", and that is not fussiness.
+ * The seed converts the closed job last, so it is the most recently modified
+ * and an unordered `limit_page_length=1` returns exactly it - and #123 refuses
+ * spending against a job at its closing stage. The first draft asked for a job
+ * and would have been handed the one the product forbids writing to, failing on
+ * a lock working correctly.
  */
 async function postExpense(page, amount) {
-  const job = await page.evaluate(async () => {
-    const response = await fetch(
-      "/api/method/frappe.client.get_list?doctype=Job&limit_page_length=1",
-      { headers: { Accept: "application/json" } },
-    );
-    const body = await response.json();
-    return body?.message?.[0]?.name ?? null;
-  });
+  const deal = await firstName(page, "Deal", [["title", "=", JOB_DEAL]]);
+  if (!deal) return false;
+  const job = await firstName(page, "Job", [["deal", "=", deal]]);
   if (!job) return false;
 
   return page.evaluate(
