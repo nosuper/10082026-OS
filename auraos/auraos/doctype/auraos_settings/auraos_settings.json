@@ -29,7 +29,9 @@
   "bank_account_name",
   "signature_section",
   "signatory_name",
-  "signatory_title"
+  "signatory_title",
+  "forecast_section",
+  "stage_forecast"
  ],
  "fields": [
   {
@@ -184,6 +186,19 @@
    "fieldtype": "Int",
    "label": "Brand Work Target %",
    "non_negative": 1
+  },
+  {
+   "description": "Per-stage dials for the cash forecast (#102). A stage with no row falls back to the house default in auraos/lib/forecast.py and is shown as such - an absent row is the only thing that can mean \"not configured\", because Lost is legitimately 0% and a stored 0 reads exactly like a field nobody ever wrote.",
+   "fieldname": "forecast_section",
+   "fieldtype": "Section Break",
+   "label": "Cash Forecast"
+  },
+  {
+   "description": "Win probability and lead time per deal stage. Read live on every forecast: nothing is cached and no weighted figure is stored anywhere, so a probability changed here changes the forecast on the next read.",
+   "fieldname": "stage_forecast",
+   "fieldtype": "Table",
+   "label": "Stage Forecast Rules",
+   "options": "Deal Stage Forecast"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -107,6 +107,24 @@ type SilentPayload = { silence_days: number; deals: SilentDeal[] };
 
 type ExpenseResult = { name: string; amount: number; category: string | null };
 
+/**
+ * The weighted pipeline projection (#102), narrowed to what this tile reads.
+ *
+ * Note the field names, which are the point rather than a detail. The tile
+ * beside this one adds up `estimated_budget` and calls itself Pipeline: that is
+ * the unweighted figure, every open deal at face value. This one is every open
+ * deal multiplied by the probability of the stage it sits at - an estimate
+ * times a guess - and the server refuses to call it a total, a balance or an
+ * income so that no screen can print it as money the studio has. The label here
+ * is a courtesy; `weighted_projection` is the guarantee.
+ */
+type ForecastTile = {
+  basis: string;
+  weighted_projection: number;
+  open_pipeline: number;
+  deal_count: number;
+};
+
 // The eight canonical job stages (spec #81). Anything else reads neutral.
 const stageTone: Record<string, string> = {
   Production: "ink",
@@ -173,6 +191,16 @@ function HomePage() {
     retry: false,
   });
 
+  // Founder-only for the same reason, and refused by the server rather than
+  // hidden by the browser: the projection is the founder's own probability
+  // dials multiplied by deal values a producer already knows, so handing it
+  // over would hand the dials back by division.
+  const forecast = useMethod<ForecastTile>(
+    "auraos.api.weighted_pipeline_forecast",
+    { months: 6 },
+    { enabled: session.isFounder, retry: false },
+  );
+
   const openDeals = (deals.data ?? []).filter((row) => !RESOLVED_DEAL_STAGES.has(row.stage));
   const openJobs = (jobs.data ?? []).filter((row) => row.stage !== "Complete");
   const milestones = overdue.data?.milestones ?? [];
@@ -225,7 +253,11 @@ function HomePage() {
       }
     >
       <div className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div
+          className={`grid gap-3 sm:grid-cols-2 ${
+            session.isFounder ? "xl:grid-cols-5" : "xl:grid-cols-4"
+          }`}
+        >
           <Stat
             label="Pipeline · open deals"
             value={
@@ -233,8 +265,34 @@ function HomePage() {
                 <Money value={sum(openDeals.map((d) => d.estimated_budget))} />
               </Figure>
             }
-            sub={deals.isSuccess ? countLabel(openDeals.length, "deal") : undefined}
+            sub={
+              deals.isSuccess ? `${countLabel(openDeals.length, "deal")} at face value` : undefined
+            }
           />
+          {/* The weighted figure, named apart from the unweighted one above it
+              in the payload and not only in this label. Founder-only, and the
+              card is absent for a producer because the server refuses the read.
+              See routes/finance.forecast.tsx for the whole screen. */}
+          {session.isFounder ? (
+            <Stat
+              label="Weighted projection · not cash"
+              value={
+                <Figure query={forecast}>
+                  <Money value={forecast.data?.weighted_projection ?? 0} />
+                </Figure>
+              }
+              // Names its own base on purpose. The tile to the left adds up
+              // estimated budgets; this one weights the better number where
+              // there is one - a sent quote beats a budget - so the two start
+              // from different figures and a founder is owed that in writing
+              // rather than left to wonder at the gap.
+              sub={
+                forecast.isSuccess
+                  ? `Next 6 months · weighted from ${vnd(forecast.data?.open_pipeline ?? 0)} ₫ of quoted or budgeted value`
+                  : undefined
+              }
+            />
+          ) : null}
           <Stat
             label="In production"
             value={

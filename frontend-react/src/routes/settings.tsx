@@ -23,7 +23,7 @@ import { LockKeyhole, Upload } from "lucide-react";
 import { useState, type ChangeEvent, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
-import { Card, Pill } from "@/components/aura/primitives";
+import { Card, Pill, Td, Th } from "@/components/aura/primitives";
 import { ErrorState, QueryStates } from "@/components/aura/states";
 import { FrappeError, uploadFile } from "@/lib/frappe";
 import { parseVnd, vnd } from "@/lib/format";
@@ -61,6 +61,24 @@ type PositioningRules = {
   mix: Record<MixKey, number>;
   project_types: ProjectTypeRow[];
 };
+
+/**
+ * One deal stage's forecast dials (#102). `configured` is the load-bearing
+ * field: AuraOS Settings is a Single, so a row nobody has written reads back as
+ * 0 rather than as nothing - and Lost is legitimately 0. Only whether a row
+ * exists can tell the founder's decision from silence, so the server sends that
+ * fact rather than leaving this screen to guess it from a zero.
+ */
+type StageForecastRule = {
+  stage: string;
+  win_probability_pct: number;
+  lead_days: number;
+  configured: boolean;
+  /** Won and Lost carry dials but never contribute: a won deal is a job. */
+  contributes: boolean;
+};
+
+type StageForecastRules = { stages: StageForecastRule[] };
 
 /** The company block, keyed by the field names auraos.lib.quote.COMPANY_FIELDS
  *  accepts. Anything not on that list is refused by name on save. */
@@ -133,8 +151,13 @@ function SettingsPage() {
     probe,
   );
   const company = useMethod<CompanyIdentity>("auraos.api.get_company_identity", undefined, probe);
+  const forecast = useMethod<StageForecastRules>(
+    "auraos.api.stage_forecast_rules",
+    undefined,
+    probe,
+  );
 
-  const queries = [floor, silence, terms, tiers, positioning, company];
+  const queries = [floor, silence, terms, tiers, positioning, company, forecast];
 
   // The gate. One refused read is enough: the settings single is readable as a
   // whole or not at all, so a partial screen would be a lie.
@@ -203,6 +226,8 @@ function SettingsPage() {
                   }
                 />
               </div>
+
+              <StageForecastCard rules={forecast.data?.stages ?? []} />
 
               <CompanyCard initial={company.data ?? {}} />
             </div>
@@ -676,6 +701,139 @@ function CompanyCard({ initial }: { initial: CompanyIdentity }) {
         </div>
 
         <SaveRow pending={save.isPending} saved={saved} error={save.isError ? save.error : null} />
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * The cash forecast dials (#102): a win probability and a lead time per deal
+ * stage, the two numbers that turn an open pipeline into an expected month.
+ *
+ * Saved as one table in one call. The founder reads the seven stages together
+ * and reasons about them together - Quote Sent has to be worth more than
+ * Breakdown - and a half-applied table would forecast with one stage's old
+ * probability and another's new one.
+ *
+ * A stage with no stored row is governed by the house default in
+ * auraos/lib/forecast.py and is marked as such, rather than showing the 0 an
+ * unwritten field on a Single actually reads back as. Saving writes every row,
+ * including a probability of 0, which is how a deliberate zero (Lost) stops
+ * being indistinguishable from silence.
+ *
+ * Nothing here stores a forecast figure. The projection is derived from these
+ * dials on every read, so moving one moves the number on the Forecast tab
+ * immediately - there is no cached total in between to go stale.
+ */
+function StageForecastCard({ rules }: { rules: StageForecastRule[] }) {
+  const [draft, setDraft] = useState<StageForecastRule[]>(rules);
+  const [saved, setSaved] = useState(false);
+
+  const save = useMethodMutation<StageForecastRules, { rules: StageForecastRule[] }>(
+    "auraos.api.set_stage_forecast_rules",
+    {
+      invalidate: [
+        resultOf("auraos.api.stage_forecast_rules"),
+        resultOf("auraos.api.weighted_pipeline_forecast"),
+      ],
+      onSuccess: (stored) => {
+        setDraft(stored.stages);
+        setSaved(true);
+      },
+    },
+  );
+
+  const set = (stage: string, field: "win_probability_pct" | "lead_days", next: number) => {
+    setDraft((rows) =>
+      rows.map((row) => (row.stage === stage ? { ...row, [field]: next } : row)),
+    );
+    setSaved(false);
+  };
+
+  const unconfigured = draft.filter((row) => !row.configured).length;
+
+  return (
+    <Card
+      title="Cash forecast dials"
+      subtitle="What each stage is worth, and how far ahead it bills"
+      action={
+        unconfigured ? <Pill tone="ember">{unconfigured} on house defaults</Pill> : null
+      }
+    >
+      <form
+        className="p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSaved(false);
+          save.mutate({
+            rules: draft.map((row) => ({
+              ...row,
+              win_probability_pct: Number(row.win_probability_pct) || 0,
+              lead_days: Number(row.lead_days) || 0,
+            })),
+          });
+        }}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="border-b border-border">
+              <tr>
+                <Th>Stage</Th>
+                <Th className="text-right">Win probability %</Th>
+                <Th className="text-right">Lead time (days)</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {draft.map((row) => (
+                <tr key={row.stage} className={row.contributes ? "" : "opacity-60"}>
+                  <Td>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{row.stage}</span>
+                      {row.configured ? null : <Pill>House default</Pill>}
+                      {row.contributes ? null : <Pill tone="outline">Not pipeline</Pill>}
+                    </div>
+                  </Td>
+                  <Td className="text-right">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={row.win_probability_pct}
+                      onChange={(event) =>
+                        set(row.stage, "win_probability_pct", Number(event.target.value))
+                      }
+                      className="num w-24 rounded-lg border border-border bg-background px-2.5 py-1.5 text-right text-sm focus:border-ember focus:outline-none"
+                    />
+                  </Td>
+                  <Td className="text-right">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={row.lead_days}
+                      onChange={(event) => set(row.stage, "lead_days", Number(event.target.value))}
+                      className="num w-24 rounded-lg border border-border bg-background px-2.5 py-1.5 text-right text-sm focus:border-ember focus:outline-none"
+                    />
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Every open deal contributes its value times the probability of the stage it sits at,
+          landing in the month that stage&apos;s lead time reaches counted from today. Won and Lost
+          keep their dials for the record but never contribute - a won deal is already a job, and
+          counting it here would have the same money arriving twice. Nothing is stored as a
+          forecast: change a number and the Forecast tab changes on its next read.
+        </p>
+        <SaveRow
+          pending={save.isPending}
+          saved={saved}
+          error={save.isError ? save.error : null}
+          label="Save the dials"
+        />
       </form>
     </Card>
   );

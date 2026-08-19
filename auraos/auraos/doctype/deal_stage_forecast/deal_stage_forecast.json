@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "creation": "2026-08-19 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "stage",
+  "win_probability_pct",
+  "lead_days"
+ ],
+ "fields": [
+  {
+   "description": "One row per Deal stage. A stage with no row here is not configured, and the house default in auraos/lib/forecast.py governs it - which is the only way to tell \"the founder means 0\" from \"nobody has said yet\", because Lost is legitimately 0.",
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Stage",
+   "options": "Brief Received\nDe-brief\nBreakdown\nQuote Sent\nNegotiation\nWon\nLost",
+   "reqd": 1
+  },
+  {
+   "description": "How much of this deal's value the forecast counts. Whole percent: a win probability finer than one point is false precision on a guess. Won is 100 and Lost is 0, but neither contributes - a won deal is a job, and its milestones are already receivables.",
+   "fieldname": "win_probability_pct",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Win Probability %",
+   "non_negative": 1
+  },
+  {
+   "description": "Days from today to the month a deal at this stage is expected to bill in. Counted from today, not from the day the deal entered the stage: a deal that has been sitting does not bill sooner for having waited.",
+   "fieldname": "lead_days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Lead Time (days)",
+   "non_negative": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-19 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Deal Stage Forecast",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

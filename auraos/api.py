@@ -2095,3 +2095,216 @@ def no_invoice_exposure():
                 )
             )
     return exposure.exposure_report(rows)
+
+
+# -- what the pipeline is worth in the months ahead (#102) --
+#
+# A projection, and named like one at every level of the payload. The
+# weighted figure travels as `weighted_projection`, the unweighted
+# contrast as `open_pipeline`, and there is deliberately no key in here
+# called total, balance, amount or income - auraos.lib.forecast.CASH_WORDS
+# says which names are forbidden and `cash_shaped_keys` is what fails the
+# test when one appears. #101 put a cash balance and a receivables total
+# on the same dashboard; those are facts, provable against `sum(amount)`
+# in the database. This is an estimate multiplied by a guess, and the
+# next consumer of this endpoint must not be able to render it as money
+# the company has without renaming a field to do it.
+#
+# Nothing is stored and nothing is cached. The dials are read from the
+# settings rows on every call - not through frappe.get_cached_doc - so a
+# probability changed in Settings changes the forecast on the very next
+# read, with nothing in between that could hold a stale figure. There is
+# no forecast table, no month totals column, and no setter anywhere that
+# could write a weighted number.
+#
+# Founder-only, decided by the server: the permission asked for is read
+# on AuraOS Settings, which grants read to Founder and System Manager and
+# to no operating role. That is not squeamishness about the pipeline - a
+# producer already reads deal values on the deals board. It is that this
+# figure is the founder's own probability dials multiplied by values a
+# producer knows, and division would hand the dials straight back.
+#
+# The imports are local to keep this section additive - see
+# get_tier_thresholds() for the same shape.
+
+# Where the per-stage dials live: a child table on the settings Single.
+STAGE_FORECAST_TABLE = "Deal Stage Forecast"
+STAGE_FORECAST_FIELD = "stage_forecast"
+
+
+def _stored_stage_rules():
+    """The dials as stored, read from the rows rather than from a cache.
+
+    Read straight out of the child table on every call. A cached settings
+    document would be one more thing between a founder moving a slider
+    and the forecast moving with it, and "changing a probability changes
+    the forecast" is an acceptance criterion rather than a nicety.
+
+    An empty list is a real answer and not a failure: every stage falls
+    back to the house default in auraos.lib.forecast, which is the only
+    reading that does not turn an unconfigured site into an empty screen.
+    """
+    return frappe.get_all(
+        STAGE_FORECAST_TABLE,
+        filters={"parenttype": "AuraOS Settings", "parentfield": STAGE_FORECAST_FIELD},
+        fields=["stage", "win_probability_pct", "lead_days"],
+        order_by="idx asc",
+        limit_page_length=0,
+    )
+
+
+@frappe.whitelist()
+def stage_forecast_rules():
+    """The win probability and lead time in force for every deal stage.
+
+    Every stage of the Deal Select comes back, configured or not, so the
+    settings screen renders the whole vocabulary. `configured` says
+    whether a row exists: it is the only thing that can distinguish a
+    founder who means 0% (Lost) from a stage nobody has been asked about,
+    because on a Single an unwritten Int reads back as 0 as well.
+    """
+    from auraos.lib import forecast
+
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return {
+        "stages": [
+            {
+                "stage": rule.stage,
+                "win_probability_pct": rule.win_probability_pct,
+                "lead_days": rule.lead_days,
+                "configured": rule.configured,
+                "contributes": rule.stage not in forecast.RESOLVED,
+            }
+            for rule in forecast.stage_rules(_stored_stage_rules())
+        ]
+    }
+
+
+@frappe.whitelist()
+def set_stage_forecast_rules(rules):
+    """Store the founder's own dials, the whole table in one call.
+
+    The table is rewritten rather than patched row by row: the founder
+    edits every stage on one card, and a half-applied pair would forecast
+    with one stage's old probability and another's new one.
+
+    A probability of 0 is written and kept. That is the point of storing
+    rows at all - a 0 that somebody typed is a decision, and it is only
+    distinguishable from silence because the row exists to hold it.
+    """
+    from auraos.lib import forecast
+
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    wanted = frappe.parse_json(rules) or []
+
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.set(STAGE_FORECAST_FIELD, [])
+    for row in wanted:
+        stage = (row.get("stage") or "").strip()
+        if stage not in forecast.STAGES:
+            frappe.throw(
+                _("{0} is not a deal stage").format(stage or "?"),
+                frappe.ValidationError,
+            )
+        probability = int(row.get("win_probability_pct") or 0)
+        if not 0 <= probability <= 100:
+            frappe.throw(
+                _("A win probability is a percentage between 0 and 100, not {0}").format(
+                    probability
+                ),
+                frappe.ValidationError,
+            )
+        settings.append(
+            STAGE_FORECAST_FIELD,
+            {
+                "stage": stage,
+                "win_probability_pct": probability,
+                "lead_days": max(int(row.get("lead_days") or 0), 0),
+            },
+        )
+    settings.save()
+    return stage_forecast_rules()
+
+
+# What a deal needs for its value and its identity on the forecast. The
+# three value fields are the ladder auraos.lib.forecast.deal_value walks:
+# the quote the client holds, the deal's own pricing, the client's budget.
+FORECAST_DEAL_FIELDS = [
+    "name",
+    "title",
+    "stage",
+    "estimated_budget",
+    "quote_total",
+    "latest_quote",
+]
+
+
+@frappe.whitelist()
+def weighted_pipeline_forecast(months=6):
+    """The open pipeline weighted by stage probability, month by month.
+
+    Every figure is derived on this call out of the deals and the dials,
+    and stored nowhere. A studio with no open deals gets the horizon with
+    every month at zero and every stage at zero rather than an error -
+    the same silence #101 chose for a company that has named no account.
+
+    The value weighted is the best number written down for the deal: the
+    total on the quote the client is holding, then the deal's own priced
+    breakdown, then the client's stated budget. A published quote is a
+    better number than a budget, and weighting the worse one when the
+    better one exists would be wrong on purpose. Which one answered
+    travels with the row as `value_basis`.
+    """
+    from auraos.lib import forecast
+
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    deals = frappe.get_all(
+        "Deal",
+        filters={"stage": ["not in", list(forecast.RESOLVED)]},
+        fields=FORECAST_DEAL_FIELDS,
+        order_by="modified desc",
+        limit_page_length=0,
+    )
+    quoted = _quoted_totals(deals)
+    for deal in deals:
+        # The frozen total off the quote the client was actually sent,
+        # which does not move when somebody edits a cost line afterwards.
+        deal["quoted_total"] = quoted.get(deal.get("latest_quote"))
+    return forecast.projection(
+        deals,
+        forecast.stage_rules(_stored_stage_rules()),
+        today=frappe.utils.today(),
+        months=_forecast_months(months),
+    )
+
+
+def _quoted_totals(deals):
+    """{quote: total} for the latest quote of each deal, frozen as sent."""
+    names = {deal.get("latest_quote") for deal in deals if deal.get("latest_quote")}
+    if not names:
+        return {}
+    return dict(
+        frappe.get_all(
+            "Deal Quote",
+            filters={"name": ["in", list(names)]},
+            fields=["name", "total"],
+            as_list=True,
+        )
+    )
+
+
+# How far ahead a forecast may be asked to look. A floor of one month
+# because a horizon of none is not a screen, and a ceiling because the
+# months come down as rows and a caller asking for a century would be
+# asking this endpoint to render one.
+MIN_FORECAST_MONTHS = 1
+MAX_FORECAST_MONTHS = 24
+
+
+def _forecast_months(months):
+    """The horizon a caller asked for, clamped to something renderable."""
+    try:
+        wanted = int(months or 6)
+    except (TypeError, ValueError):
+        wanted = 6
+    return max(MIN_FORECAST_MONTHS, min(wanted, MAX_FORECAST_MONTHS))
