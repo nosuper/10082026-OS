@@ -13,6 +13,7 @@ import { Card, Money, Pill } from "@/components/aura/primitives";
 import { ErrorState, QueryState } from "@/components/aura/states";
 import {
   COLLECTION_STATUSES,
+  INVOICED,
   LOCKED_STATUSES,
   PAID,
   STAGES,
@@ -23,20 +24,22 @@ import {
 import { countLabel, formatDate, overdueLabel } from "@/lib/format";
 import { resultOf, useMethod, useMethodMutation } from "@/lib/queries";
 
-/**
- * The invoice a milestone was billed under, as the server now sends it. Declared
- * here rather than beside Milestone because this panel is the only screen reading
- * it so far; it belongs on the shared type as soon as a second one does.
- */
-type IssuedInvoice = { invoice_no: string | null; invoice_vat_pct: number | null };
-
 /** A milestone as the panel edits it: the stored row plus a stable row key. */
-type PlanRow = Milestone & Partial<IssuedInvoice> & { key: string };
+type PlanRow = Milestone & { key: string };
 
 type InvoiceText = { text: string };
 
 function isLocked(row: PlanRow): boolean {
   return LOCKED_STATUSES.includes(row.status);
+}
+
+/**
+ * Whether a status still holds an invoice: đã xuất HĐ and everything past it.
+ * Anything short of it has walked back before the invoice was issued, and the
+ * server clears the number, the issue date and the rate together.
+ */
+function keepsInvoice(status: string): boolean {
+  return LOCKED_STATUSES.includes(status);
 }
 
 function pctOf(row: { pct: number | null }): number {
@@ -83,18 +86,20 @@ function stampFor(row: PlanRow): string {
 }
 
 /**
- * The invoice this milestone was billed under - its number and the VAT rate it
- * was written at. Shown from the issue date, because the issue date is what says
- * an invoice exists: a milestone with no date has no invoice to describe, and one
- * issued before the number came back from the accountant says so rather than
- * leaving a gap the founder has to interpret.
+ * The VAT rate the invoice beside it was written at. Shown from the issue date,
+ * because the issue date is what says an invoice exists: a milestone with no
+ * date has no invoice to describe, and a rate of 0 is a real export invoice
+ * rather than a way of saying nothing was issued.
+ *
+ * Shown and never edited. The rate is captured once, at issue, from the job -
+ * today's rate must not restate an invoice the client is already holding - so
+ * there is no control for it anywhere on this screen.
  */
-function invoiceLine(row: PlanRow): string | null {
+function vatNote(row: PlanRow): string | null {
   if (!row.invoiced_on) return null;
   const rate = row.invoice_vat_pct;
-  const parts = [row.invoice_no || "invoice number not recorded"];
-  if (rate !== null && rate !== undefined) parts.push(`VAT ${Number(rate)}%`);
-  return parts.join(" - ");
+  if (rate === null || rate === undefined) return null;
+  return `VAT ${Number(rate)}%`;
 }
 
 /** The four planning fields, as the comparison for "unsaved". */
@@ -190,6 +195,8 @@ export function JobMilestonesPanel({ job }: { job: string }) {
         requested_on: null,
         invoiced_on: null,
         paid_on: null,
+        invoice_no: null,
+        invoice_vat_pct: null,
         overdue: false,
         days_overdue: 0,
       },
@@ -197,8 +204,38 @@ export function JobMilestonesPanel({ job }: { job: string }) {
   }
 
   function setStatus(row: PlanRow, status: string) {
-    setRows((current) => current.map((one) => (one.key === row.key ? { ...one, status } : one)));
+    // Walking back before đã xuất HĐ clears the invoice on the server - number,
+    // issue date and rate in one go, because a number with no issue date is a
+    // number nobody issued. The row drops all three in the same breath, so the
+    // screen never shows a number the server has already forgotten.
+    const invoice = keepsInvoice(status)
+      ? {}
+      : { invoice_no: null, invoice_vat_pct: null, invoiced_on: null };
+    setRows((current) =>
+      current.map((one) => (one.key === row.key ? { ...one, status, ...invoice } : one)),
+    );
     statusSetter.mutate({ job, milestone: row.name, status });
+  }
+
+  /**
+   * The number the accountant sent back, saved through the same door as the
+   * status: đã xuất HĐ stamps the issue date and carries the number beside it.
+   * Sent again while the milestone is still invoiced it corrects a mistyped
+   * number and leaves the issue date alone, which is what the accountant's
+   * corrections need.
+   *
+   * Only sent while the milestone is marked đã xuất HĐ. The server refuses a
+   * number at any other status, and the only way to obey it from a paid
+   * milestone would be to send đã xuất HĐ too - walking a collected payment
+   * back behind the founder. A text field must not do that, so the field waits
+   * for the status instead.
+   */
+  function saveInvoiceNo(row: PlanRow) {
+    if (!row.name || row.status !== INVOICED) return;
+    const typed = (row.invoice_no ?? "").trim();
+    const savedRow = stored.find((one) => one.name === row.name);
+    if (savedRow && (savedRow.invoice_no ?? "") === typed) return;
+    statusSetter.mutate({ job, milestone: row.name, status: INVOICED, invoice_no: typed });
   }
 
   function savePlan() {
@@ -353,12 +390,45 @@ export function JobMilestonesPanel({ job }: { job: string }) {
                           {stampFor(row)}
                         </div>
                       ) : null}
-                      {row.name && invoiceLine(row) ? (
-                        <div
-                          className="num text-xs text-muted-foreground"
-                          title="The invoice this milestone was billed under, and the VAT rate it was written at"
-                        >
-                          {invoiceLine(row)}
+                      {/* The invoice, beside the status that issues it. The
+                          number is the only part anyone types: the rate is the
+                          job's on the day the invoice went out, captured once
+                          and never restated, so it is shown and not offered. */}
+                      {row.name ? (
+                        <div className="mt-1 flex items-center gap-2">
+                          <input
+                            value={row.invoice_no ?? ""}
+                            disabled={row.status !== INVOICED}
+                            placeholder="Invoice number"
+                            aria-label="Invoice number"
+                            title={
+                              row.status === INVOICED
+                                ? "The number the accountant sent back. Retyping it corrects the number without moving the issue date."
+                                : `An invoice number belongs to a milestone marked ${INVOICED} - set the status first.`
+                            }
+                            onChange={(event) =>
+                              setRows((current) =>
+                                current.map((one) =>
+                                  one.key === row.key
+                                    ? { ...one, invoice_no: event.target.value }
+                                    : one,
+                                ),
+                              )
+                            }
+                            onBlur={() => saveInvoiceNo(row)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") event.currentTarget.blur();
+                            }}
+                            className="num w-32 rounded-lg border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-border-strong disabled:border-transparent disabled:bg-transparent disabled:px-0 disabled:text-muted-foreground"
+                          />
+                          {vatNote(row) ? (
+                            <span
+                              className="num text-xs text-muted-foreground"
+                              title="The VAT rate this invoice was written at, recorded when it was issued"
+                            >
+                              {vatNote(row)}
+                            </span>
+                          ) : null}
                         </div>
                       ) : null}
                     </td>

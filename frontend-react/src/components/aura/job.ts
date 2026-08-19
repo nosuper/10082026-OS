@@ -46,6 +46,12 @@ export const COLLECTION_STATUSES = [
   { value: "Paid", vi: "đã thanh toán" },
 ];
 
+/**
+ * đã xuất HĐ, by name: the one status an invoice number belongs to. The server
+ * refuses a number sent with any other, so the screen asks the same question.
+ */
+export const INVOICED = "Invoiced";
+
 export const PAID = "Paid";
 
 /**
@@ -127,6 +133,15 @@ export type Milestone = {
   requested_on: string | null;
   invoiced_on: string | null;
   paid_on: string | null;
+  /**
+   * The invoice this milestone was billed under - the number the accountant
+   * sent back, and the VAT rate it was written at. Both are null unless
+   * invoiced_on is set, because the issue date is what says an invoice exists:
+   * a Percent column cannot hold nothing, and 0% is a rate an export invoice is
+   * genuinely written at. Never read absence from a zero rate.
+   */
+  invoice_no: string | null;
+  invoice_vat_pct: number | null;
   overdue: boolean;
   days_overdue: number;
 };
