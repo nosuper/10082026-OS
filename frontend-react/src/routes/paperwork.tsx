@@ -14,11 +14,8 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Bold,
   Download,
   FileText,
-  Italic,
-  List,
   LockKeyhole,
   Pencil,
   Printer,
@@ -27,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { EditorToolbar } from "@/components/aura/RichText";
 import {
   PAPER_STATUSES,
   PaperStatusSelect,
@@ -1118,35 +1116,11 @@ function TemplateEditorDialog({
         />
 
         <div ref={frame} className="relative">
-          <div className="flex flex-wrap items-center gap-1 rounded-t-lg border border-border bg-secondary/60 px-2 py-1.5">
-            <ToolButton label="Bold" onPress={() => document.execCommand("bold")}>
-              <Bold className="size-3.5" />
-            </ToolButton>
-            <ToolButton label="Italic" onPress={() => document.execCommand("italic")}>
-              <Italic className="size-3.5" />
-            </ToolButton>
-            <ToolButton
-              label="Bulleted list"
-              onPress={() => document.execCommand("insertUnorderedList")}
-            >
-              <List className="size-3.5" />
-            </ToolButton>
-            <span className="mx-1 h-4 w-px bg-border" />
-            <select
-              defaultValue="p"
-              onMouseDown={(event) => event.stopPropagation()}
-              onChange={(event) => {
-                document.execCommand("formatBlock", false, event.target.value);
-                event.target.value = "p";
-              }}
-              className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-            >
-              <option value="p">Body text</option>
-              <option value="h1">Heading 1</option>
-              <option value="h2">Heading 2</option>
-              <option value="h3">Heading 3</option>
-            </select>
-          </div>
+          {/* The app's one toolbar - components/aura/RichText.tsx. It acts
+              on the document selection rather than on a reference to this
+              body, which is what lets the placeholder machinery below stay
+              here while the controls are shared with the deal brief. */}
+          <EditorToolbar />
 
           <div
             ref={body}
@@ -1225,30 +1199,5 @@ function TemplateEditorDialog({
         {failure ? <ErrorState error={failure} className="px-0 py-2" /> : null}
       </div>
     </Modal>
-  );
-}
-
-function ToolButton({
-  label,
-  onPress,
-  children,
-}: {
-  label: string;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        onPress();
-      }}
-      className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-    >
-      {children}
-    </button>
   );
 }

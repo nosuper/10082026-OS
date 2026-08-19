@@ -34,6 +34,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { RichText } from "@/components/aura/RichText";
 import { Card, Money, Pill } from "@/components/aura/primitives";
 import { Empty, ErrorState, Loading } from "@/components/aura/states";
 import { FrappeError, uploadFile } from "@/lib/frappe";
@@ -399,12 +400,18 @@ function DealPage() {
   const [uploading, setUploading] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
 
+  // Bumped on every seed so the brief editor remounts with the server's
+  // copy. It is a token rather than the deal code because reload() re-seeds
+  // the same deal, and that has to reload the editor too.
+  const [seedToken, setSeedToken] = useState(0);
+
   function seed(data: DealDoc) {
     seeded.current = data.name;
     const fresh = toDraft(data);
     setServerDoc(data);
     setDraft(fresh);
     setBaseline(JSON.stringify(wire(fresh)));
+    setSeedToken((token) => token + 1);
   }
 
   // Seed once per deal. A later refetch of the same record must not overwrite
@@ -768,13 +775,18 @@ function DealPage() {
                   </div>
                 </Readout>
 
+                {/* Keyed on the seed, not on the draft. RichText writes its
+                    body once and never again while somebody types - see its
+                    docblock - so a new deal, or a reload that throws away what
+                    is on screen, has to remount it. Anything else either loses
+                    the reload or moves the caret on every keystroke. */}
                 <Field label="Brief" span>
-                  <textarea
-                    rows={3}
-                    value={draft.brief}
-                    onChange={(event) => edit({ brief: event.target.value })}
+                  <RichText
+                    key={seedToken}
+                    defaultValue={draft.brief}
+                    onChange={(html) => edit({ brief: html })}
                     placeholder="What the client asked for"
-                    className={inputClass}
+                    ariaLabel="Brief"
                   />
                 </Field>
 

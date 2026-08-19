@@ -8,3 +8,4 @@
 auraos.patches.backfill_generated_paper_status
 auraos.patches.record_invoice_vat_basis
 auraos.patches.backfill_cash_ledger
+auraos.patches.convert_deal_brief_to_html

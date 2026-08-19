@@ -13,6 +13,7 @@ import { ArrowUpRight, Clock, DollarSign, Link2, Plus, Search, Trash2, X } from 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { RichText } from "@/components/aura/RichText";
 import { ViewToggle } from "@/components/aura/Kanban";
 import { useSession } from "@/components/aura/SessionProvider";
 import { Card, Money, Pill, Td, Th } from "@/components/aura/primitives";
@@ -1806,12 +1807,21 @@ function NewDealDialog({
 
         <label className="block sm:col-span-2">
           <span className="label-caps">Brief</span>
-          <textarea
-            rows={3}
-            value={brief}
-            onChange={(event) => setBrief(event.target.value)}
-            className={`mt-1.5 ${inputClass}`}
-          />
+          {/* The same editor the deal screen uses, because this writes the
+              same field. `brief` is a Text Editor field now, so a plain
+              textarea here would put unescaped text into a column the rest of
+              the app renders as HTML - and the first deal briefed with
+              "budget < 200tr" would come back with half its sentence missing.
+              One editor also means one answer to what a line break is. */}
+          <div className="mt-1.5">
+            <RichText
+              defaultValue=""
+              onChange={setBrief}
+              placeholder="What the client asked for"
+              ariaLabel="Brief"
+              className="min-h-[5rem]"
+            />
+          </div>
         </label>
       </div>
     </Modal>
