@@ -35,6 +35,7 @@ from auraos.lib.finance import (
     expense_report,
     income_report,
     month_keys,
+    profit_and_loss,
     receivables_report,
 )
 from auraos.lib.milestones import INVOICED, NOT_REQUESTED, PAID, REQUESTED
@@ -336,6 +337,115 @@ def test_spend_is_whole_dong_never_a_float():
     report = expense_report([spend("2026-08-04", 1_500_000.4, "Crew")], "2026-08-01", "2026-08-31")
     total = report["categories"][0]["total"]
     assert isinstance(total, int) and total == 1_500_000
+
+
+# -- money in against money out: the profit and loss --
+
+
+def pnl(payments, spends, date_from="2026-01-01", date_to="2026-03-31"):
+    """The two reports composed, exactly as the endpoint composes them."""
+    return profit_and_loss(
+        income_report(payments, date_from, date_to),
+        expense_report(spends, date_from, date_to),
+    )
+
+
+def month(report, key):
+    return next(row for row in report["months"] if row["month"] == key)
+
+
+def test_a_period_with_no_activity_is_zeroed_rather_than_broken():
+    report = pnl([], [])
+    assert [row["month"] for row in report["months"]] == ["2026-01", "2026-02", "2026-03"]
+    for row in report["months"]:
+        assert (row["income"], row["expense"], row["profit"]) == (0, 0, 0)
+        assert row["margin_pct"] is None
+    assert report["total"]["profit"] == 0
+    assert report["total"]["margin_pct"] is None
+
+
+def test_a_month_pairs_the_income_and_the_spend_that_fell_in_it():
+    report = pnl(
+        [payment("2026-01-15", 100_000_000), payment("2026-02-03", 50_000_000)],
+        [spend("2026-01-20", 40_000_000, "Crew")],
+    )
+    assert (month(report, "2026-01")["income"], month(report, "2026-01")["expense"]) == (
+        100_000_000,
+        40_000_000,
+    )
+    assert month(report, "2026-02")["expense"] == 0
+    assert month(report, "2026-03")["income"] == 0
+
+
+def test_profit_is_the_income_less_the_expense_on_every_row():
+    report = pnl(
+        [payment("2026-01-15", 100_000_000)],
+        [spend("2026-01-20", 40_000_000, "Crew")],
+    )
+    assert month(report, "2026-01")["profit"] == 60_000_000
+    assert month(report, "2026-01")["margin_pct"] == 60.0
+
+
+def test_a_month_that_spent_without_collecting_reads_negative():
+    """Not flattened at zero: the studio really is down that money."""
+    report = pnl([], [spend("2026-03-02", 7_000_000, "Crew")])
+    assert month(report, "2026-03")["profit"] == -7_000_000
+
+
+def test_a_month_with_spend_and_no_income_has_no_margin_percentage():
+    """None, never 0 - 0% would read as a month that broke even."""
+    report = pnl([], [spend("2026-03-02", 7_000_000, "Crew")])
+    assert month(report, "2026-03")["margin_pct"] is None
+
+
+def test_the_total_is_exactly_the_sum_of_the_printed_months():
+    report = pnl(
+        [payment("2026-01-15", 100_000_000), payment("2026-02-03", 50_000_000)],
+        [spend("2026-01-20", 40_000_000, "Crew"), spend("2026-03-02", 7_000_000)],
+    )
+    assert report["total"]["income"] == sum(row["income"] for row in report["months"])
+    assert report["total"]["expense"] == sum(row["expense"] for row in report["months"])
+    assert report["total"]["profit"] == sum(row["profit"] for row in report["months"])
+
+
+def test_the_counts_are_carried_through_from_both_sides():
+    report = pnl(
+        [payment("2026-01-15", 100_000_000), payment("2026-02-03", 50_000_000)],
+        [spend("2026-01-20", 40_000_000, "Crew")],
+    )
+    assert report["total"]["income_count"] == 2
+    assert report["total"]["expense_count"] == 1
+    assert month(report, "2026-01")["expense_count"] == 1
+    assert month(report, "2026-02")["expense_count"] == 0
+
+
+def test_the_profit_and_loss_declares_the_basis_and_the_range():
+    report = pnl([], [])
+    assert report["basis"] == "cash"
+    assert (report["date_from"], report["date_to"]) == ("2026-01-01", "2026-03-31")
+
+
+def test_a_range_that_ends_before_it_starts_reports_no_months():
+    report = pnl([], [], date_from="2026-03-31", date_to="2026-01-01")
+    assert report["months"] == []
+    assert report["total"]["income"] == 0
+    assert report["total"]["profit"] == 0
+
+
+def test_every_figure_is_whole_dong_never_a_float():
+    report = pnl([payment("2026-01-15", 100_000_000.4)], [spend("2026-01-20", 40_000_000.4)])
+    row = month(report, "2026-01")
+    assert all(isinstance(row[key], int) for key in ("income", "expense", "profit"))
+    assert row["profit"] == 60_000_000
+
+
+def test_the_profit_and_loss_carries_no_founder_number():
+    """Cash in and cash out. The profit chain is a different door."""
+    forbidden = {"commission", "cm", "profit_before_tax", "tndn", "net_profit", "vat_payable"}
+    report = pnl([payment("2026-01-15", 100_000_000)], [spend("2026-01-20", 40_000_000)])
+    assert not forbidden & set(report)
+    assert not forbidden & set(report["total"])
+    assert not forbidden & set(report["months"][0])
 
 
 # -- money owed: the ageing ladder --

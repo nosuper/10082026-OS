@@ -102,3 +102,22 @@ export function overdueLabel(days: number | null | undefined): string {
 export function countLabel(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
+
+const PERCENT = new Intl.NumberFormat("vi-VN", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+/**
+ * A percentage to one decimal, grouped the Vietnamese way: `68,7%`.
+ *
+ * Null is a dash, never `0%`. The server sends null for a margin it could not
+ * measure - a month nothing came in, a job quoted at nothing - and 0% would
+ * read as breaking even, which is a different and much better piece of news
+ * than having no revenue at all. auraos.lib.reporting.margin_pct draws that
+ * line on the server; this is the only place the browser prints it.
+ */
+export function percent(value: number | null | undefined, blank = "-"): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return blank;
+  return `${PERCENT.format(value)}%`;
+}

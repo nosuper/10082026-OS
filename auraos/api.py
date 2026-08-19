@@ -1224,6 +1224,27 @@ def finance_receivables():
     )
 
 
+@frappe.whitelist()
+def finance_profit_and_loss(date_from, date_to):
+    """Money in against money out for a range, month by month.
+
+    Both sides through the two endpoints that already answer them, so
+    the profit and loss cannot print an income the income screen does
+    not, and the permission check on each side is the one that side
+    already carries: a session that may not list job expenses gets no
+    profit and loss, not a profit and loss with the cost side missing.
+
+    The subtraction is auraos.lib.finance's, not the browser's. A screen
+    holding two arrays of months and zipping them itself would be the
+    second place in this app that decides what a margin is when nothing
+    came in, and the two places would eventually disagree.
+    """
+    return finance.profit_and_loss(
+        finance_income(date_from, date_to),
+        finance_expenses(date_from, date_to),
+    )
+
+
 # -- what a job earned (the new UI's per-job profitability) --
 
 # A job stops being open at the end of the production flow; everything
@@ -1264,7 +1285,7 @@ def _job_profit(doc, client=None):
 
 
 @frappe.whitelist()
-def job_profitability(job=None):
+def job_profitability(job=None, include_closed=0):
     """What a job has earned so far - one job, or every open one.
 
     Margin, deliberately, and not the founder profit chain. A producer
@@ -1277,15 +1298,27 @@ def job_profitability(job=None):
 
     With no argument the answer is the whole board, scoped by get_list
     so a producer sees only the jobs they may list.
+
+    `include_closed` widens that board to the jobs that have finished.
+    Off by default because the caller that has always asked this question
+    - the job list - is watching work in progress, and a delivered job is
+    not news. A margin report is the other reading: the only jobs whose
+    margin is final are the closed ones, and a ranking that showed none
+    of them would rank the studio on its unfinished work. Each row
+    carries its own `stage`, so the two are told apart on the answer
+    rather than by asking twice.
     """
     if job:
         _check_job_permission(job, "read")
         names = [job]
     else:
         frappe.has_permission("Job", "read", throw=True)
+        filters = {} if frappe.utils.cint(include_closed) else {
+            "stage": ["!=", CLOSED_JOB_STAGE]
+        }
         names = frappe.get_list(
             "Job",
-            filters={"stage": ["!=", CLOSED_JOB_STAGE]},
+            filters=filters,
             pluck="name",
             order_by="modified desc",
             limit_page_length=0,

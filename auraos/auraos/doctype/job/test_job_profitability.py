@@ -206,6 +206,44 @@ class TestProfitabilityScope(ProfitabilityTestCase):
         # the one whose margin the founder wants to read.
         self.assertEqual(profit_of(self.job)["name"], self.job)
 
+    def test_a_finished_job_is_answered_when_the_report_asks_for_it(self):
+        """The margin report's reading: a closed job is the only one
+        whose margin is final, so a ranking that dropped it would rank
+        the studio on its unfinished work."""
+        self.doc.stage = STAGES[-1]
+        self.doc.save()
+
+        names = [row["name"] for row in job_profitability(include_closed=1)]
+        self.assertIn(self.job, names)
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_the_widened_board_still_carries_the_open_jobs(self):
+        """include_closed adds the finished ones, it does not swap the
+        question for a closed-jobs-only one."""
+        self.assertIn(self.job, [row["name"] for row in job_profitability(include_closed=1)])
+
+    def test_a_row_says_which_of_the_two_it_is(self):
+        """The screen tells them apart on the answer rather than by
+        asking twice, so the stage has to come back on the row."""
+        self.doc.stage = STAGES[-1]
+        self.doc.save()
+
+        (row,) = [
+            row for row in job_profitability(include_closed=1) if row["name"] == self.job
+        ]
+        self.assertEqual(row["stage"], STAGES[-1])
+
+    def test_the_flag_arrives_over_http_as_a_string(self):
+        """Whitelisted arguments come off the query string, so "1" has
+        to mean the same as 1 and "0" the same as 0."""
+        self.doc.stage = STAGES[-1]
+        self.doc.save()
+
+        self.assertIn(self.job, [row["name"] for row in job_profitability(include_closed="1")])
+        self.assertNotIn(
+            self.job, [row["name"] for row in job_profitability(include_closed="0")]
+        )
+
     def test_a_job_that_does_not_exist_is_missing_not_forbidden(self):
         with self.assertRaises(frappe.DoesNotExistError):
             job_profitability("JOB-does-not-exist")

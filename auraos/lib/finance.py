@@ -1,8 +1,8 @@
-"""Finance aggregates across jobs: money in, money out, money owed.
+"""Finance aggregates across jobs: money in, money out, what is left, money owed.
 
 Framework-free by contract like the rest of auraos/lib; the whitelisted
 endpoints in auraos.api are thin adapters that fetch rows and hand them
-here. Three questions the finance screens ask, three shapes:
+here. Four questions the finance screens ask, four shapes:
 
 **Money in is cash, not invoices.** A milestone counts in the month the
 payment was recorded, never the month it fell due or the month the
@@ -17,6 +17,14 @@ float. An expense naming no category lands in one Uncategorised bucket
 rather than being dropped - the same rule actual-vs-quoted already uses,
 and the same constant.
 
+**What is left is the one less the other, and never a browser's
+subtraction.** The profit and loss composes the two reports above rather
+than recounting a row, so its January income is the income report's
+January income. It exists here because the alternative is a screen
+holding two arrays of months and deciding for itself which ones line up
+and what a margin means in a month nothing came in - a rule this module
+already owns for every other figure on those screens.
+
 **Money owed ages from the terms, not from the due date.** The overdue
 verdict and the days-late count come straight from auraos.lib.milestones,
 so an ageing bucket and the nudge on the jobs board cannot disagree.
@@ -30,7 +38,10 @@ chain is a different question asked through a different door.
 
 Rounding to whole đồng happens per part before the parts are added, so a
 month's total is exactly the sum of its printed rows and the range total
-is exactly the sum of its printed months. Nothing here emits a float.
+is exactly the sum of its printed months. No money figure here is ever a
+float. The one number that is - a margin percentage - is not money, and
+is None rather than 0 when there was no revenue to earn it on, because a
+month that took nothing in has no margin rather than a margin of zero.
 """
 
 from __future__ import annotations
@@ -42,6 +53,7 @@ from typing import Any, Iterable, Mapping
 from auraos.lib.milestones import PAID, days_overdue, is_overdue
 from auraos.lib.money import round_vnd
 from auraos.lib.money import to_decimal as _d
+from auraos.lib.reporting import margin_pct
 from auraos.lib.settlement import FROM_ADVANCE, FROM_COMPANY, UNCATEGORISED
 
 Row = Mapping[str, Any]
@@ -302,6 +314,89 @@ def _category_rows(totals: Mapping[str, Decimal]) -> list[dict]:
 def _paid_from_rows(totals: Mapping[str, Decimal]) -> dict:
     """Both sources every time, so a month with one of them still prints."""
     return {source: round_vnd(totals[source]) for source in (FROM_ADVANCE, FROM_COMPANY)}
+
+
+# -- money in against money out: the profit and loss --
+
+
+def profit_and_loss(income: Mapping, expenses: Mapping) -> dict:
+    """Collected money less spent money, month by month, and the total.
+
+    Composed from the two reports beside it rather than recounting the
+    rows, so a month's income here is the same number the income screen
+    prints and a month's expense is the same number the expense screen
+    prints. There is no third count of anything.
+
+    The subtraction lives here because it has to live somewhere, and a
+    browser holding two arrays of months is the wrong somewhere: a screen
+    that zips them itself owns a rule - which months line up, what a
+    margin is when nothing came in - that this module already owns for
+    every other finance figure.
+
+    Margin is `profit / income`, and it is None rather than 0 when no
+    money came in, exactly as auraos.lib.reporting.margin_pct decides it
+    for a job. A month with no income and no spend is a real month with
+    nothing in it, not a divide by zero.
+
+    Both sides are cash: money recorded as received against money
+    recorded as paid out. The basis is carried through from the income
+    report rather than restated, so the two cannot drift apart.
+    """
+    spend = {month["month"]: month for month in expenses.get("months") or []}
+    rows = [
+        _pnl_month(month, spend.pop(month["month"], None))
+        for month in income.get("months") or []
+    ]
+    # A month the expense side knows and the income side does not
+    # cannot happen while both are built from one range, and dropping it
+    # silently if it ever did would hide spend. Sorting afterwards keeps
+    # the months in calendar order whichever side contributed them.
+    rows.extend(_pnl_month(None, month) for month in spend.values())
+    rows.sort(key=lambda row: row["month"])
+
+    return {
+        "date_from": income.get("date_from"),
+        "date_to": income.get("date_to"),
+        "basis": income.get("basis", CASH_BASIS),
+        "months": rows,
+        "total": _pnl_total(income, expenses),
+    }
+
+
+def _pnl_month(income: Row | None, expense: Row | None) -> dict:
+    """One month's two sides and the difference between them."""
+    key = (income or expense or {}).get("month")
+    earned = (income or {}).get("total") or 0
+    spent = (expense or {}).get("total") or 0
+    return {
+        "month": key,
+        "month_start": (income or expense or {}).get("month_start") or f"{key}-01",
+        "income": earned,
+        "expense": spent,
+        "profit": earned - spent,
+        "margin_pct": margin_pct(earned - spent, earned),
+        "income_count": (income or {}).get("count") or 0,
+        "expense_count": (expense or {}).get("count") or 0,
+    }
+
+
+def _pnl_total(income: Mapping, expenses: Mapping) -> dict:
+    """The range, from each report's own total rather than from the rows.
+
+    Every part was rounded to whole đồng before it was added, so this is
+    exactly the sum of the printed months and needs no rounding of its
+    own.
+    """
+    earned = income.get("total") or 0
+    spent = expenses.get("total") or 0
+    return {
+        "income": earned,
+        "expense": spent,
+        "profit": earned - spent,
+        "margin_pct": margin_pct(earned - spent, earned),
+        "income_count": income.get("count") or 0,
+        "expense_count": expenses.get("count") or 0,
+    }
 
 
 # -- money owed: what the client has not paid yet --
