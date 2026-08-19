@@ -1760,6 +1760,17 @@ def _library_attachment_counts(names):
     Counted rather than listed: the card shows a number, and the list
     of every file in the library would be the larger half of the
     response for something nobody has asked to see yet.
+
+    Counted in Python rather than with a `count(*)` and a `group_by`,
+    which is the obvious way to write this and is what Frappe's own
+    listview does. Two reasons not to. Frappe qualifies its group_by
+    with a backticked table prefix and passes `count(*)` rather than
+    `count(name)`, and whether the plain forms survive its field
+    validation is a question this can simply not ask. And the library is
+    SOPs - tens of rows, not thousands - so the aggregate buys nothing
+    measurable and costs a behaviour nobody here can run yet. If this
+    table ever grows, the group_by is the right change and this comment
+    is the reason it was not the first one.
     """
     if not names:
         return {}
@@ -1769,10 +1780,13 @@ def _library_attachment_counts(names):
             "attached_to_doctype": "Library Document",
             "attached_to_name": ["in", names],
         },
-        fields=["attached_to_name", "count(name) as total"],
-        group_by="attached_to_name",
+        fields=["attached_to_name"],
+        limit_page_length=0,
     )
-    return {row["attached_to_name"]: row["total"] for row in rows}
+    counts = {}
+    for row in rows:
+        counts[row.attached_to_name] = counts.get(row.attached_to_name, 0) + 1
+    return counts
 
 
 @frappe.whitelist()
