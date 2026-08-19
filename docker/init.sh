@@ -72,13 +72,12 @@ build_frontend() {
     (cd "apps/auraos/$dir" && npm install --no-audit --no-fund && npm run build)
 }
 
-# The frappe-ui page at /aura, and the React SPA at /aura-next. The two
-# coexist until #103 retires the Vue app; /aura is the rollback path.
-build_frontend frontend aura.html /aura
+# The React SPA at /aura-next. There was a second build here for the
+# frappe-ui page at /aura, kept as the rollback path until #103 retired it.
 build_frontend frontend-react aura-next.html /aura-next
 
 # Ensure the app's assets symlink exists - without it the built
-# frontend 404s and /aura renders as a white page.
+# frontend 404s and /aura-next renders as a white page.
 mkdir -p sites/assets
 ln -sfn "$BENCH_DIR/apps/auraos/auraos/public" sites/assets/auraos
 

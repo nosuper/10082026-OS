@@ -9,7 +9,7 @@
 #   docker compose logs -f frappe
 #
 # Site: http://localhost:8000 (login Administrator / admin)
-# Placeholder page: http://localhost:8000/aura
+# The app: http://localhost:8000/aura-next
 services:
   mariadb:
     image: mariadb:10.6
@@ -45,7 +45,10 @@ services:
     ports:
       - "${AURA_WEB_PORT:-8000}:8000" # bench web
       - "${AURA_SOCKET_PORT:-9000}:9000" # socketio
-      - "${AURA_VITE_PORT:-8080}:8080" # vite dev server (npm run dev in frontend/)
+      # 8081, not 8080: that was the Vue dev server's port, and this mapping
+      # outlived it by one ticket. frontend-react/vite.config.ts serves on
+      # 8081, so the old mapping published a port nothing listened on.
+      - "${AURA_VITE_PORT:-8081}:8081" # vite dev server (npm run dev in frontend-react/)
     volumes:
       - ..:/workspace/repo
       # Mounted at the home dir, not the bench dir: bench init refuses
