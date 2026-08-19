@@ -1,0 +1,8 @@
+# Patches run once per site, recorded in the Patch Log. Both sections
+# must exist even when one is empty - Frappe reads this as a config file
+# and refuses a file that names only one of them.
+
+[pre_model_sync]
+
+[post_model_sync]
+auraos.patches.backfill_generated_paper_status

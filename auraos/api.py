@@ -13,7 +13,7 @@ from auraos.auraos.doctype.job.job import STAGES as JOB_STAGES
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, finance, paperwork, settlement
+from auraos.lib import breakdown, finance, paper_status, paperwork, settlement
 from auraos.lib import reporting
 # Imported by name: `milestones` is a parameter of save_job_milestones.
 from auraos.lib.milestones import PAID as MILESTONE_PAID
@@ -1336,16 +1336,82 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     }
 
 
+# What the status of a paper is made of, wherever a screen reads one.
+PAPER_STATUS_FIELDS = ["name", "status", "status_changed_by", "status_changed_on"]
+
+
+def _user_names(users):
+    """Full names for a set of user ids, in one query.
+
+    "Who told me this was signed" is answered with a person's name, so
+    the screen never has to turn a login into one.
+    """
+    users = {user for user in users if user}
+    if not users:
+        return {}
+    return {
+        row.name: row.full_name
+        for row in frappe.get_all(
+            "User", filters={"name": ["in", list(users)]}, fields=["name", "full_name"]
+        )
+    }
+
+
+def _attach_paper_status(row, paper, names):
+    """Write one file row's signing status onto it, structured.
+
+    Three fields and never a sentence: the screen decides how "Signed by
+    Trần Minh Anh on Tuesday" reads, and papers older than the field
+    read as Draft rather than as a blank.
+    """
+    row["paper"] = paper.name if paper else None
+    row["status"] = paper_status.status_or_draft(paper.status) if paper else None
+    row["status_changed_by"] = paper.status_changed_by if paper else None
+    row["status_changed_by_label"] = names.get(paper.status_changed_by) if paper else None
+    row["status_changed_on"] = paper.status_changed_on if paper else None
+    return row
+
+
 @frappe.whitelist()
 def job_paperwork(job):
-    """Documents hanging off this job, newest first."""
+    """Documents hanging off this job, newest first, each with the
+    registry row that says whether it has been signed.
+
+    The status lives on Generated Paper, not on the File, so the two are
+    joined here rather than on the screen: the job's paperwork tab shows
+    and changes a paper's status without a second round trip, and a file
+    that reached the job some other way simply has no registry row and
+    so no status.
+    """
     _check_job_permission(job, "read")
-    return frappe.get_all(
+    rows = frappe.get_all(
         "File",
         filters={"attached_to_doctype": "Job", "attached_to_name": job},
         fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
         order_by="creation desc",
     )
+    registry = frappe.get_all(
+        "Generated Paper",
+        filters={"job": job},
+        fields=PAPER_STATUS_FIELDS + ["file_name", "file_url"],
+        order_by="creation desc",
+    )
+    # Matched on the file's own name first: generating the same paper twice
+    # produces two registry rows, and Frappe hands identical bytes back the
+    # same file_url, so the url alone would tie both rows to one status. The
+    # url is the fallback for anything stored without a name.
+    by_name = {}
+    by_url = {}
+    for paper in registry:
+        if paper.file_name:
+            by_name.setdefault(paper.file_name, paper)
+        if paper.file_url:
+            by_url.setdefault(paper.file_url, paper)
+    names = _user_names({paper.status_changed_by for paper in registry})
+    for row in rows:
+        paper = by_name.get(row.file_name) or by_url.get(row.file_url)
+        _attach_paper_status(row, paper, names)
+    return rows
 
 
 def _register_paper(job, template, vendor, freelancer, document):
@@ -1454,6 +1520,9 @@ def generated_papers():
             "file_url",
             "owner",
             "creation",
+            "status",
+            "status_changed_by",
+            "status_changed_on",
         ],
         order_by="creation desc",
         limit_page_length=0,
@@ -1485,10 +1554,46 @@ def generated_papers():
         if freelancers
         else {}
     )
+    changers = _user_names({row.status_changed_by for row in rows})
     for row in rows:
         row["vendor_label"] = vendor_names.get(row.vendor)
         row["freelancer_label"] = freelancer_names.get(row.freelancer)
+        # Papers generated before the status existed read as Draft, so
+        # "what is still unsigned" is one filter rather than two.
+        row["status"] = paper_status.status_or_draft(row.status)
+        row["status_changed_by_label"] = changers.get(row.status_changed_by)
     return rows
+
+
+@frappe.whitelist()
+def set_paper_status(paper, status):
+    """Move one generated paper between Draft, Awaiting signature and Signed.
+
+    Read on the job, not write: marking a contract signed is operational
+    bookkeeping rather than privileged information, so anyone who can see
+    the job can record it (#106). The Generated Paper permission the save
+    itself checks was widened to match - a producer posts contracts too.
+
+    Nothing enforces an order. A paper can be moved back to Draft,
+    because a real document sometimes has to be redone, and a status set
+    by mistake must not be a one-way door.
+    """
+    doc = frappe.get_doc("Generated Paper", paper)
+    _check_job_permission(doc.job, "read")
+    try:
+        doc.status = paper_status.validated(status)
+    except ValueError:
+        frappe.throw(
+            _("{0} is not a status a paper can be in").format(status),
+            frappe.ValidationError,
+        )
+    # Who and when are the controller's to write, not the caller's.
+    doc.save()
+    return _attach_paper_status(
+        {"name": doc.name, "file_url": doc.file_url},
+        doc,
+        _user_names({doc.status_changed_by}),
+    )
 
 
 @frappe.whitelist()

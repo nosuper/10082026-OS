@@ -27,6 +27,14 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import {
+  PAPER_STATUSES,
+  PaperStatusSelect,
+  PaperStatusStamp,
+  statusOf,
+  useSetPaperStatus,
+  type PaperStatusFields,
+} from "@/components/aura/PaperStatus";
 import { Card, Pill, Td, Th } from "@/components/aura/primitives";
 import { Empty, ErrorState, QueryState } from "@/components/aura/states";
 import { countLabel, formatDateTime } from "@/lib/format";
@@ -76,7 +84,7 @@ type Library = {
   templates: TemplateRow[];
 };
 
-type PaperRow = {
+type PaperRow = PaperStatusFields & {
   name: string;
   job: string;
   template: string | null;
@@ -91,8 +99,12 @@ type PaperRow = {
   freelancer_label: string | null;
 };
 
-type Preview = { html: string | null; web?: boolean; file_url?: string | null };
+/** The registry's own filter: "what is still unsigned" is one of these. */
+const STATUS_FILTERS = ["All", ...PAPER_STATUSES] as const;
 
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+type Preview = { html: string | null; web?: boolean; file_url?: string | null };
 
 const LIBRARY = "auraos.api.paperwork_library";
 const PAPERS = "auraos.api.generated_papers";
@@ -223,6 +235,11 @@ function PaperworkPage() {
   const [paperWindow, setPaperWindow] = useState<WindowState>(null);
   const [editor, setEditor] = useState<EditorDraft | null>(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+
+  // Marking a paper signed is bookkeeping anyone who can see the job may do -
+  // the server decides that, and refuses whoever may not.
+  const move = useSetPaperStatus();
 
   const templates = library.data?.templates ?? [];
   const canManage = library.data?.can_manage ?? false;
@@ -258,13 +275,22 @@ function PaperworkPage() {
     .join(" · ");
 
   const needle = search.trim().toLowerCase();
-  const shownPapers = (papers.data ?? []).filter((row) =>
-    needle
-      ? [row.template_name, row.file_name, row.job, row.vendor_label, row.freelancer_label]
-          .filter(Boolean)
-          .some((text) => String(text).toLowerCase().includes(needle))
-      : true,
+  const allPapers = papers.data ?? [];
+  const shownPapers = allPapers.filter(
+    (row) =>
+      (statusFilter === "All" || statusOf(row) === statusFilter) &&
+      (needle
+        ? [row.template_name, row.file_name, row.job, row.vendor_label, row.freelancer_label]
+            .filter(Boolean)
+            .some((text) => String(text).toLowerCase().includes(needle))
+        : true),
   );
+
+  function countOf(filter: StatusFilter): number {
+    return filter === "All"
+      ? allPapers.length
+      : allPapers.filter((row) => statusOf(row) === filter).length;
+  }
 
   return (
     <AppShell title="Paperwork" meta={meta}>
@@ -373,50 +399,86 @@ function PaperworkPage() {
           >
             {() =>
               shownPapers.length === 0 ? (
-                <Empty title="No paper matches that." detail="Clear the search to see them all." />
+                <>
+                  <StatusFilters
+                    current={statusFilter}
+                    countOf={countOf}
+                    onPick={setStatusFilter}
+                  />
+                  <Empty
+                    title="No paper matches that."
+                    detail="Clear the search or the status to see them all."
+                  />
+                </>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b border-border">
-                      <tr>
-                        <Th>Paper</Th>
-                        <Th>For</Th>
-                        <Th>Job</Th>
-                        <Th>Generated</Th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {shownPapers.map((row) => (
-                        <tr key={row.name} className="hover:bg-secondary/50">
-                          <Td className="font-medium">
-                            <button
-                              type="button"
-                              onClick={() => setPaperWindow({ kind: "paper", row })}
-                              className="max-w-[22rem] truncate text-left hover:text-ember"
-                            >
-                              {row.template_name || row.file_name}
-                            </button>
-                          </Td>
-                          <Td className="text-muted-foreground">
-                            {row.freelancer_label || row.vendor_label || "Client"}
-                          </Td>
-                          <Td>
-                            <Link
-                              to="/jobs/$jobId"
-                              params={{ jobId: row.job }}
-                              className="num text-xs text-muted-foreground hover:text-ember"
-                            >
-                              {row.job}
-                            </Link>
-                          </Td>
-                          <Td className="num text-xs whitespace-nowrap text-muted-foreground">
-                            {formatDateTime(row.creation)}
-                          </Td>
+                <>
+                  <StatusFilters
+                    current={statusFilter}
+                    countOf={countOf}
+                    onPick={setStatusFilter}
+                  />
+                  {move.error ? (
+                    <ErrorState error={move.error} className="border-b border-border py-4" />
+                  ) : null}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="border-b border-border">
+                        <tr>
+                          <Th>Paper</Th>
+                          <Th>For</Th>
+                          <Th>Job</Th>
+                          <Th>Generated</Th>
+                          <Th>Signing</Th>
+                          <Th>Last change</Th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {shownPapers.map((row) => (
+                          <tr key={row.name} className="hover:bg-secondary/50">
+                            <Td className="font-medium">
+                              <button
+                                type="button"
+                                onClick={() => setPaperWindow({ kind: "paper", row })}
+                                className="max-w-[22rem] truncate text-left hover:text-ember"
+                              >
+                                {row.template_name || row.file_name}
+                              </button>
+                            </Td>
+                            <Td className="text-muted-foreground">
+                              {row.freelancer_label || row.vendor_label || "Client"}
+                            </Td>
+                            <Td>
+                              <Link
+                                to="/jobs/$jobId"
+                                params={{ jobId: row.job }}
+                                className="num text-xs text-muted-foreground hover:text-ember"
+                              >
+                                {row.job}
+                              </Link>
+                            </Td>
+                            <Td className="num text-xs whitespace-nowrap text-muted-foreground">
+                              {formatDateTime(row.creation)}
+                            </Td>
+                            <Td>
+                              <PaperStatusSelect
+                                status={statusOf(row)}
+                                disabled={move.isPending}
+                                onChange={(status) => move.mutate({ paper: row.name, status })}
+                              />
+                            </Td>
+                            <Td>
+                              <PaperStatusStamp
+                                by={row.status_changed_by}
+                                byLabel={row.status_changed_by_label}
+                                on={row.status_changed_on}
+                              />
+                            </Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )
             }
           </QueryState>
@@ -463,6 +525,39 @@ function PaperworkPage() {
         />
       ) : null}
     </AppShell>
+  );
+}
+
+/**
+ * "What is still unsigned" as one click. Counts come off the rows already
+ * fetched, so the filter is instant and the server is asked once.
+ */
+function StatusFilters({
+  current,
+  countOf,
+  onPick,
+}: {
+  current: StatusFilter;
+  countOf: (filter: StatusFilter) => number;
+  onPick: (filter: StatusFilter) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2.5">
+      {STATUS_FILTERS.map((filter) => (
+        <button
+          key={filter}
+          type="button"
+          onClick={() => onPick(filter)}
+          className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+            current === filter
+              ? "border-transparent bg-primary text-primary-foreground"
+              : "border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {filter} <span className="num opacity-60">{countOf(filter)}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 

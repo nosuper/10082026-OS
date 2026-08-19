@@ -10,6 +10,13 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, FileText, X } from "lucide-react";
 
+import {
+  PaperStatusSelect,
+  PaperStatusStamp,
+  statusOf,
+  useSetPaperStatus,
+  type PaperStatusFields,
+} from "@/components/aura/PaperStatus";
 import { Card } from "@/components/aura/primitives";
 import { ErrorState, Loading, QueryState } from "@/components/aura/states";
 import { formatDateTime } from "@/lib/format";
@@ -25,12 +32,14 @@ type TemplateRow = {
   unknown_placeholders: string[];
 };
 
-type PaperRow = {
+type PaperRow = Partial<PaperStatusFields> & {
   name: string;
   file_name: string | null;
   file_url: string | null;
   owner: string | null;
   creation: string | null;
+  /** The registry row behind this file, where there is one. */
+  paper?: string | null;
 };
 
 type Preview = { html: string; missing: string[]; unknown: string[] };
@@ -128,6 +137,10 @@ export function JobPaperworkPanel({ job }: { job: string }) {
     "auraos.api.preview_paper",
   );
 
+  // Sent out, come back signed, or back to Draft because it has to be redone.
+  // The server records who moved it and when; nothing here is founder-only.
+  const move = useSetPaperStatus();
+
   function openDocument(row: PaperRow) {
     paperReader.mutate(
       { file_url: row.file_url },
@@ -145,7 +158,12 @@ export function JobPaperworkPanel({ job }: { job: string }) {
   const forParties = { vendor: vendor || null, freelancer: freelancer || null };
   const gaps = [...(generated?.missing ?? []), ...(generated?.unknown ?? [])];
   const failure =
-    previewer.error ?? generator.error ?? draftSaver.error ?? paperReader.error ?? templates.error;
+    previewer.error ??
+    generator.error ??
+    draftSaver.error ??
+    paperReader.error ??
+    move.error ??
+    templates.error;
 
   return (
     <Card title="Paperwork" subtitle="Filled from this job and printed for wet-ink signature.">
@@ -309,6 +327,8 @@ export function JobPaperworkPanel({ job }: { job: string }) {
                   </th>
                   <th className="label-caps px-2 py-2 text-left font-normal">Added</th>
                   <th className="label-caps px-4 py-2 text-left font-normal">By</th>
+                  <th className="label-caps px-2 py-2 text-left font-normal">Signing</th>
+                  <th className="label-caps px-4 py-2 text-left font-normal">Last change</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -328,6 +348,28 @@ export function JobPaperworkPanel({ job }: { job: string }) {
                     </td>
                     <td className="px-4 py-2 text-xs whitespace-nowrap text-muted-foreground">
                       {row.owner}
+                    </td>
+                    {/* A file that reached this job some other way has no
+                        registry row, so there is nothing to move. */}
+                    <td className="px-2 py-2">
+                      {row.paper ? (
+                        <PaperStatusSelect
+                          status={statusOf({ status: row.status ?? null })}
+                          disabled={move.isPending}
+                          onChange={(status) => move.mutate({ paper: row.paper as string, status })}
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {row.paper ? (
+                        <PaperStatusStamp
+                          by={row.status_changed_by ?? null}
+                          byLabel={row.status_changed_by_label ?? null}
+                          on={row.status_changed_on ?? null}
+                        />
+                      ) : null}
                     </td>
                   </tr>
                 ))}
