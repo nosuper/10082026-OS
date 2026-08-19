@@ -18,6 +18,7 @@ import { expect, test } from "@playwright/test";
 
 import { producerState } from "./auth-state.js";
 import { callAs, keysDeep, figureIn, vnd } from "./call.js";
+import { openJob } from "./records.js";
 
 const producerTest = test.extend({ storageState: producerState });
 
@@ -154,7 +155,9 @@ test("the tile prints the server's figure, and nothing uncovered reads as zero",
   // Polled because the tile appears as soon as the session is known to be a
   // founder, which is before its own query has come back.
   const figure = tile.locator(".num").first();
-  await expect.poll(async () => figureIn(await figure.textContent())).toBe(vnd(report.tndn_exposure));
+  await expect
+    .poll(async () => figureIn(await figure.textContent()))
+    .toBe(vnd(report.tndn_exposure));
 
   // textContent, not innerText: innerText is the rendered page and applies
   // text-transform, so a NaN inside a `label-caps` element would come back as
@@ -164,23 +167,142 @@ test("the tile prints the server's figure, and nothing uncovered reads as zero",
   expect(failures).toEqual([]);
 });
 
-// -- blocked on the seed, not on the screen (#130) --
+// -- the status is derived, and this is what proves it --
 //
-// The status is derived and stored nowhere: record a covering expense and the
-// line reads covered, delete it and it reads uncovered again. #121 asks for
-// this through the screen, and #130 agrees it belongs in the spec rather than
-// in the seed, because proving a status is derived means writing and deleting
-// the thing it derives from.
+// #121 asks for this through the screen: record a cover and the money reads
+// covered, take it away and it reads uncovered again. It was blocked twice
+// over and both blockers are gone. #123 gave `log_job_expense` a `cost_line`,
+// so spending can be attributed through the app at all; #130 seeded a job
+// carrying a Không hoá đơn line, so there is something to attribute it to.
 //
-// It cannot be written yet, and the blocker is bigger than a missing fixture.
-// **Nothing in the app writes `covers_cost_line`.** `auraos.api.log_job_expense`
-// takes no such argument, and no React screen references the field; its only
-// writers in the repo are the doctype's own seam test and a direct get_doc.
-// So a cover cannot be recorded through the app at all, by anyone, and this
-// case cannot become an end-to-end spec until something can record one. It is
-// reported as a finding against #11 rather than guessed at here.
+// It is written as a change rather than as a figure. Nothing here knows what
+// the site is carrying - every assertion is a difference against the report
+// taken a moment earlier, so the seed can grow underneath it without touching
+// this file, and a run against a site with forty other payments on it means
+// exactly what a run against an empty one means.
 //
-// When it can be written it needs, from #130: a Job carrying a cost line typed
-// Không hoá đơn, and a way to record and unrecord a covering expense against
-// it. The assertion is then uncovered_count before, after and after the
-// delete - counts off the payload, with nothing left behind.
+// **The unwind uses frappe.client.delete because the app has no way to delete
+// an expense**, and no way to put an invoice number on one that already
+// exists. That is a finding about the product, not a convenience taken here:
+// see the ticket filed against #11. A reader should not infer from this spec
+// that a person could undo what it does - they could not.
+
+/** The seeded line whose tax treatment is the one that carries exposure.
+ *
+ * Found by tax type rather than by name. The name would have to be mirrored
+ * from the seed through e2e/fixture.js, and the property this test depends on
+ * is not what the line is called - it is that its treatment is Không hoá đơn,
+ * which is what auraos.lib.exposure reads. Exactly one is required: a fixture
+ * that grew a second would make "the line" an ambiguous phrase, and this fails
+ * saying so instead of picking one and asserting against the other.
+ */
+async function noInvoiceLine(page, job) {
+  const answer = await callAs(page, "auraos.api.job_cost_lines", { job });
+  expect(answer.status, `the job's cost lines were refused: ${JSON.stringify(answer.body)}`).toBe(
+    200,
+  );
+  const lines = (answer.body?.message ?? []).filter((line) => line.tax_type === "Không hoá đơn");
+  expect(
+    lines.length,
+    `the seeded job carries ${lines.length} Không hoá đơn lines, so "the no-invoice line" names nothing definite`,
+  ).toBe(1);
+  return lines[0].name;
+}
+
+// Two amounts, distinct and distinctive, so a failure message says which
+// payment moved the figure. Whole đồng: the server rounds per part, and a
+// fraction would make the arithmetic below a near-miss rather than an equality.
+const EXPOSED = 2_500_000;
+const COVERED = 1_500_000;
+
+test("the exposure follows the money, and an invoice number keeps it out of the figure", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  const job = await openJob(page);
+  const line = await noInvoiceLine(page, job);
+
+  const opening = await callAs(page, EXPOSURE);
+  expect(opening.status, `the exposure was refused: ${JSON.stringify(opening.body)}`).toBe(200);
+  const before = opening.body.message;
+
+  const logged = [];
+  const log = async (amount, values) => {
+    const answer = await callAs(page, "auraos.api.log_job_expense", {
+      job,
+      amount,
+      cost_line: line,
+      ...values,
+    });
+    expect(answer.status, `logging the expense failed: ${JSON.stringify(answer.body)}`).toBe(200);
+    logged.push(answer.body.message.name);
+    const report = await callAs(page, EXPOSURE);
+    expect(report.status, `the exposure was refused: ${JSON.stringify(report.body)}`).toBe(200);
+    return report.body.message;
+  };
+
+  try {
+    // Uncovered: money out against a line whose treatment says no invoice is
+    // coming. The count, the total and the tax all move together - the tax
+    // recomputed from the payload rather than compared against a number typed
+    // here, so this stays true if the rate ever changes.
+    const raised = await log(EXPOSED, { description: "Playwright spec exposed spend" });
+    expect(raised.uncovered_count).toBe(before.uncovered_count + 1);
+    expect(raised.uncovered_total).toBe(before.uncovered_total + EXPOSED);
+    // One đồng of slack, for the same reason as the control test above: the
+    // server rounds per part with ROUND_HALF_UP and this does not.
+    expect(
+      Math.abs(raised.tndn_exposure - (raised.uncovered_total * raised.rate_pct) / 100),
+    ).toBeLessThanOrEqual(1);
+    expect(raised.covered_count).toBe(before.covered_count);
+
+    // And the screen agrees, on a fresh load. Without this the test would prove
+    // the endpoint derives the status and say nothing about the tile the
+    // founder actually reads - which is what #121 asked about.
+    await openDashboard(page);
+    const tile = page.locator("section").filter({ has: page.getByRole("heading", tileHeading) });
+    await expect
+      .poll(async () => figureIn(await tile.locator(".num").first().textContent()))
+      .toBe(vnd(raised.tndn_exposure));
+
+    // Covered: the same line, the same kind of spend, with paper on file. The
+    // uncovered figure must not move, which is the half of the model that lets
+    // the number come down.
+    const covered = await log(COVERED, {
+      description: "Playwright spec covered spend",
+      invoice_no: "PW-SPEC-0001",
+    });
+    expect(covered.uncovered_total, "an expense carrying an invoice raised the exposure").toBe(
+      raised.uncovered_total,
+    );
+    expect(covered.uncovered_count).toBe(raised.uncovered_count);
+    expect(covered.covered_count).toBe(before.covered_count + 1);
+    expect(covered.covered_total).toBe(before.covered_total + COVERED);
+  } finally {
+    // In a finally block because everything above runs against a site the rest
+    // of the suite reads afterwards: workers is 1 and fullyParallel is off, so
+    // a spec that fails halfway would otherwise hand every later file a
+    // different set of books. #135 means the re-seed cannot be relied on to
+    // tidy up afterwards either.
+    for (const name of logged) {
+      const gone = await callAs(page, "frappe.client.delete", {
+        doctype: "Job Expense",
+        name,
+      });
+      expect(gone.status, `the spec could not remove ${name}: ${JSON.stringify(gone.body)}`).toBe(
+        200,
+      );
+    }
+  }
+
+  // Derived, not stored: with the payments gone the figure is exactly what it
+  // was before they existed. An equality, not a fall - a stored status would
+  // leave the count right and the total stale, and only this catches that.
+  const closing = await callAs(page, EXPOSURE);
+  const after = closing.body.message;
+  expect(after.uncovered_total).toBe(before.uncovered_total);
+  expect(after.uncovered_count).toBe(before.uncovered_count);
+  expect(after.covered_total).toBe(before.covered_total);
+  expect(after.covered_count).toBe(before.covered_count);
+  expect(after.tndn_exposure).toBe(before.tndn_exposure);
+});

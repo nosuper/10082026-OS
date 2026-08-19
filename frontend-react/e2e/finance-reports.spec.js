@@ -182,22 +182,21 @@ producerTest("a producer gets the same report, carrying no founder figure", asyn
   expect(failures).toEqual([]);
 });
 
-// -- blocked on the seed (#130), written against the shape it will land --
-//
-// Margin by job needs jobs, and the e2e seed creates none: a user, a company,
-// a deal and a breakdown, and nothing downstream of them. #130 adds a job, and
-// the lead has asked it for a closed one as well as an open one, which is what
-// this test needs - the distinction it asserts cannot exist in a dataset with
-// only one kind.
-//
-// Un-fixme this when #130 lands. Nothing in it reads a figure: it asserts the
-// partition the screen draws, against the stages the endpoint reports, and
-// counts more than zero rather than an exact number, so it is asserting the
-// screen rather than the seed.
-test.fixme("margin by job separates the closed from the still-spending", async ({ page }) => {
+// #130 landed the two jobs this needs. It was written before them, deliberately
+// against the shape rather than against the fixture, and the only edit it took
+// to un-block was removing the fixme - which is the property that was worth
+// having: nothing in it reads a figure. It asserts the partition the screen
+// draws, against the stages the endpoint reports, and counts more than zero
+// rather than an exact number, so it says something about the screen and
+// nothing about how many jobs the seed happens to make.
+test("margin by job separates the closed from the still-spending", async ({ page }) => {
   await openReports(page);
 
+  // include_closed: 1 because that is what the screen asks for (see the header
+  // of routes/finance.reports.tsx) - the two groups below only both exist in an
+  // answer that was allowed to carry finished work.
   const answer = await callAs(page, MARGINS, { include_closed: 1 });
+  expect(answer.status, `job profitability was refused: ${JSON.stringify(answer.body)}`).toBe(200);
   const jobs = answer.body?.message ?? [];
   const closed = jobs.filter((job) => job.stage === "Complete");
   const open = jobs.filter((job) => job.stage !== "Complete");
