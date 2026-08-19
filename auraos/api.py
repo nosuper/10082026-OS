@@ -14,7 +14,7 @@ from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, exposure, finance, paper_status, paperwork, settlement
+from auraos.lib import breakdown, exposure, finance, library, paper_status, paperwork, settlement
 from auraos.lib import reporting
 # Imported by name: `milestones` is a parameter of save_job_milestones.
 from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
@@ -1743,6 +1743,141 @@ def job_parties(job):
     )
     by_name = {row.name: row for row in rows}
     return {"freelancers": [by_name[name] for name in contacts if name in by_name]}
+
+
+# -- the Library: knowledge the company keeps --
+#
+# The Documents screen has two tabs and they share nothing but a roof.
+# Everything above fills a template from a job's own records and leaves
+# a document belonging to that job. A Library document is written by
+# hand, belongs to nobody and generates nothing, so none of the
+# placeholder machinery reaches down here and none of it should.
+
+
+def _library_attachment_counts(names):
+    """How many files hang off each document, in one query.
+
+    Counted rather than listed: the card shows a number, and the list
+    of every file in the library would be the larger half of the
+    response for something nobody has asked to see yet.
+    """
+    if not names:
+        return {}
+    rows = frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "Library Document",
+            "attached_to_name": ["in", names],
+        },
+        fields=["attached_to_name", "count(name) as total"],
+        group_by="attached_to_name",
+    )
+    return {row["attached_to_name"]: row["total"] for row in rows}
+
+
+@frappe.whitelist()
+def library_documents():
+    """Every Library document, for the table and card views.
+
+    **The body is deliberately not in this response.** A card shows one
+    line of the document's prose, and `lib.library.snippet` cuts that
+    line on this side, so listing the library does not ship every SOP in
+    full and the browser is never handed markup it only meant to
+    summarise. One document in full is `library_document_detail`.
+    """
+    frappe.has_permission("Library Document", "read", throw=True)
+    rows = frappe.get_all(
+        "Library Document",
+        fields=["name", "title", "category", "body", "modified"],
+        order_by="modified desc",
+    )
+    counts = _library_attachment_counts([row.name for row in rows])
+    return {
+        # Everyone reads, the founder writes. The server refuses either
+        # way - this only decides whether the screen offers a control
+        # that would be refused, the way paperwork_library does.
+        "can_manage": bool(frappe.has_permission("Library Document", "create")),
+        "categories": [row.name for row in frappe.get_all("Library Category", order_by="name")],
+        "documents": [
+            {
+                "name": row.name,
+                "title": row.title,
+                "category": row.category,
+                "snippet": library.snippet(row.body),
+                # Spec #81: stamps cross the wire as ISO strings.
+                "modified": reporting.iso(row.modified),
+                "attachment_count": counts.get(row.name, 0),
+            }
+            for row in rows
+        ],
+    }
+
+
+@frappe.whitelist()
+def library_document_detail(name):
+    """One document in full: its body, and the files hanging off it.
+
+    Named apart from `library_documents` rather than differing from it
+    by one trailing letter. The two return different shapes, so a typo
+    between them hands a caller a list where it expected a record, and
+    that fails somewhere other than where the mistake is.
+    """
+    frappe.has_permission("Library Document", "read", throw=True)
+    doc = frappe.get_doc("Library Document", name)
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "category": doc.category,
+        "body": doc.body or "",
+        "modified": reporting.iso(doc.modified),
+        "attachments": frappe.get_all(
+            "File",
+            filters={
+                "attached_to_doctype": "Library Document",
+                "attached_to_name": doc.name,
+            },
+            fields=["name", "file_name", "file_url"],
+            order_by="creation",
+        ),
+    }
+
+
+@frappe.whitelist()
+def save_library_document(title, body="", category=None, name=None):
+    """Write a document, creating its category if that word is new.
+
+    **The side effect is the feature.** Category is a Link to a small
+    doctype so the filter list stays a fixed set of words rather than a
+    field of near-duplicates, but #66 exists so that maintaining an SOP
+    stops needing a deploy - and a category the founder had to file a
+    ticket for would put the deploy back one level up. So a category
+    typed here that does not exist yet is created here. A reader who
+    finds a save endpoint inserting a second doctype should see this
+    paragraph before they conclude it is a mistake.
+
+    No `name` means a new document, which Frappe names.
+    """
+    if name:
+        frappe.has_permission("Library Document", "write", doc=name, throw=True)
+    else:
+        frappe.has_permission("Library Document", "create", throw=True)
+
+    heading = (title or "").strip()
+    if not heading:
+        # The doctype would refuse this anyway; saying so in words beats
+        # a mandatory-field traceback arriving in a dialog.
+        frappe.throw(_("A document needs a title."))
+
+    label = (category or "").strip()
+    if label and not frappe.db.exists("Library Category", label):
+        frappe.get_doc({"doctype": "Library Category", "category_name": label}).insert()
+
+    doc = frappe.get_doc("Library Document", name) if name else frappe.new_doc("Library Document")
+    doc.title = heading
+    doc.category = label or None
+    doc.body = body or ""
+    doc.save()
+    return {"name": doc.name}
 
 
 @frappe.whitelist()

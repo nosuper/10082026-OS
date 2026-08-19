@@ -80,7 +80,10 @@ type LibraryDoc = {
 };
 
 const DOCUMENTS = "auraos.api.library_documents";
-const DOCUMENT = "auraos.api.library_document";
+// `_detail` rather than the singular of the line above: two endpoints that
+// differ by one trailing letter are a typo away from returning a list where
+// a record was expected, which fails somewhere other than the mistake.
+const DOCUMENT_DETAIL = "auraos.api.library_document_detail";
 const SAVE = "auraos.api.save_library_document";
 
 const ALL = "All";
@@ -413,7 +416,7 @@ function DocumentWindow({
   onClose: () => void;
   onEdit: (doc: LibraryDoc) => void;
 }) {
-  const doc = useMethod<LibraryDoc>(DOCUMENT, { name });
+  const doc = useMethod<LibraryDoc>(DOCUMENT_DETAIL, { name });
   // Captured rather than read through `doc.data` inside the handler, so the
   // narrowing survives into the closure.
   const data = doc.data;
@@ -494,7 +497,7 @@ function DocumentEditor({
   onSaved: (name: string) => void;
 }) {
   const save = useMethodMutation<{ name: string }, Record<string, unknown>>(SAVE, {
-    invalidate: [resultOf(DOCUMENTS), resultOf(DOCUMENT)],
+    invalidate: [resultOf(DOCUMENTS), resultOf(DOCUMENT_DETAIL)],
     onSuccess: (result) => onSaved(result.name),
   });
 
