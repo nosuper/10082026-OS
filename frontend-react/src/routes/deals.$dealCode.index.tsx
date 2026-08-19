@@ -1,194 +1,1166 @@
+// One deal, on real data.
+//
+// The record itself: who it is for, who owns it, what it is worth, what it is
+// tagged and linked with, what has been said about it and how it moved through
+// the stages. Pricing is the next screen along, at /deals/<code>/quote.
+//
+// The Vue surface this replaces is frontend/src/components/DealFormDialog.vue.
+// Same doctype, same field list, same endpoints - deal_comments,
+// add_deal_comment, deal_attachments, classification_hints, preview_tier - and
+// the same frappe.client.save write, with the edits overlaid on the server's
+// own copy so the breakdown, the packages and the stage history survive the
+// round trip. The backend is unchanged.
+//
+// The one deliberate change is where it lives. The dialog was reached from the
+// board and vanished on save; the design puts the deal on its own route, so a
+// deal is a place you can link to, keep open and come back to.
+//
+// The stage is shown here and moved on the board: Lost needs a reason before
+// the server will take it, and that conversation belongs where the card is
+// dragged. Comments and attachments write themselves the moment you add them,
+// because they are their own records; everything else waits for Save.
+
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, FileSpreadsheet } from "lucide-react";
+import {
+  ChevronLeft,
+  ExternalLink,
+  FileSpreadsheet,
+  Paperclip,
+  Plus,
+  RotateCcw,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
 import { AppShell } from "@/components/aura/AppShell";
-import { Card, Money, Pill, Td, Th } from "@/components/aura/primitives";
-import { costLines, costTotals, deal, founderBlock, totals } from "@/data/fixture";
+import { Card, Money, Pill } from "@/components/aura/primitives";
+import { Empty, ErrorState, Loading } from "@/components/aura/states";
+import { FrappeError, uploadFile } from "@/lib/frappe";
+import { countLabel, formatDateTime, parseVnd, vnd } from "@/lib/format";
+import { listsOf, resultOf, useDoc, useList, useMethod, useMethodMutation } from "@/lib/queries";
 
 export const Route = createFileRoute("/deals/$dealCode/")({
   head: () => ({
     meta: [
-      { title: 'Breakdown — TVC Tết 2027 "Vị Xuân" | AuraOS' },
+      { title: "Deal - AuraOS" },
       {
         name: "description",
         content:
-          "Internal cost breakdown: 17 cost lines by phase, markups, tax types and founder-only margin. Quotation is built on its own surface.",
+          "One deal: client, contact, owner, budget, positioning and tier, with its tags, links, files, comments and stage history.",
       },
-      { property: "og:title", content: 'Breakdown — TVC Tết 2027 "Vị Xuân"' },
+      { property: "og:title", content: "Deal - AuraOS" },
       {
         property: "og:description",
-        content: "Cost lines by phase with markup, tax type and founder-only margin check.",
+        content: "The deal record, with its tags, links, files, comments and stage history.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: BreakdownPage,
+  component: DealPage,
 });
 
-const phases = ["Pre-production", "Production", "Post-production"] as const;
+// -- the vocabulary the backend enforces -------------------------------------
 
-const taxTone: Record<string, string> = {
-  "Công ty": "neutral",
-  "Cá nhân": "outline",
-  "Không hoá đơn": "ember",
+// Deal.positioning is a Select with exactly these three, and the tier follows
+// from it. The percentages beside them are the founder's live mix targets, not
+// a hardcoded 70/20/10.
+const POSITIONINGS = ["Cash", "Bridge", "Brand"] as const;
+
+const POSITIONING_HINTS: Record<string, string> = {
+  Cash: "nuôi bộ máy",
+  Bridge: "gần định vị",
+  Brand: "đúng định vị",
 };
 
-function BreakdownPage() {
+// What each tier means in the playbook (§2.2). Prose, so it stays in the sans
+// face; the pill beside it carries the tier itself.
+const TIER_HINTS: Record<string, string> = {
+  "Tier 1": "cơm áo",
+  "Tier 2": "trung bình",
+  "Tier 3": "đúng định vị",
+};
+
+const STAGE_TONE: Record<string, string> = {
+  Breakdown: "ink",
+  "Quote Sent": "outline",
+  Negotiation: "ember",
+  Won: "positive",
+  Lost: "ember",
+};
+
+// The pause after the last keystroke before the tier chip is asked for again.
+// The budget field fires per character.
+const PREVIEW_MS = 300;
+
+// -- what the server sends ---------------------------------------------------
+
+type TagRow = { deal_tag: string | null };
+type LinkRow = { label: string | null; url: string | null };
+
+type StageLogRow = {
+  name: string;
+  from_stage: string | null;
+  to_stage: string | null;
+  changed_on: string | null;
+  changed_by: string | null;
+};
+
+type DealDoc = {
+  name: string;
+  title: string | null;
+  stage: string;
+  deal_owner: string | null;
+  company: string | null;
+  contact: string | null;
+  brief: string | null;
+  estimated_budget: number | null;
+  source: string | null;
+  project_type: string | null;
+  tier: string | null;
+  tier_is_manual: number | null;
+  positioning: string | null;
+  quote_status: string | null;
+  modified: string | null;
+  deal_tags: TagRow[] | null;
+  deal_links: LinkRow[] | null;
+  stage_history: StageLogRow[] | null;
+};
+
+type CompanyRow = { name: string; company_name: string | null };
+type ContactRow = { name: string; full_name: string | null; company: string | null };
+type OwnerRow = { name: string; full_name: string | null };
+type NamedRow = { name: string };
+
+/** auraos.api.classification_hints: the founder's mix targets, in percent. */
+type Mix = { cash: number; bridge: number; brand: number };
+
+/** One row of auraos.api.deal_comments. */
+type CommentRow = {
+  name: string;
+  content: string | null;
+  comment_by: string | null;
+  comment_email: string | null;
+  creation: string | null;
+};
+
+/** One row of auraos.api.deal_attachments. */
+type FileRow = {
+  name: string;
+  file_name: string | null;
+  file_url: string | null;
+  file_size: number | null;
+  creation: string | null;
+};
+
+// -- what is being edited ----------------------------------------------------
+
+type Draft = {
+  title: string;
+  deal_owner: string;
+  company: string;
+  contact: string;
+  brief: string;
+  /** Digits only, so the field can be empty and mean "not known". */
+  budget: string;
+  source: string;
+  project_type: string;
+  positioning: string;
+  tags: string[];
+  links: { label: string; url: string }[];
+};
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function toDraft(doc: DealDoc): Draft {
+  return {
+    title: text(doc.title),
+    deal_owner: text(doc.deal_owner),
+    company: text(doc.company),
+    contact: text(doc.contact),
+    brief: text(doc.brief),
+    budget: doc.estimated_budget ? String(Math.round(doc.estimated_budget)) : "",
+    source: text(doc.source),
+    project_type: text(doc.project_type),
+    positioning: text(doc.positioning),
+    tags: (doc.deal_tags ?? []).map((row) => text(row.deal_tag)).filter(Boolean),
+    links: (doc.deal_links ?? [])
+      .map((row) => ({ label: text(row.label), url: text(row.url) }))
+      .filter((row) => row.url),
+  };
+}
+
+/** An untouched optional field goes back as it came: empty, not "". */
+function blank(value: string): string | null {
+  return value.trim() ? value.trim() : null;
+}
+
+/** The fields this screen owns, as the doctype spells them. */
+function wire(draft: Draft): Record<string, unknown> {
+  return {
+    title: draft.title.trim(),
+    deal_owner: blank(draft.deal_owner),
+    company: blank(draft.company),
+    contact: blank(draft.contact),
+    brief: blank(draft.brief),
+    estimated_budget: draft.budget ? parseVnd(draft.budget) : null,
+    source: blank(draft.source),
+    project_type: blank(draft.project_type),
+    positioning: blank(draft.positioning),
+    deal_tags: draft.tags.map((tag) => ({ deal_tag: tag })),
+    deal_links: draft.links.map((row) => ({ label: row.label, url: row.url })),
+  };
+}
+
+// -- small local helpers -----------------------------------------------------
+
+/** Wait for the typing to stop before asking the server. */
+function useDebounced<T>(value: T, delay: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettled(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return settled;
+}
+
+function isMissing(error: unknown): boolean {
+  return error instanceof FrappeError && error.kind === "notfound";
+}
+
+/**
+ * A comment as text. The server stores sanitized HTML; parsing it out of the
+ * document rather than assigning innerHTML keeps it out of the live tree.
+ */
+function stripHtml(html: string | null): string {
+  if (!html) return "";
+  return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+}
+
+/** How big a file is. Not money and not a date, so format.ts does not own it. */
+function fileSize(bytes: number | null): string {
+  if (!bytes) return "";
+  // A real file is never 0 KB, so a small one rounds up rather than down.
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const inputClass =
+  "w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-border-strong";
+
+const ghostButton =
+  "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-border-strong";
+
+function Field({
+  label,
+  hint,
+  required,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  required?: boolean | undefined;
+  span?: boolean | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <label className={`block ${span ? "sm:col-span-2" : ""}`}>
+      <span className="label-caps">
+        {label}
+        {required ? <span className="text-ember"> *</span> : null}
+      </span>
+      <div className="mt-1.5">{children}</div>
+      {hint ? <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div> : null}
+    </label>
+  );
+}
+
+/** The same block for something the server decides, so it has no control. */
+function Readout({
+  label,
+  hint,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  span?: boolean | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div className={span ? "sm:col-span-2" : undefined}>
+      <div className="label-caps">{label}</div>
+      <div className="mt-1.5">{children}</div>
+      {hint ? <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div> : null}
+    </div>
+  );
+}
+
+// -- the screen --------------------------------------------------------------
+
+function DealPage() {
   const { dealCode } = Route.useParams();
+  const client = useQueryClient();
+
+  // -- reads ----------------------------------------------------------------
+
+  const deal = useDoc<DealDoc>("Deal", dealCode);
+
+  const companies = useList<CompanyRow>({
+    doctype: "Party Company",
+    fields: ["name", "company_name"],
+    orderBy: "company_name asc",
+  });
+
+  const contacts = useList<ContactRow>({
+    doctype: "Party Contact",
+    fields: ["name", "full_name", "company"],
+    orderBy: "full_name asc",
+  });
+
+  const owners = useMethod<OwnerRow[]>("auraos.api.operating_users");
+
+  const sources = useList<NamedRow>({
+    doctype: "Deal Source",
+    fields: ["name"],
+    orderBy: "name asc",
+  });
+
+  const projectTypes = useList<NamedRow>({
+    doctype: "Project Type",
+    fields: ["name"],
+    orderBy: "name asc",
+  });
+
+  const tagOptions = useList<NamedRow>({
+    doctype: "Deal Tag",
+    fields: ["name"],
+    orderBy: "name asc",
+  });
+
+  const mix = useMethod<Mix>("auraos.api.classification_hints");
+
+  const comments = useMethod<CommentRow[]>(
+    "auraos.api.deal_comments",
+    { deal: dealCode },
+    { enabled: deal.isSuccess },
+  );
+
+  const attachments = useMethod<FileRow[]>(
+    "auraos.api.deal_attachments",
+    { deal: dealCode },
+    { enabled: deal.isSuccess },
+  );
+
+  // -- what is being edited -------------------------------------------------
+
+  const [serverDoc, setServerDoc] = useState<DealDoc | null>(null);
+  const [typed, setDraft] = useState<Draft | null>(null);
+  const [baseline, setBaseline] = useState("");
+  const [failure, setFailure] = useState<unknown>(null);
+
+  // The route component survives a change of :dealCode - clicking through from
+  // one deal to another does not remount it - so whatever is in state may still
+  // belong to the deal just left. Nothing is used until it says it is this
+  // one's, which is the whole bug this screen was filed for.
+  const onThisDeal = serverDoc?.name === dealCode;
+  const draft = onThisDeal ? typed : null;
+  const doc = onThisDeal ? serverDoc : deal.data?.name === dealCode ? deal.data : null;
+
+  // The half-typed additions: a tag, a link, a comment, a file in flight. None
+  // of them is part of the deal until it is added.
+  const [tagInput, setTagInput] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [commentDraft, setCommentDraft] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+
+  function seed(data: DealDoc) {
+    seeded.current = data.name;
+    const fresh = toDraft(data);
+    setServerDoc(data);
+    setDraft(fresh);
+    setBaseline(JSON.stringify(wire(fresh)));
+  }
+
+  // Seed once per deal. A later refetch of the same record must not overwrite
+  // what has been typed since.
+  const seeded = useRef("");
+  useEffect(() => {
+    const data = deal.data;
+    if (!data || seeded.current === data.name) return;
+    seed(data);
+  }, [deal.data]);
+
+  /**
+   * Start again from the server's copy, losing what is on screen.
+   *
+   * Frappe refuses a save whose `modified` is stale - somebody else has edited
+   * the deal since this page loaded it - and says so. There is no sane way to
+   * merge two people's edits, so the offer is the honest one: take theirs and
+   * retype yours.
+   */
+  async function reload() {
+    setFailure(null);
+    // Clear the refused save too, or its message would outlive the record it
+    // was complaining about. saveDeal is declared below and this only ever runs
+    // from a click, long after the render body has.
+    saveDeal.reset();
+    const fresh = await deal.refetch();
+    if (fresh.data) seed(fresh.data);
+  }
+
+  const snapshot = useMemo(() => (draft ? JSON.stringify(wire(draft)) : ""), [draft]);
+  const dirty = onThisDeal && Boolean(baseline) && snapshot !== baseline;
+
+  function edit(patch: Partial<Draft>) {
+    setDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  // -- the tier chip --------------------------------------------------------
+  //
+  // Tier is derived, not chosen: positioning and budget in, tier out. Previewed
+  // on the server so a producer session sees the outcome without ever learning
+  // the thresholds.
+
+  const manualTier = Boolean(doc?.tier_is_manual);
+
+  // Three primitives rather than one object: a fresh object every render would
+  // restart the timer on every render and never settle.
+  const settledBudget = useDebounced(draft?.budget ?? "", PREVIEW_MS);
+  const settledType = useDebounced(draft?.project_type ?? "", PREVIEW_MS);
+  const settledPositioning = useDebounced(draft?.positioning ?? "", PREVIEW_MS);
+
+  const previewed = useMethod<string>(
+    "auraos.api.preview_tier",
+    {
+      estimated_budget: settledBudget ? parseVnd(settledBudget) : 0,
+      project_type: settledType,
+      positioning: settledPositioning,
+    },
+    { enabled: Boolean(draft) && !manualTier },
+  );
+
+  const tier = manualTier ? (doc?.tier ?? "") : (previewed.data ?? doc?.tier ?? "");
+
+  // -- writes ---------------------------------------------------------------
+
+  const dealWrites = [
+    listsOf("Deal"),
+    resultOf("auraos.api.deal_tags_map"),
+    resultOf("auraos.api.deal_stage_entries"),
+  ];
+
+  const sent = useRef("");
+
+  const saveDeal = useMethodMutation<DealDoc, { doc: Record<string, unknown> }>(
+    "frappe.client.save",
+    {
+      invalidate: dealWrites,
+      onSuccess: (saved) => {
+        setFailure(null);
+        // The server's copy replaces the old one - it carries the derived tier
+        // and the new stage history row - but what is on screen is left alone:
+        // anything typed while the save was in flight is still an edit.
+        setServerDoc(saved);
+        setBaseline(sent.current);
+        // The save returned the whole document, so hand it to the cache rather
+        // than invalidating and refetching. ["doc", doctype, name] is the key
+        // useDoc builds; lib/queries has listsOf and resultOf but no docOf.
+        client.setQueryData(["doc", "Deal", dealCode], saved);
+      },
+    },
+  );
+
+  // Typing a tag that does not exist yet creates it, as the Vue form does: the
+  // child row's Link field would otherwise fail on save.
+  const createTag = useMethodMutation<NamedRow, { doc: Record<string, unknown> }>(
+    "frappe.client.insert",
+    { invalidate: [listsOf("Deal Tag")] },
+  );
+
+  const postComment = useMethodMutation<CommentRow, { deal: string; content: string }>(
+    "auraos.api.add_deal_comment",
+    {
+      invalidate: [resultOf("auraos.api.deal_comments")],
+      onSuccess: () => setCommentDraft(""),
+    },
+  );
+
+  function save() {
+    const base = doc;
+    if (!base || !draft || !onThisDeal || saveDeal.isPending) return;
+    sent.current = snapshot;
+    setFailure(null);
+    saveDeal.mutate({ doc: { ...base, doctype: "Deal", ...wire(draft) } });
+  }
+
+  // The shortcut fires from a window listener, which outlives the render that
+  // created it.
+  const saveNow = useRef(save);
+  useEffect(() => {
+    saveNow.current = save;
+  });
+
+  useEffect(() => {
+    function onKeydown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      saveNow.current();
+    }
+    window.addEventListener("keydown", onKeydown);
+    return () => window.removeEventListener("keydown", onKeydown);
+  }, []);
+
+  // -- tags, links, files, comments -----------------------------------------
+
+  async function addTag() {
+    const value = tagInput.trim();
+    if (!value || !draft) return;
+    setTagInput("");
+    if (draft.tags.includes(value)) return;
+    const known = (tagOptions.data ?? []).some((row) => row.name === value);
+    if (!known) {
+      try {
+        await createTag.mutateAsync({ doc: { doctype: "Deal Tag", tag_name: value } });
+      } catch (error) {
+        setFailure(error);
+        return;
+      }
+    }
+    setFailure(null);
+    edit({ tags: [...draft.tags, value] });
+  }
+
+  function addLink() {
+    const label = linkLabel.trim();
+    const url = linkUrl.trim();
+    if (!draft) return;
+    // The row renders as a clickable link before the server's own URL
+    // validation runs on save - keep javascript: and data: out of href.
+    if (!label || !url) {
+      setLinkError("A link needs both a label and a URL");
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      setLinkError("URL must start with http:// or https://");
+      return;
+    }
+    setLinkError("");
+    setLinkLabel("");
+    setLinkUrl("");
+    edit({ links: [...draft.links, { label, url }] });
+  }
+
+  function attach(file: File | undefined) {
+    if (!file) return;
+    setFailure(null);
+    setUploading(true);
+    uploadFile(file, { doctype: "Deal", docname: dealCode, isPrivate: true })
+      .then(() => client.invalidateQueries({ queryKey: resultOf("auraos.api.deal_attachments") }))
+      .catch((error: unknown) => setFailure(error))
+      .finally(() => setUploading(false));
+  }
+
+  function comment() {
+    const content = commentDraft.trim();
+    if (!content || postComment.isPending) return;
+    setFailure(null);
+    postComment.mutate({ deal: dealCode, content });
+  }
+
+  // -- chrome ---------------------------------------------------------------
+
+  const companyLabel = doc?.company
+    ? ((companies.data ?? []).find((row) => row.name === doc.company)?.company_name ?? doc.company)
+    : "";
+
+  // Only people of the selected company, as the Vue form decided; nothing
+  // chosen yet means everybody.
+  const contactOptions = (contacts.data ?? []).filter(
+    (row) => !draft?.company || row.company === draft.company,
+  );
+  // A contact saved before the company changed must still be reachable, or
+  // opening the deal would silently drop it.
+  const savedContact = (contacts.data ?? []).find((row) => row.name === draft?.contact);
+  if (savedContact && !contactOptions.some((row) => row.name === savedContact.name)) {
+    contactOptions.unshift(savedContact);
+  }
+
+  const ownerOptions = (owners.data ?? []).slice();
+  if (draft?.deal_owner && !ownerOptions.some((row) => row.name === draft.deal_owner)) {
+    ownerOptions.unshift({ name: draft.deal_owner, full_name: draft.deal_owner });
+  }
+
+  const percent: Record<string, number | undefined> = {
+    Cash: mix.data?.cash,
+    Bridge: mix.data?.bridge,
+    Brand: mix.data?.brand,
+  };
+
+  const status = saveDeal.isPending
+    ? "Saving..."
+    : dirty
+      ? "Unsaved changes - Ctrl or Cmd plus S saves"
+      : onThisDeal && baseline
+        ? "All changes saved"
+        : "";
+
+  const error = failure ?? (saveDeal.isError ? saveDeal.error : null);
 
   return (
     <AppShell
-      title={deal.name}
+      title={doc?.title || dealCode}
       meta={
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link to="/deals" className="inline-flex items-center hover:text-ember">
             <ChevronLeft className="size-3.5" /> Deals
           </Link>
-          <span className="num">{dealCode}</span>· {deal.client} · {deal.contact} · Owner{" "}
-          {deal.owner} · {deal.tier} · {deal.positioning}
+          <span className="num">{dealCode}</span>
+          {companyLabel ? <span>· {companyLabel}</span> : null}
+          {doc ? <Pill tone={STAGE_TONE[doc.stage] ?? "neutral"}>{doc.stage}</Pill> : null}
+          {tier ? <Pill tone={tier === "Tier 3" ? "ink" : "neutral"}>{tier}</Pill> : null}
         </span>
       }
       actions={
-        <Link
-          to="/quotations/$quoteRef"
-          params={{ quoteRef: "new" }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90"
-        >
-          <FileSpreadsheet className="size-3.5" /> Convert to quotation
-        </Link>
+        doc ? (
+          <div className="flex items-center gap-3">
+            {status ? (
+              <span className="hidden text-xs text-muted-foreground sm:inline">{status}</span>
+            ) : null}
+            <Link
+              to="/deals/$dealCode/quote"
+              params={{ dealCode }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-secondary"
+            >
+              <FileSpreadsheet className="size-3.5" strokeWidth={1.75} /> Breakdown and quote
+            </Link>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saveDeal.isPending || !dirty}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {saveDeal.isPending ? "Saving..." : "Save"}
+            </button>
+          </div>
+        ) : null
       }
     >
-      <div className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="label-caps">Client budget</div>
-            <Money value={deal.clientBudget} className="mt-2 block text-lg font-semibold" />
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="label-caps">Total cost</div>
-            <Money value={costTotals.totalCost} className="mt-2 block text-lg font-semibold" />
-            <div className="mt-1 text-xs text-muted-foreground">
-              {costLines.length} cost lines
-            </div>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="label-caps">Line-level quote price</div>
-            <Money value={costTotals.totalLineQuote} className="mt-2 block text-lg font-semibold" />
-            <div className="mt-1 text-xs text-muted-foreground">before packaging & fees</div>
-          </div>
-          <div className="rounded-xl border border-ember bg-card p-4">
-            <div className="label-caps">Margin</div>
-            <div className="mt-2 num text-lg font-semibold text-ember">{totals.marginPct}%</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              floor {totals.marginFloorPct}% · above floor
-            </div>
-          </div>
-        </div>
-
-        <Card
-          title="Cost lines"
-          subtitle="Internal only — pricing shown to the client is assembled in the quotation."
-          action={
-            <Link
-              to="/quotations/$quoteRef"
-              params={{ quoteRef: "QUO-0182-2" }}
-              className="rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-secondary"
+      {deal.isPending ? (
+        <Loading rows={6} />
+      ) : deal.isError ? (
+        isMissing(deal.error) ? (
+          <Empty
+            title="No such deal."
+            detail={`Nothing on this site is filed under ${dealCode}. It may have been deleted, or the code may be a typo.`}
+            action={
+              <Link to="/deals" className={ghostButton}>
+                <ChevronLeft className="size-3.5" /> Back to the pipeline
+              </Link>
+            }
+          />
+        ) : (
+          <ErrorState error={deal.error} onRetry={() => void deal.refetch()} />
+        )
+      ) : !draft ? (
+        <Loading rows={6} />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="space-y-4 xl:col-span-2">
+            <Card
+              title="The deal"
+              subtitle="The record itself. Pricing lives in the breakdown and the quote."
             >
-              Open quotation
-            </Link>
-          }
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px]">
-              <thead className="border-b border-border">
-                <tr>
-                  <Th className="w-8">#</Th>
-                  <Th>Description</Th>
-                  <Th>Category</Th>
-                  <Th>Source</Th>
-                  <Th>Contact</Th>
-                  <Th>Pkg</Th>
-                  <Th className="text-right">Qty</Th>
-                  <Th className="text-right">Unit price</Th>
-                  <Th>Tax</Th>
-                  <Th className="text-right">Markup</Th>
-                  <Th className="text-right">Subtotal</Th>
-                  <Th className="text-right">Quote price</Th>
-                </tr>
-              </thead>
-              {phases.map((phase) => {
-                const lines = costLines.filter((l) => l.phase === phase);
-                const sub = lines.reduce((a, l) => a + l.subtotal, 0);
-                const quote = lines.reduce((a, l) => a + l.quotePrice, 0);
-                return (
-                  <tbody key={phase} className="divide-y divide-border border-b border-border">
-                    <tr className="bg-secondary/60">
-                      <Td colSpan={10} className="label-caps !text-foreground">
-                        {phase}
-                      </Td>
-                      <Td className="text-right text-xs">
-                        <Money value={sub} />
-                      </Td>
-                      <Td className="text-right text-xs font-semibold">
-                        <Money value={quote} />
-                      </Td>
-                    </tr>
-                    {lines.map((l) => (
-                      <tr key={l.id} className="hover:bg-secondary/40">
-                        <Td className="num text-muted-foreground">{l.id}</Td>
-                        <Td className="font-medium">{l.description}</Td>
-                        <Td className="text-muted-foreground">{l.category}</Td>
-                        <Td className="text-muted-foreground">{l.source}</Td>
-                        <Td className="text-muted-foreground">{l.contact}</Td>
-                        <Td>
-                          <Pill tone="outline">{l.pkg}</Pill>
-                        </Td>
-                        <Td className="num text-right whitespace-nowrap">
-                          {l.qty1} {l.unit1}
-                          {l.qty2 ? ` × ${l.qty2} ${l.unit2}` : ""}
-                        </Td>
-                        <Td className="text-right">
-                          <Money value={l.unitPrice} />
-                        </Td>
-                        <Td>
-                          <Pill tone={taxTone[l.taxType]}>{l.taxType}</Pill>
-                        </Td>
-                        <Td className="num text-right">{l.markup}%</Td>
-                        <Td className="text-right">
-                          <Money value={l.subtotal} />
-                        </Td>
-                        <Td className="text-right font-medium">
-                          <Money value={l.quotePrice} />
-                        </Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                );
-              })}
-            </table>
-          </div>
-        </Card>
+              <div className="grid gap-4 p-4 sm:grid-cols-2">
+                <Field label="Title" required span>
+                  <input
+                    value={draft.title}
+                    onChange={(event) => edit({ title: event.target.value })}
+                    placeholder="TVC Tết 2027"
+                    className={inputClass}
+                  />
+                </Field>
 
-        <Card tone="ink" title="Founder only" subtitle="Never shown to producers">
-          <dl className="grid gap-x-8 gap-y-1.5 p-4 text-sm sm:grid-cols-2">
-            {[
-              [`Commission (CMF) ${founderBlock.commissionRate}%`, founderBlock.commission],
-              ["CM after commission", founderBlock.cmAfterCommission],
-              ["Lợi nhuận trước thuế", founderBlock.profitBeforeTax],
-              [`TNDN ${founderBlock.tndnRate}%`, founderBlock.tndn],
-              ["VAT phải nộp", founderBlock.vatPayable],
-              ["Net profit", founderBlock.netProfit],
-            ].map(([k, v]) => (
-              <div key={k as string} className="flex justify-between gap-3">
-                <dt className="text-primary-foreground/60">{k}</dt>
-                <dd>
-                  <Money value={v as number} />
-                </dd>
+                <Field label="Client company" required>
+                  <select
+                    value={draft.company}
+                    onChange={(event) => edit({ company: event.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">Which company...</option>
+                    {(companies.data ?? []).map((row) => (
+                      <option key={row.name} value={row.name}>
+                        {row.company_name ?? row.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field
+                  label="Contact"
+                  hint={draft.company ? "People at the selected company." : undefined}
+                >
+                  <select
+                    value={draft.contact}
+                    onChange={(event) => edit({ contact: event.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">No contact</option>
+                    {contactOptions.map((row) => (
+                      <option key={row.name} value={row.name}>
+                        {row.full_name || row.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Owner" required>
+                  <select
+                    value={draft.deal_owner}
+                    onChange={(event) => edit({ deal_owner: event.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">Who owns it...</option>
+                    {ownerOptions.map((row) => (
+                      <option key={row.name} value={row.name}>
+                        {row.full_name || row.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Readout label="Stage" hint="Stages move on the board, where Lost can ask why.">
+                  <div className="flex items-center gap-2 py-1.5">
+                    <Pill tone={STAGE_TONE[doc?.stage ?? ""] ?? "neutral"}>{doc?.stage}</Pill>
+                    <Link to="/deals" className="text-xs text-muted-foreground hover:text-ember">
+                      Open the pipeline
+                    </Link>
+                  </div>
+                </Readout>
+
+                <Field label="Brief" span>
+                  <textarea
+                    rows={4}
+                    value={draft.brief}
+                    onChange={(event) => edit({ brief: event.target.value })}
+                    placeholder="What the client asked for"
+                    className={inputClass}
+                  />
+                </Field>
+
+                <Field label="Est. client budget (VND)">
+                  <input
+                    inputMode="numeric"
+                    value={draft.budget ? vnd(parseVnd(draft.budget)) : ""}
+                    onChange={(event) => edit({ budget: event.target.value.replace(/\D/g, "") })}
+                    placeholder="0"
+                    aria-label="Estimated client budget in đồng"
+                    className={`num ${inputClass} text-right`}
+                  />
+                </Field>
+
+                <Field label="Source">
+                  <select
+                    value={draft.source}
+                    onChange={(event) => edit({ source: event.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">Unknown</option>
+                    {(sources.data ?? []).map((row) => (
+                      <option key={row.name} value={row.name}>
+                        {row.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Project type">
+                  <select
+                    value={draft.project_type}
+                    onChange={(event) => edit({ project_type: event.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">Not set</option>
+                    {(projectTypes.data ?? []).map((row) => (
+                      <option key={row.name} value={row.name}>
+                        {row.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field
+                  label="Positioning"
+                  hint={
+                    // New tab on purpose: the half-edited deal stays behind.
+                    <a
+                      href="/aura/sop/deals"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 underline decoration-border underline-offset-2 hover:text-ember"
+                    >
+                      SOP: cách đánh giá và phân loại deal
+                      <ExternalLink className="size-3" />
+                    </a>
+                  }
+                >
+                  <select
+                    value={draft.positioning}
+                    onChange={(event) => edit({ positioning: event.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">Not set</option>
+                    {POSITIONINGS.map((item) => (
+                      <option key={item} value={item}>
+                        {item} - {POSITIONING_HINTS[item]}
+                        {percent[item] === undefined ? "" : ` (~${percent[item]}%)`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Readout
+                  label="Tier (auto)"
+                  hint={
+                    manualTier
+                      ? "Pinned by hand - clear the tier in the deals table to hand it back to the rules."
+                      : "Follows positioning and budget, decided on the server."
+                  }
+                >
+                  <div className="flex flex-wrap items-center gap-2 py-1.5">
+                    {tier ? (
+                      <>
+                        <Pill tone={tier === "Tier 3" ? "ink" : "neutral"}>{tier}</Pill>
+                        <span className="text-xs text-muted-foreground">{TIER_HINTS[tier]}</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        No tier yet - it follows positioning and budget.
+                      </span>
+                    )}
+                  </div>
+                </Readout>
+
+                <Field label="Tags" span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {draft.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          title={`Remove ${tag}`}
+                          aria-label={`Remove tag ${tag}`}
+                          onClick={() => edit({ tags: draft.tags.filter((item) => item !== tag) })}
+                          className="text-muted-foreground hover:text-ember"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                    {draft.tags.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">No tags yet.</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex gap-1.5">
+                    <input
+                      list="aura-deal-tags"
+                      value={tagInput}
+                      onChange={(event) => setTagInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void addTag();
+                      }}
+                      placeholder="Add tag"
+                      aria-label="Add tag"
+                      className={inputClass}
+                    />
+                    <datalist id="aura-deal-tags">
+                      {(tagOptions.data ?? [])
+                        .filter((row) => !draft.tags.includes(row.name))
+                        .map((row) => (
+                          <option key={row.name} value={row.name} />
+                        ))}
+                    </datalist>
+                    <button
+                      type="button"
+                      onClick={() => void addTag()}
+                      disabled={createTag.isPending}
+                      className={ghostButton}
+                    >
+                      <Plus className="size-3" /> Add
+                    </button>
+                  </div>
+                </Field>
               </div>
-            ))}
-          </dl>
-        </Card>
-      </div>
+
+              <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+                Tags, links and the fields above save together - Save, or Ctrl or Cmd plus S.
+                Comments and files are their own records and save themselves.
+              </div>
+            </Card>
+
+            <Card title="Links" subtitle="The brief, the folder, the reference board.">
+              <div className="space-y-1 p-4">
+                {draft.links.map((row, index) => (
+                  <div key={`${row.url}-${index}`} className="flex items-center gap-2 text-sm">
+                    <a
+                      href={row.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium hover:text-ember"
+                    >
+                      {row.label || row.url}
+                    </a>
+                    <span className="truncate text-xs text-muted-foreground">{row.url}</span>
+                    <button
+                      type="button"
+                      title="Remove link"
+                      aria-label={`Remove link ${row.label || row.url}`}
+                      onClick={() =>
+                        edit({ links: draft.links.filter((_, item) => item !== index) })
+                      }
+                      className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-ember"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {draft.links.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No links yet.</div>
+                ) : null}
+
+                <div className="flex flex-wrap gap-1.5 pt-2">
+                  <input
+                    value={linkLabel}
+                    onChange={(event) => setLinkLabel(event.target.value)}
+                    placeholder="Label, e.g. Drive folder"
+                    aria-label="Link label"
+                    className={`${inputClass} sm:w-2/5`}
+                  />
+                  <input
+                    value={linkUrl}
+                    onChange={(event) => setLinkUrl(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      addLink();
+                    }}
+                    placeholder="https://"
+                    aria-label="Link URL"
+                    className={`${inputClass} sm:flex-1`}
+                  />
+                  <button type="button" onClick={addLink} className={ghostButton}>
+                    <Plus className="size-3" /> Add
+                  </button>
+                </div>
+                {linkError ? <div className="text-xs text-ember">{linkError}</div> : null}
+              </div>
+            </Card>
+
+            <Card
+              title="Comments"
+              subtitle={
+                comments.data?.length
+                  ? countLabel(comments.data.length, "comment")
+                  : "Anything the fields cannot say."
+              }
+            >
+              <div className="space-y-2 p-4">
+                {(comments.data ?? []).map((row) => (
+                  <div
+                    key={row.name}
+                    className="rounded-lg border border-border bg-secondary/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-baseline gap-2 text-xs">
+                      <span className="font-medium">{row.comment_by || row.comment_email}</span>
+                      <span className="num text-muted-foreground">
+                        {formatDateTime(row.creation)}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-sm whitespace-pre-line">
+                      {stripHtml(row.content)}
+                    </div>
+                  </div>
+                ))}
+                {comments.isError ? (
+                  <ErrorState error={comments.error} onRetry={() => void comments.refetch()} />
+                ) : null}
+                {comments.isSuccess && comments.data.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">Nothing said yet.</div>
+                ) : null}
+
+                <div className="flex gap-1.5 pt-1">
+                  <input
+                    value={commentDraft}
+                    onChange={(event) => setCommentDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      comment();
+                    }}
+                    placeholder="Write a comment"
+                    aria-label="Write a comment"
+                    className={inputClass}
+                  />
+                  <button
+                    type="button"
+                    onClick={comment}
+                    disabled={postComment.isPending || !commentDraft.trim()}
+                    className={`${ghostButton} disabled:opacity-40`}
+                  >
+                    {postComment.isPending ? "Posting..." : "Comment"}
+                  </button>
+                </div>
+                {postComment.isError ? (
+                  <div className="text-xs text-ember">{postComment.error.messages.join(" ")}</div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            <Card title="At a glance">
+              <dl className="space-y-2 p-4 text-sm">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted-foreground">Client budget</dt>
+                  <dd>
+                    {doc?.estimated_budget ? (
+                      <Money value={doc.estimated_budget} className="font-medium" />
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted-foreground">Quote</dt>
+                  <dd className="text-right">
+                    {doc?.quote_status && doc.quote_status !== "Not Sent" ? (
+                      doc.quote_status
+                    ) : (
+                      <span className="text-muted-foreground">Not sent</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted-foreground">Last touched</dt>
+                  <dd className="num text-right text-xs text-muted-foreground">
+                    {formatDateTime(doc?.modified)}
+                  </dd>
+                </div>
+              </dl>
+              <div className="border-t border-border p-4">
+                <Link
+                  to="/deals/$dealCode/quote"
+                  params={{ dealCode }}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium hover:text-ember"
+                >
+                  <FileSpreadsheet className="size-3.5" strokeWidth={1.75} /> Cost lines, margin and
+                  the client quote
+                </Link>
+              </div>
+            </Card>
+
+            <Card
+              title="Attachments"
+              subtitle="Private files, on the deal itself."
+              action={
+                <>
+                  <input
+                    ref={picker}
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      attach(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => picker.current?.click()}
+                    disabled={uploading}
+                    className={`${ghostButton} disabled:opacity-40`}
+                  >
+                    <Paperclip className="size-3" /> {uploading ? "Uploading..." : "Attach file"}
+                  </button>
+                </>
+              }
+            >
+              <div className="space-y-1 p-4">
+                {(attachments.data ?? []).map((file) => (
+                  <div key={file.name} className="flex items-baseline gap-2 text-sm">
+                    <a
+                      href={file.file_url ?? "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate hover:text-ember"
+                    >
+                      {file.file_name || file.file_url}
+                    </a>
+                    <span className="num ml-auto shrink-0 text-xs text-muted-foreground">
+                      {fileSize(file.file_size)}
+                    </span>
+                  </div>
+                ))}
+                {attachments.isError ? (
+                  <ErrorState
+                    error={attachments.error}
+                    onRetry={() => void attachments.refetch()}
+                  />
+                ) : null}
+                {attachments.isSuccess && attachments.data.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No files yet.</div>
+                ) : null}
+              </div>
+            </Card>
+
+            <Card title="Stage history" subtitle="As stored on the deal, not reconstructed.">
+              <div className="space-y-1.5 p-4">
+                {(doc?.stage_history ?? []).map((entry) => (
+                  <div key={entry.name} className="flex gap-2 text-xs">
+                    <span className="num w-32 shrink-0 text-muted-foreground">
+                      {formatDateTime(entry.changed_on)}
+                    </span>
+                    <span className="min-w-0">
+                      {entry.from_stage ? (
+                        <span className="text-muted-foreground">{entry.from_stage} → </span>
+                      ) : null}
+                      <span className="font-medium">{entry.to_stage}</span>
+                      <span className="text-muted-foreground"> · {entry.changed_by}</span>
+                    </span>
+                  </div>
+                ))}
+                {(doc?.stage_history ?? []).length === 0 ? (
+                  <div className="text-xs text-muted-foreground">Nothing logged yet.</div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
+
+          {error ? (
+            <div className="xl:col-span-3">
+              <Card>
+                <ErrorState error={error} />
+                <div className="flex justify-center pb-6">
+                  <button type="button" onClick={() => void reload()} className={ghostButton}>
+                    <RotateCcw className="size-3" /> Start again from the server's copy
+                  </button>
+                </div>
+              </Card>
+            </div>
+          ) : null}
+        </div>
+      )}
     </AppShell>
   );
 }
