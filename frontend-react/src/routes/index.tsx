@@ -266,7 +266,9 @@ function HomePage() {
               </Figure>
             }
             sub={
-              deals.isSuccess ? `${countLabel(openDeals.length, "deal")} at face value` : undefined
+              deals.isSuccess
+                ? `${countLabel(openDeals.length, "deal")} at estimated budget, unweighted`
+                : undefined
             }
           />
           {/* The weighted figure, named apart from the unweighted one above it
