@@ -11,7 +11,7 @@ from frappe.model.document import Document
 
 from auraos.auraos.doctype.cash_account.cash_account import default_account
 from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
-from auraos.lib import ledger
+from auraos.lib import exposure, ledger
 from auraos.lib.settlement import FROM_ADVANCE
 
 
@@ -27,6 +27,7 @@ class JobExpense(Document):
     def validate(self):
         self.validate_amount()
         self.validate_category()
+        self.validate_cover()
 
     def on_update(self):
         # After the save, because an expense has no name to post against
@@ -60,6 +61,51 @@ class JobExpense(Document):
                 _("{0} is not a category on this job - its packages are: {1}").format(
                     self.category, ", ".join(allowed) or _("none")
                 ),
+                frappe.ValidationError,
+            )
+
+    def validate_cover(self):
+        """A replacement invoice has to point at a line it could replace.
+
+        `covers_cost_line` is what makes a no-invoice line count as
+        covered, and the status is derived from it rather than stored -
+        so this link is the only thing standing between the founder's
+        exposure tile and a number somebody typed. It is worth being
+        strict about.
+
+        Two ways it can be wrong, and both are rejected rather than
+        ignored, because an ignored link reads on the tile as an
+        exposure that has been dealt with:
+
+        1. **A line that is not on this job.** A cost line name is a
+           child row, and a typo or a copied name would silently cover
+           somebody else's line - or nothing at all.
+        2. **A line that already had an invoice.** Công ty and Cá nhân
+           lines came with their paper. There is nothing to replace, so
+           an expense claiming to replace it is a mistake about which
+           line was meant.
+
+        Deliberately a Data field validated here rather than a Link: the
+        target is a child row, and a Link to a child doctype is a Frappe
+        oddity that would buy nothing this method is not already doing.
+        """
+        if not self.covers_cost_line:
+            return
+        lines = {row.name: row for row in frappe.get_doc("Job", self.job).cost_lines}
+        line = lines.get(self.covers_cost_line)
+        if line is None:
+            frappe.throw(
+                _("That cost line is not on job {0}, so this expense cannot replace it.").format(
+                    self.job
+                ),
+                frappe.ValidationError,
+            )
+        if not exposure.is_no_invoice(line.as_dict()):
+            frappe.throw(
+                _(
+                    "{0} is a {1} line, so it already has an invoice behind it "
+                    "and there is nothing to replace."
+                ).format(line.description or self.covers_cost_line, line.tax_type),
                 frappe.ValidationError,
             )
 

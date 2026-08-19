@@ -13,9 +13,43 @@ import { AppShell } from "@/components/aura/AppShell";
 import { useSession } from "@/components/aura/SessionProvider";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
 import { ErrorState, Figure, QueryState, QueryStates } from "@/components/aura/states";
-import { countLabel, formatDateLong, overdueLabel, parseVnd, vnd } from "@/lib/format";
+import { countLabel, formatDateLong, overdueLabel, parseVnd, percent, vnd } from "@/lib/format";
 import { listsOf, useList, useMethod, useMethodMutation } from "@/lib/queries";
 import { FOUNDER_PROBE } from "@/lib/session";
+
+/**
+ * The founder's no-invoice tax exposure (issue #11).
+ *
+ * Pinned by tests/test_exposure.py and the seam tests in
+ * auraos/auraos/doctype/job_expense/test_no_invoice_cover.py. Money is whole
+ * integer đồng; `covered` is derived from whether an expense says it covers
+ * the line, and is stored on no doctype anywhere.
+ */
+export type ExposureLine = {
+  job: string | null;
+  job_title: string | null;
+  line: string | null;
+  description: string | null;
+  amount: number;
+  covered: boolean;
+  covering_expenses: string[];
+  covering_count: number;
+  covering_total: number;
+  spent_on: string | null;
+};
+
+export type ExposureReport = {
+  /** What was measured, printed rather than asserted by the screen. */
+  basis: string;
+  rate_pct: number;
+  uncovered_total: number;
+  tndn_exposure: number;
+  uncovered_count: number;
+  covered_total: number;
+  covered_count: number;
+  /** Only the uncovered ones: this is a list of invoices to chase. */
+  lines: ExposureLine[];
+};
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -92,6 +126,14 @@ function sum(values: Array<number | null | undefined>): number {
   return values.reduce<number>((total, value) => total + (value ?? 0), 0);
 }
 
+/**
+ * The uncovered lines worth chasing first: biggest cash, at most five. A sort
+ * and a slice of the server's own rows - nothing on the tile is added up here.
+ */
+function biggestUncovered(lines: ExposureLine[]): ExposureLine[] {
+  return [...lines].sort((a, b) => b.amount - a.amount).slice(0, 5);
+}
+
 function HomePage() {
   const session = useSession();
 
@@ -121,6 +163,14 @@ function HomePage() {
   const marginFloor = useMethod<number>(FOUNDER_PROBE, undefined, {
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
+  });
+
+  // Founder-only, and asked only when the session is one: the server refuses a
+  // producer outright, so firing this for them would be a guaranteed 403 on
+  // every dashboard load. The gate is the server's; this only avoids the noise.
+  const exposure = useMethod<ExposureReport>("auraos.api.no_invoice_exposure", undefined, {
+    enabled: session.isFounder,
+    retry: false,
   });
 
   const openDeals = (deals.data ?? []).filter((row) => !RESOLVED_DEAL_STAGES.has(row.stage));
@@ -294,6 +344,64 @@ function HomePage() {
                 >
                   Adjust the floor and the defaults
                 </Link>
+              </div>
+            </Card>
+          ) : null}
+
+          {/* Founder only, same reason as the card above: the server refuses
+              the read. A producer records that the replacement invoice
+              arrived; what it costs the company in tax is not theirs. */}
+          {session.isFounder ? (
+            <Card title="No-invoice exposure" subtitle="Founder only">
+              <div className="space-y-3 p-4">
+                <div className="flex items-baseline gap-2">
+                  <span className="num text-3xl font-semibold text-ember">
+                    <Figure query={exposure} width="7rem">
+                      <Money value={exposure.data?.tndn_exposure ?? 0} />
+                    </Figure>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    TNDN at {percent(exposure.data?.rate_pct)}
+                  </span>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  On{" "}
+                  <Money
+                    value={exposure.data?.uncovered_total ?? 0}
+                    className="font-medium text-foreground"
+                  />{" "}
+                  of cost handed over with no invoice and no replacement on file, across{" "}
+                  {countLabel(exposure.data?.uncovered_count ?? 0, "line")}. Carried until the paper
+                  arrives, not billed to a month.
+                </p>
+                <QueryState
+                  query={exposure}
+                  loadingRows={2}
+                  isEmpty={() => (exposure.data?.lines.length ?? 0) === 0}
+                  empty={{
+                    title: "Every no-invoice cost has its replacement.",
+                    detail: "Nothing here is exposed.",
+                    icon: <CheckCircle2 className="size-6" strokeWidth={1.5} />,
+                  }}
+                >
+                  {(report) => (
+                    <ul className="space-y-1.5 border-t border-border pt-3">
+                      {biggestUncovered(report.lines).map((row) => (
+                        <li key={row.line} className="flex items-baseline gap-2 text-xs">
+                          <span className="truncate">{row.description || "Untitled line"}</span>
+                          <Link
+                            to="/jobs/$jobId"
+                            params={{ jobId: row.job ?? "" }}
+                            className="label-caps shrink-0 hover:text-foreground"
+                          >
+                            {row.job_title || row.job}
+                          </Link>
+                          <Money value={row.amount} className="ml-auto shrink-0" />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </QueryState>
               </div>
             </Card>
           ) : null}

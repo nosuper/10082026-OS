@@ -15,6 +15,7 @@
   "paid_from",
   "detail_section",
   "description",
+  "covers_cost_line",
   "photo"
  ],
  "fields": [
@@ -83,6 +84,12 @@
    "fieldname": "description",
    "fieldtype": "Data",
    "label": "Description"
+  },
+  {
+   "fieldname": "covers_cost_line",
+   "fieldtype": "Data",
+   "label": "Covers Cost Line",
+   "description": "The Không hoá đơn cost line on this job that this expense is the replacement invoice for. Leave empty on an ordinary expense."
   },
   {
    "description": "Photo of the receipt, taken when the money was handed over",

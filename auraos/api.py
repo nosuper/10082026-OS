@@ -13,7 +13,7 @@ from auraos.auraos.doctype.job.job import STAGES as JOB_STAGES
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, finance, paper_status, paperwork, settlement
+from auraos.lib import breakdown, exposure, finance, paper_status, paperwork, settlement
 from auraos.lib import reporting
 # Imported by name: `milestones` is a parameter of save_job_milestones.
 from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
@@ -2019,3 +2019,79 @@ def _cash_job_titles(names):
             as_list=True,
         )
     )
+
+
+# -- no-invoice exposure (T9, issue #11) --
+
+# What one no-invoice cost line needs for its cash figure and its
+# identity on the tile. Read as a flat query rather than by loading each
+# Job document: the founder's tile asks about every job at once, and
+# forty document loads to add up forty numbers is a page that gets
+# slower every month the studio stays in business.
+EXPOSURE_LINE_FIELDS = [
+    "name",
+    "parent",
+    "description",
+    "tax_type",
+    "subtotal",
+    "vendor_mf_pct",
+    "input_vat",
+]
+
+
+@frappe.whitelist()
+def no_invoice_exposure():
+    """Cost handed over with no invoice, and the TNDN it exposes us to.
+
+    Founder-only, and refused outright rather than blanked: this is the
+    company's tax position, which sits behind the same boundary as the
+    profit chain. The UI hides the tile from a producer as a courtesy;
+    this is the part that means they cannot have it.
+
+    Not a range. An uncovered no-invoice cost is carried from the day
+    the money left until a replacement invoice arrives, so the question
+    is what the company is carrying now - the same reading
+    `finance_receivables` takes when it says what is owed is owed today.
+
+    Every job, not only the open ones. A finished shoot's missing
+    invoice is still missing, and the tax on it is still owed.
+
+    The covered/uncovered status is derived here and stored nowhere. A
+    line is covered when some expense says it covers it, so the only way
+    to change this number is to record or unrecord the paperwork - which
+    is what stops it becoming a figure somebody typed.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may see the no-invoice tax exposure"),
+            frappe.PermissionError,
+        )
+
+    jobs = dict(
+        frappe.get_all("Job", fields=["name", "title"], as_list=True, limit_page_length=0)
+    )
+    rows = []
+    if jobs:
+        lines = frappe.get_all(
+            "Deal Cost Line",
+            filters={"parenttype": "Job", "parent": ["in", list(jobs)]},
+            fields=EXPOSURE_LINE_FIELDS,
+            order_by="parent asc, idx asc",
+            limit_page_length=0,
+        )
+        covers = frappe.get_all(
+            "Job Expense",
+            filters={"job": ["in", list(jobs)], "covers_cost_line": ["is", "set"]},
+            fields=["name", "amount", "covers_cost_line"],
+            limit_page_length=0,
+        )
+        by_job = {}
+        for line in lines:
+            by_job.setdefault(line.parent, []).append(line)
+        for job, job_lines in by_job.items():
+            rows.extend(
+                exposure.exposure_rows(
+                    job_lines, covers, job=job, job_title=jobs.get(job)
+                )
+            )
+    return exposure.exposure_report(rows)
