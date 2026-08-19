@@ -24,7 +24,7 @@ so the ledger reconciles against them.
 import os
 
 import frappe
-from frappe.utils import add_months, add_days, today
+from frappe.utils import add_months, today
 
 from auraos.auraos.doctype.job.job import CLOSED_STAGE, create_from_deal
 from auraos.api import generate_job_paperwork
@@ -58,7 +58,7 @@ INVOICED_LINE = "Playwright director"
 # contain them. The gap is the assertion: expenses in this month, the
 # collected milestone two months back, and empty months between.
 SPENT_ON = today()
-COLLECTED_ON = add_days(add_months(today(), -2), 0)
+COLLECTED_ON = add_months(today(), -2)
 
 
 def ensure_user():
