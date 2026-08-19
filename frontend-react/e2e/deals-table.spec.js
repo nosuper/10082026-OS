@@ -25,8 +25,12 @@ import { administratorState, producerState } from "./auth-state.js"
 // selector for selector would have produced a spec that tests nothing.
 
 const existingDeal = "Playwright Existing Deal"
+// The cell renders the symbol; the editor does not. Keeping both forms named
+// here means the next display change breaks in one place rather than four.
 const seededBudget = "10.000.000"
 const typedBudget = "12.500.000"
+const seededCell = `${seededBudget}₫`
+const typedCell = `${typedBudget}₫`
 
 async function openDeals(page) {
   await page.goto("/aura-next/deals")
@@ -73,12 +77,12 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
   await editor.fill("12500000")
   await expect(editor).toHaveValue(typedBudget)
   await editor.blur()
-  await expect(cell).toHaveText(typedBudget)
+  await expect(cell).toHaveText(typedCell)
 
   await page.reload()
   await openTable(page)
   cell = await budgetCell(page)
-  await expect(cell).toHaveText(typedBudget)
+  await expect(cell).toHaveText(typedCell)
 
   // Anything that is not a digit never lands in the field, and Escape walks
   // away without saving.
@@ -89,7 +93,7 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
 
   await page.reload()
   await openTable(page)
-  await expect(await budgetCell(page)).toHaveText(typedBudget)
+  await expect(await budgetCell(page)).toHaveText(typedCell)
 
   // Put the seeded figure back. The Vue original did not, and because
   // ensure_deal() only created the deal rather than restoring it, every site
@@ -100,7 +104,7 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
   await cell.click()
   await cell.locator("input").fill("10000000")
   await cell.locator("input").blur()
-  await expect(cell).toHaveText(seededBudget)
+  await expect(cell).toHaveText(seededCell)
 })
 
 test("table view and optional columns persist while required columns stay fixed", async ({
