@@ -45,7 +45,28 @@ def ensure_company():
 
 
 def ensure_deal(company):
-    if frappe.db.exists("Deal", {"title": DEAL}):
+    """The seeded deal, restored to its seeded values rather than merely
+    created once.
+
+    Same argument as ensure_breakdown below, which was given it first
+    because the breakdown line was the one implicated at the time. This
+    function kept the older shape - return early if the deal exists - and
+    that leaves `estimated_budget` as an initialiser: the deals spec edits
+    it to 12.500.000 and never puts it back, so from the second run
+    onwards the site carries a budget nobody seeded and no reseed ever
+    corrects it. Nothing asserted on it, so it drifted quietly.
+
+    A spec that changes a seeded value is allowed to. The seed's job is
+    to be able to say what the state *is*.
+    """
+    existing = frappe.db.exists("Deal", {"title": DEAL})
+    if existing:
+        deal = frappe.get_doc("Deal", existing)
+        deal.company = company
+        deal.stage = "Brief Received"
+        deal.deal_owner = PRODUCER
+        deal.estimated_budget = 10_000_000
+        deal.save(ignore_permissions=True)
         return
     frappe.get_doc(
         {
