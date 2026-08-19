@@ -741,43 +741,73 @@ def seed_a5_freelancer_contract(deal_name):
     ).insert(ignore_permissions=True)
 
 
-def seed_11_no_invoice_cover(deal_name):
-    """#11: one no-invoice line answered for, one still exposed.
+def seed_123_no_invoice_exposure(deal_name):
+    """#123: the founder's tax tile with all three of its states showing.
 
-    The founder's exposure tile has two states and a walkthrough that
-    only ever shows one of them leaves the other unlooked-at. The
-    covering expense is a real Job Expense through the real field, not a
-    flag written somewhere: coverage is derived, so the only way to seed
-    a covered line is to record the paperwork that covers it.
+    Exposure is money that moved, so every row here is a real payment
+    rather than a quoted line. #11 seeded this by writing a second
+    expense to stand for the replacement invoice, which is what #123
+    removed: a covering expense adds its amount to the job's cost and
+    posts a ledger entry for money that never moved. The invoice is a
+    field on the payment now.
 
-    The one left uncovered is the catering line, deliberately the
-    smaller of the two - an exposure the founder can check against the
-    tile by eye.
+    Three states, because a tile whose covered branch has never rendered
+    is a branch nobody has looked at:
+
+    1. **Stated and exposed** - paid against a Không hoá đơn line, no
+       invoice. This is the number the founder is meant to act on.
+    2. **Stated and covered** - the same, with an invoice number on it,
+       so it drops out of the exposure and into the covered total.
+    3. **Unattributed** - the float expenses seeded by T8 name no line
+       at all, so they count as at risk until somebody points them at
+       one. Nothing extra is needed for this; it is already true, and it
+       is the half the founder asked to be counted rather than hidden.
+
+    Deliberately smaller than the float spend beside it, so the tile's
+    two halves are told apart by eye rather than by arithmetic.
     """
     job = frappe.db.get_value("Job", {"title": WON_DEAL})
-    if not job or frappe.db.exists("Job Expense", {"covers_cost_line": ["is", "set"]}):
+    if not job or frappe.db.exists("Job Expense", {"cost_line": ["is", "set"]}):
         return
 
     doc = frappe.get_doc("Job", job)
-    covered = [
-        row for row in doc.cost_lines
-        if row.tax_type == "Không hoá đơn" and row.description == "Thuê bãi đỗ xe đoàn"
-    ]
-    if not covered:
+    lines = {
+        row.description: row
+        for row in doc.cost_lines
+        if row.tax_type == "Không hoá đơn"
+    }
+    exposed = lines.get("Ăn uống đoàn")
+    covered = lines.get("Thuê bãi đỗ xe đoàn")
+    if not exposed or not covered:
         return
 
-    frappe.get_doc(
+    payments = [
         {
-            "doctype": "Job Expense",
-            "job": job,
-            "paid_by": founder(),
+            "amount": 4_200_000,
+            "description": "Cơm đoàn 3 ngày quay",
+            "cost_line": exposed.name,
+            "invoice_no": None,
+        },
+        {
             "amount": 3_000_000,
-            "spent_on": frappe.utils.add_days(frappe.utils.today(), -4),
-            "paid_from": "Company",
-            "description": "Hoá đơn thay thế - bãi đỗ xe",
-            "covers_cost_line": covered[0].name,
-        }
-    ).insert(ignore_permissions=True)
+            "description": "Bãi đỗ xe đoàn",
+            "cost_line": covered.name,
+            # The paper arrived. Recorded on the payment, not as a
+            # second one - the founder did not pay the bãi đỗ xe twice.
+            "invoice_no": "0001234",
+        },
+    ]
+    for offset, payment in enumerate(payments):
+        frappe.get_doc(
+            {
+                "doctype": "Job Expense",
+                "job": job,
+                "paid_by": founder(),
+                "paid_from": "Company",
+                "spent_on": frappe.utils.add_days(frappe.utils.today(), -4 - offset),
+                **payment,
+            }
+        ).insert(ignore_permissions=True)
 
 
 # Far enough back to be a different calendar month whatever day the seed
@@ -872,7 +902,7 @@ FEATURE_SEEDS = {
     "A5 freelancer contract": seed_a5_freelancer_contract,
     # Ordered after T8 and T10: both of these read records those seeds
     # create, and a dict preserves insertion order.
-    "#11 no-invoice cover": seed_11_no_invoice_cover,
+    "#123 no-invoice exposure": seed_123_no_invoice_exposure,
     "#108 a second month": seed_108_a_second_month,
     "#106 paper states": seed_106_paper_states,
 }
