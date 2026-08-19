@@ -14,6 +14,8 @@
   "stamps_section",
   "requested_on",
   "invoiced_on",
+  "invoice_no",
+  "invoice_vat_pct",
   "column_break_stamps",
   "paid_on"
  ],
@@ -85,6 +87,21 @@
    "read_only": 1
   },
   {
+   "description": "Số hoá đơn - recorded when the invoice is issued, and cleared with the issue date if the milestone is walked back before đã xuất HĐ",
+   "fieldname": "invoice_no",
+   "fieldtype": "Data",
+   "label": "Invoice Number",
+   "read_only": 1
+  },
+  {
+   "description": "The output VAT rate this invoice was issued under - captured once, so a later rate change never restates an invoice the client already holds",
+   "fieldname": "invoice_vat_pct",
+   "fieldtype": "Percent",
+   "label": "VAT Rate Invoiced At",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_stamps",
    "fieldtype": "Column Break"
   },
@@ -98,7 +115,7 @@
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-08-10 00:00:00.000000",
+ "modified": "2026-08-19 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "AuraOS",
  "name": "Job Payment Milestone",

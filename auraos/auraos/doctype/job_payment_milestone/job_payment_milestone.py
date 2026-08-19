@@ -16,6 +16,7 @@ from frappe import _
 from frappe.model.document import Document
 
 from auraos.lib.milestones import (
+    INVOICE_FIELDS,
     NOT_REQUESTED,
     STATUS_FLOW,
     allocated_pct,
@@ -27,6 +28,7 @@ from auraos.lib.milestones import (
     milestone_amounts,
     stage_reached,
     stamps_for,
+    vat_basis,
 )
 from auraos.settings import setting
 
@@ -91,7 +93,11 @@ def apply_to(job, stages):
             status=row.status,
             now=now,
         )
-        stamps = stamps_for(row.status or NOT_REQUESTED, row.as_dict(), now)
+        # job.vat_pct is only ever taken by a milestone being invoiced
+        # for the first time; stamps_for keeps a rate already recorded.
+        stamps = stamps_for(
+            row.status or NOT_REQUESTED, row.as_dict(), now, vat_pct=job.vat_pct
+        )
         for field, value in stamps.items():
             row.set(field, value)
 
@@ -139,6 +145,9 @@ VIEW_FIELDS = (
     "requested_on",
     "invoiced_on",
     "paid_on",
+    # The invoice, on the row it bills: its number and the rate it was
+    # written on, so the screen reads the basis instead of assuming one.
+    *INVOICE_FIELDS,
 )
 
 
@@ -155,6 +164,12 @@ def milestone_view(row, terms_days=None, now=None):
     due_on = frappe.utils.get_datetime(row.due_on) if row.due_on else None
     return {
         **{field: row.get(field) for field in VIEW_FIELDS},
+        # There is an invoice exactly when there is an issue date. A
+        # stored rate of 0 on a milestone nobody invoiced would read as
+        # a VAT-free invoice, and an empty Data column would make the
+        # screen test for two kinds of nothing.
+        "invoice_no": (row.get("invoice_no") or None) if row.get("invoiced_on") else None,
+        "invoice_vat_pct": row.get("invoice_vat_pct") if row.get("invoiced_on") else None,
         "overdue": is_overdue(
             status=row.status, due_on=due_on, now=now, terms_days=terms_days
         ),
@@ -247,5 +262,15 @@ def request_text(job, row):
         client=client,
         milestone={"title": row.title, "pct": row.pct, "amount": row.amount},
         job_title=job.title,
-        vat_pct=job.vat_pct,
+        vat_pct=invoice_vat_pct(job, row),
     )
+
+
+def invoice_vat_pct(job, row):
+    """The rate this milestone's invoice is read at.
+
+    Its own, once it has one. Asking for the text again a quarter after
+    the company moved to 10% must reproduce the 8% invoice the client
+    holds, not a second version of it.
+    """
+    return vat_basis(row.get("invoiced_on"), row.get("invoice_vat_pct"), job.vat_pct)

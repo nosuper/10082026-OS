@@ -23,8 +23,15 @@ import {
 import { countLabel, formatDate, overdueLabel } from "@/lib/format";
 import { resultOf, useMethod, useMethodMutation } from "@/lib/queries";
 
+/**
+ * The invoice a milestone was billed under, as the server now sends it. Declared
+ * here rather than beside Milestone because this panel is the only screen reading
+ * it so far; it belongs on the shared type as soon as a second one does.
+ */
+type IssuedInvoice = { invoice_no: string | null; invoice_vat_pct: number | null };
+
 /** A milestone as the panel edits it: the stored row plus a stable row key. */
-type PlanRow = Milestone & { key: string };
+type PlanRow = Milestone & Partial<IssuedInvoice> & { key: string };
 
 type InvoiceText = { text: string };
 
@@ -73,6 +80,21 @@ function rebalanced(rows: PlanRow[], index: number, pct: number): PlanRow[] {
 function stampFor(row: PlanRow): string {
   const stamp = row.paid_on || row.invoiced_on || row.requested_on;
   return stamp ? formatDate(stamp) : "";
+}
+
+/**
+ * The invoice this milestone was billed under - its number and the VAT rate it
+ * was written at. Shown from the issue date, because the issue date is what says
+ * an invoice exists: a milestone with no date has no invoice to describe, and one
+ * issued before the number came back from the accountant says so rather than
+ * leaving a gap the founder has to interpret.
+ */
+function invoiceLine(row: PlanRow): string | null {
+  if (!row.invoiced_on) return null;
+  const rate = row.invoice_vat_pct;
+  const parts = [row.invoice_no || "invoice number not recorded"];
+  if (rate !== null && rate !== undefined) parts.push(`VAT ${Number(rate)}%`);
+  return parts.join(" - ");
 }
 
 /** The four planning fields, as the comparison for "unsaved". */
@@ -329,6 +351,14 @@ export function JobMilestonesPanel({ job }: { job: string }) {
                       {row.name && stampFor(row) ? (
                         <div className="num mt-1 text-xs text-muted-foreground">
                           {stampFor(row)}
+                        </div>
+                      ) : null}
+                      {row.name && invoiceLine(row) ? (
+                        <div
+                          className="num text-xs text-muted-foreground"
+                          title="The invoice this milestone was billed under, and the VAT rate it was written at"
+                        >
+                          {invoiceLine(row)}
                         </div>
                       ) : null}
                     </td>

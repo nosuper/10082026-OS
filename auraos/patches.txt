@@ -6,3 +6,4 @@
 
 [post_model_sync]
 auraos.patches.backfill_generated_paper_status
+auraos.patches.record_invoice_vat_basis

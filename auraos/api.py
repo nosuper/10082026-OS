@@ -16,7 +16,9 @@ from auraos.auraos.doctype.paperwork_template import paperwork_template
 from auraos.lib import breakdown, finance, paper_status, paperwork, settlement
 from auraos.lib import reporting
 # Imported by name: `milestones` is a parameter of save_job_milestones.
+from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
 from auraos.lib.milestones import PAID as MILESTONE_PAID
+from auraos.lib.milestones import invoice_split
 from auraos.lib.money import round_vnd, to_decimal
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import COMPANY_FIELDS
@@ -946,17 +948,34 @@ def save_job_milestones(job, milestones):
 
 
 @frappe.whitelist()
-def set_milestone_status(job, milestone, status):
+def set_milestone_status(job, milestone, status, invoice_no=None):
     """Move one milestone along (or back along) the collection flow.
 
     Back along on purpose: a status set by mistake would otherwise be a
     one-way door, which is exactly what the T6 walkthrough asked us to
     stop building. The timestamps follow the status either way.
+
+    Issuing an invoice is this call, not a second one. đã xuất HĐ already
+    stamps the issue date here; the number the accountant sent back rides
+    in beside it, so there is exactly one door onto "invoiced" and the
+    same door leads back out. Passing it again while the milestone is
+    still invoiced corrects a mistyped number without disturbing the day
+    the invoice went out. The VAT rate is never accepted from a caller -
+    like the amount, it is derived on save, from the job.
     """
     _check_job_permission(job, "write")
+    if invoice_no is not None and status != MILESTONE_INVOICED:
+        frappe.throw(
+            _("An invoice number belongs to a milestone marked {0}").format(
+                MILESTONE_INVOICED
+            ),
+            frappe.ValidationError,
+        )
     doc = frappe.get_doc("Job", job)
     row = job_payment_milestone.find(doc, milestone)
     row.status = status
+    if invoice_no is not None:
+        row.invoice_no = (invoice_no or "").strip()
     doc.save()
     # The save recomputed the row's stamps in place, so this is the
     # stored milestone, not the one the caller described.
@@ -969,11 +988,28 @@ def milestone_invoice_request(job, milestone):
 
     Read-only: pasting the message is a human act, and marking the
     milestone requested is a separate, undoable decision.
+
+    The text is for the accountant; the numbers beside it are for the
+    screen. The VAT basis is stated rather than implied - a milestone
+    already invoiced is read at the rate it was issued under, and one
+    still to be invoiced at the company's rate today - so nothing has to
+    parse a Vietnamese sentence to find out which.
     """
     _check_job_permission(job, "read")
     doc = frappe.get_doc("Job", job)
     row = job_payment_milestone.find(doc, milestone)
-    return {"text": job_payment_milestone.request_text(doc, row)}
+    vat_pct = job_payment_milestone.invoice_vat_pct(doc, row)
+    amount = round_vnd(row.amount or 0)
+    split = invoice_split(amount, vat_pct)
+    return {
+        "text": job_payment_milestone.request_text(doc, row),
+        "invoice_no": row.invoice_no,
+        "invoiced_on": row.invoiced_on,
+        "amount": amount,
+        "vat_pct": vat_pct,
+        "net": split.net,
+        "vat": split.vat,
+    }
 
 
 @frappe.whitelist()

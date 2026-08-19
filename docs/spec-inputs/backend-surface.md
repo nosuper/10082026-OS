@@ -84,12 +84,17 @@ shapes returned.
 |---|---|---|---|
 | 27 | `job_milestones(job)` | `{payment_terms_days, milestones:[milestone_view]}` | job read |
 | 28 | `save_job_milestones(job, milestones)` | same as 27 | job write; only `title/pct/trigger_stage` accepted, amounts always derived |
-| 29 | `set_milestone_status(job, milestone, status)` | one `milestone_view` | job write |
-| 30 | `milestone_invoice_request(job, milestone)` | `{text}` - Vietnamese Zalo message | job read |
+| 29 | `set_milestone_status(job, milestone, status, invoice_no=None)` | one `milestone_view` | job write; a number is only accepted with `Invoiced` |
+| 30 | `milestone_invoice_request(job, milestone)` | `{text, invoice_no, invoiced_on, amount, vat_pct, net, vat}` - the Zalo message plus the figures it is built from | job read |
 | 31 | `overdue_milestones()` | `{payment_terms_days, milestones:[{...milestone_view, job, job_title, company}]}` **across all permitted jobs** | `has_permission("Job","read")`; `overdue()` scopes by `get_list("Job")` |
 
 `milestone_view` shape: `name, idx, title, pct, trigger_stage, amount, status, due_on,
-requested_on, invoiced_on, paid_on, overdue, days_overdue`.
+requested_on, invoiced_on, paid_on, invoice_no, invoice_vat_pct, overdue, days_overdue`.
+
+`invoice_no` and `invoice_vat_pct` are the invoice itself, kept beside the moment it
+was issued: both are null until `invoiced_on` exists, both are cleared if the milestone
+walks back before it, and the rate is captured once at issue so today's rate cannot
+restate an invoice the client already holds.
 
 ### Paperwork
 
