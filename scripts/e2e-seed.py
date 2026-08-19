@@ -124,6 +124,11 @@ def ensure_deal(company):
         deal.company = company
         deal.stage = "Brief Received"
         deal.deal_owner = PRODUCER
+        # #117 lets a spec move this deal to Lost, which writes a reason
+        # and a note the doctype then requires to stay consistent with the
+        # stage. Clearing them here is part of saying what the state is.
+        deal.lost_reason = None
+        deal.lost_note = None
         deal.estimated_budget = 10_000_000
         deal.save(ignore_permissions=True)
         return
