@@ -102,14 +102,26 @@ class _Report:
 # -- reading a template --
 
 
+NOT_A_DOCX = (
+    "That file is not a docx - Word documents saved as .doc or "
+    "exported as PDF cannot be used as templates."
+)
+
+
 def _archive(data: bytes) -> zipfile.ZipFile:
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        # A caller reading an upload can be handed text rather than
+        # bytes: a file store that decodes what it reads gives back a
+        # string for any file whose bytes happen to be valid UTF-8,
+        # which a tiny PDF or a renamed .txt often is. A docx is a zip
+        # and never decodes, so text arriving here is the same mistake
+        # as any other wrong file and has to read like one, rather than
+        # as a TypeError from inside the zip reader.
+        raise ValueError(NOT_A_DOCX)
     try:
         return zipfile.ZipFile(BytesIO(data))
     except zipfile.BadZipFile:
-        raise ValueError(
-            "That file is not a docx - Word documents saved as .doc or "
-            "exported as PDF cannot be used as templates."
-        ) from None
+        raise ValueError(NOT_A_DOCX) from None
 
 
 def placeholders_in_docx(data: bytes) -> list[str]:

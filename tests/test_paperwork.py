@@ -341,6 +341,17 @@ def test_a_file_that_is_not_a_docx_is_refused_by_name():
         placeholders_in_docx(b"this is a PDF, honestly")
 
 
+def test_a_non_docx_that_reads_as_text_is_refused_the_same_way():
+    """The file store hands back text for bytes that happen to decode -
+    a small PDF, a renamed .txt - and that is a wrong file, not a
+    TypeError from inside the zip reader (issue #105)."""
+    with pytest.raises(ValueError, match="docx"):
+        placeholders_in_docx("%PDF-1.4 tiny fake pdf, all ascii")
+
+    with pytest.raises(ValueError, match="docx"):
+        fill_docx("%PDF-1.4 tiny fake pdf, all ascii", {})
+
+
 # -- the starter template we can write ourselves --
 
 
@@ -544,6 +555,17 @@ def test_docx_reads_back_with_its_emphasis_and_alignment():
 def test_docx_line_breaks_survive_the_round_trip():
     docx = html_to_docx("<p>dòng một<br>dòng hai</p>")
     assert "dòng một<br>dòng hai" in docx_to_html(docx)
+
+
+def test_reading_a_file_that_is_not_a_docx_says_so_whatever_its_type():
+    """The job screen reads any attachment through here, and a receipt
+    photo or a PDF - bytes or the text the file store decoded them into
+    - has to come back as a refusal, not a TypeError (issue #105)."""
+    with pytest.raises(ValueError, match="docx"):
+        docx_to_html(b"\xd0\xcf\x11\xe0 old Word format")
+
+    with pytest.raises(ValueError, match="docx"):
+        docx_to_html("%PDF-1.4 tiny fake pdf, all ascii")
 
 
 def test_highlight_gaps_wraps_only_the_markers():

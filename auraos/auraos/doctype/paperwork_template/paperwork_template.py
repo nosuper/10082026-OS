@@ -86,6 +86,12 @@ def content(template) -> bytes:
     Templates are uploaded through the app, so the attachment is always
     a File row; a `template_file` pointing anywhere else is a template
     nobody can generate from, and saying so beats a stack trace.
+
+    Frappe hands back text, not bytes, for a stored file whose bytes
+    happen to decode - a small PDF, a renamed .txt - so the encode puts
+    those bytes back the way they were read and keeps the promise this
+    signature makes. What is wrong with such a file is then the one
+    thing that is wrong with it: it is not a docx.
     """
     name = frappe.db.get_value("File", {"file_url": template.template_file}, "name")
     if not name:
@@ -95,7 +101,8 @@ def content(template) -> bytes:
             ),
             frappe.DoesNotExistError,
         )
-    return frappe.get_doc("File", name).get_content()
+    data = frappe.get_doc("File", name).get_content()
+    return data.encode("utf-8") if isinstance(data, str) else data
 
 
 def party(doctype, name):
