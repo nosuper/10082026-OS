@@ -392,3 +392,118 @@ def balance(entries: Iterable[Entry | Mapping[str, Any]]) -> int:
 def _amount_of(entry: Entry | Mapping[str, Any]) -> Any:
     """One entry's signed amount, whether it is an Entry or a stored row."""
     return entry["amount"] if isinstance(entry, dict) else entry.amount
+
+
+# -- reading the ledger back (#101) --
+
+
+def _field(entry: Entry | Mapping[str, Any], name: str) -> Any:
+    """One field off an entry, whether it is an Entry or a stored row."""
+    if isinstance(entry, dict):
+        return entry.get(name)
+    return getattr(entry, name, None)
+
+
+@dataclass(frozen=True)
+class Holding:
+    """One account and what the ledger says it holds.
+
+    Not a stored figure and not a storable one: it is made here, out of
+    the rows, every time somebody asks. There is deliberately no way to
+    put a number into this that the entries did not put there.
+    """
+
+    account: str
+    balance: int
+    count: int
+
+
+def holdings(
+    accounts: Iterable[str],
+    entries: Iterable[Entry | Mapping[str, Any]],
+) -> list[Holding]:
+    """What each account holds, in the order the accounts were given.
+
+    Every account named comes back, whether or not anything was ever
+    posted against it. An account with no entries holds 0 - that is a
+    fact about the account, not a gap in the data, and a studio that has
+    never posted anything opens this screen to zeros rather than to an
+    error.
+
+    Each balance is `balance()` over that account's rows and nothing
+    else, so widening the ledger with a fifth flow tomorrow widens these
+    figures without a line changing here.
+    """
+    held = {account: [] for account in accounts}
+    for entry in entries:
+        rows = held.get(_field(entry, "account"))
+        if rows is not None:
+            rows.append(entry)
+    return [
+        Holding(account, balance(rows), len(rows)) for account, rows in held.items()
+    ]
+
+
+def total_held(held: Iterable[Holding]) -> int:
+    """What the company has: the accounts on the screen, added up.
+
+    Taken from the same holdings the screen lists rather than from the
+    entries again, so the total and the rows under it cannot disagree.
+    """
+    return sum(holding.balance for holding in held)
+
+
+def source_of(
+    entry: Entry | Mapping[str, Any],
+    job_title: str | None = None,
+) -> str:
+    """The origin as a human recognises it - never a doctype and a name.
+
+    An entry's origin is a pair, which is the right thing to store and
+    the wrong thing to read: "Job Payment Milestone / 8f3c1a2b" tells a
+    founder nothing about their own money. What the origin calls itself
+    is already on the entry - a milestone's title, an expense's
+    description, the person holding a float - so that is the first
+    answer. The job it happened on is the second, because money out of a
+    record with no title of its own is still recognisably that job's.
+    The flow is the last resort, and it is always true.
+    """
+    for candidate in (
+        _field(entry, "description"),
+        job_title,
+        _field(entry, "flow"),
+    ):
+        named = str(candidate or "").strip()
+        if named:
+            return named
+    return ""
+
+
+def entry_view(
+    entry: Entry | Mapping[str, Any],
+    job_title: str | None = None,
+) -> dict[str, Any]:
+    """One movement as a screen reads it (#101).
+
+    The direction is read off the sign here as well, rather than trusted
+    from the stored column: the amount is what a balance is made of, so
+    the word printed beside it has to come from the same place.
+
+    The origin pair travels too. The screen prints `source`, but a
+    founder querying a figure needs to be able to reach the record it
+    came from, and the pair is what identifies it.
+    """
+    amount = round_vnd(_amount_of(entry) or 0)
+    entry_date = as_date(_field(entry, "entry_date"))
+    return {
+        "name": _field(entry, "name"),
+        "entry_date": entry_date.isoformat() if entry_date else None,
+        "amount": amount,
+        "direction": direction_of(amount),
+        "flow": _field(entry, "flow"),
+        "source": source_of(entry, job_title),
+        "source_doctype": _field(entry, "source_doctype"),
+        "source_name": _field(entry, "source_name"),
+        "job": _field(entry, "job") or None,
+        "job_title": job_title or None,
+    }

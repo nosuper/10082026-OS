@@ -1869,3 +1869,120 @@ def set_company_identity(values):
     settings.update(values)
     settings.save()
     return get_company_identity()
+
+
+# -- cash accounts: what the company actually holds (#101) --
+#
+# The first time the cash ledger is visible. Two reads, both derived:
+# a balance is `sum(amount)` over an account's entries and nothing else,
+# computed by auraos.lib.ledger and never stored, never defaulted and
+# never accepted from a caller. There is no setter down here on purpose
+# - a figure somebody can type over is an opinion, and the point of this
+# pair of endpoints is that the number is a fact.
+#
+# Founder-only, decided by the server: the permission asked for is read
+# on Cash Ledger Entry, which #99 granted to Founder and System Manager
+# and to no operating role beyond them. A producer reads a job's own
+# money through job_money(); what the company holds across every job is
+# not their question, and the refusal is the doctype's, not this
+# module's opinion of it.
+#
+# The imports are local to keep this section additive - see
+# get_tier_thresholds() for the same shape.
+
+
+@frappe.whitelist()
+def cash_accounts():
+    """Every cash account with what the ledger says it holds.
+
+    The total comes down computed, like every balance under it. Nothing
+    here is a list for a screen to add up: the frontend formats money
+    and never works it out.
+
+    A company that has named no account gets an empty list and a total
+    of 0 - the same silence #99 chose when a collection has nowhere to
+    post to, rather than an error about a company that simply has not
+    said where it keeps its money yet.
+    """
+    from auraos.auraos.doctype.cash_account.cash_account import default_account
+    from auraos.lib import ledger
+
+    frappe.has_permission("Cash Ledger Entry", "read", throw=True)
+    accounts = frappe.get_all(
+        "Cash Account",
+        fields=["name", "account_name", "note"],
+        order_by="account_name asc",
+    )
+    entries = frappe.get_all("Cash Ledger Entry", fields=["account", "amount"])
+    held = ledger.holdings([account.name for account in accounts], entries)
+    by_account = {holding.account: holding for holding in held}
+    default = default_account()
+    return {
+        "accounts": [
+            {
+                "name": account.name,
+                "account_name": account.account_name,
+                "note": account.note or None,
+                "balance": by_account[account.name].balance,
+                "count": by_account[account.name].count,
+                # Where a collection lands when nobody says otherwise.
+                "is_default": account.name == default,
+            }
+            for account in accounts
+        ],
+        "total": ledger.total_held(held),
+        "count": sum(holding.count for holding in held),
+    }
+
+
+@frappe.whitelist()
+def cash_account_entries(account):
+    """One account's movements, newest first, each with its source.
+
+    The source is what the origin calls itself, not the pair it is
+    stored as: auraos.lib.ledger.source_of turns a doctype and a name
+    into the milestone, expense or float a founder recognises, and the
+    job it happened on is resolved to its title here because that is the
+    one part of it a fetch can answer and arithmetic cannot.
+
+    An account nothing has ever been posted against answers with an
+    empty list and a balance of 0.
+    """
+    from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+    from auraos.lib import ledger
+
+    frappe.has_permission("Cash Ledger Entry", "read", throw=True)
+    if not frappe.db.exists("Cash Account", account):
+        frappe.throw(
+            _("{0} is not a cash account").format(account), frappe.DoesNotExistError
+        )
+    rows = cash_ledger_entry.entries_for(account)
+    titles = _cash_job_titles({row.job for row in rows if row.job})
+    (held,) = ledger.holdings([account], rows)
+    return {
+        "account": account,
+        "account_name": frappe.db.get_value("Cash Account", account, "account_name"),
+        "balance": held.balance,
+        "count": held.count,
+        "entries": [ledger.entry_view(row, titles.get(row.job)) for row in rows],
+    }
+
+
+def _cash_job_titles(names):
+    """{job: title} for the jobs a set of entries came from.
+
+    Read with get_all rather than get_list: this endpoint has already
+    refused anybody who may not read the ledger, and a founder filtering
+    their own cash by which jobs they happen to own would report a
+    balance that is not the account's.
+    """
+    if not names:
+        return {}
+    return dict(
+        frappe.get_all(
+            "Job",
+            filters={"name": ["in", list(names)]},
+            fields=["name", "title"],
+            as_list=True,
+        )
+    )

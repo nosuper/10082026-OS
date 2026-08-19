@@ -29,6 +29,7 @@ test_cash_ledger.py) proves the doctype and the save path go through
 this module.
 """
 
+from dataclasses import asdict
 from datetime import date, datetime
 
 import pytest
@@ -47,19 +48,24 @@ from auraos.lib.ledger import (
     SOURCES,
     UNPOST,
     Entry,
+    Holding,
     balance,
     client_payment,
     collected,
     crew_advance,
     direction_of,
     entry_name,
+    entry_view,
     float_settlement,
+    holdings,
     job_expense,
     paid_by_company,
     posting,
     restated,
     restates,
     settled,
+    source_of,
+    total_held,
     transferred,
 )
 from auraos.lib.milestones import INVOICED, PAID, REQUESTED
@@ -564,3 +570,138 @@ def test_an_entry_read_back_out_of_a_database_compares_equal():
 
     assert stored == client_payment(PAID_MILESTONE, ACCOUNT, job="JOB-0001")
     assert not restates(stored, client_payment(PAID_MILESTONE, ACCOUNT))
+
+
+# -- what the founder sees: an account, its balance, its movements (#101) --
+#
+# The screen's arithmetic, pinned without a database. Every figure #101
+# prints is made here out of the entries: there is no function below
+# that accepts a balance, and none that stores one.
+
+CASH_BOX = "Két tiền mặt"
+
+
+def test_every_account_gets_a_balance_made_of_its_own_entries():
+    entries = [
+        Entry(ACCOUNT, 55_000_000, date(2026, 8, 1), *_origin("a")),
+        Entry(CASH_BOX, -3_000_000, date(2026, 8, 2), *_origin("b")),
+        Entry(ACCOUNT, -10_000_000, date(2026, 8, 3), *_origin("c")),
+    ]
+
+    assert holdings([ACCOUNT, CASH_BOX], entries) == [
+        Holding(ACCOUNT, 45_000_000, 2),
+        Holding(CASH_BOX, -3_000_000, 1),
+    ]
+
+
+def test_an_account_with_no_entries_holds_zero_rather_than_erroring():
+    """The studio that has never posted anything opens Finance to a 0."""
+    assert holdings([ACCOUNT], []) == [Holding(ACCOUNT, 0, 0)]
+
+
+def test_a_company_with_no_accounts_at_all_holds_nothing():
+    assert holdings([], []) == []
+    assert total_held(holdings([], [])) == 0
+
+
+def test_the_accounts_come_back_in_the_order_they_were_given():
+    """The caller orders them; adding up is all this does."""
+    assert [held.account for held in holdings([CASH_BOX, ACCOUNT], [])] == [
+        CASH_BOX,
+        ACCOUNT,
+    ]
+
+
+def test_the_total_is_the_accounts_added_up():
+    entries = [
+        Entry(ACCOUNT, 55_000_000, date(2026, 8, 1), *_origin("a")),
+        Entry(CASH_BOX, -3_000_000, date(2026, 8, 2), *_origin("b")),
+    ]
+
+    assert total_held(holdings([ACCOUNT, CASH_BOX], entries)) == 52_000_000
+
+
+def test_the_total_of_the_four_flows_is_the_same_sum_the_ledger_makes():
+    """One account holding a mix of everything - no case analysis anywhere."""
+    entries = [entry for entry in (client_payment(PAID_MILESTONE, ACCOUNT), paid(), handed_over(), closed()) if entry]
+
+    assert total_held(holdings([ACCOUNT], entries)) == balance(entries)
+
+
+def test_a_balance_adds_up_stored_rows_out_of_a_query_too():
+    rows = [
+        {"account": ACCOUNT, "amount": 55_000_000.0},
+        {"account": ACCOUNT, "amount": -5_000_000.0},
+    ]
+
+    assert holdings([ACCOUNT], rows) == [Holding(ACCOUNT, 50_000_000, 2)]
+
+
+# -- an origin is a doctype and a name; a source is something recognisable --
+
+
+def test_a_source_is_what_the_origin_calls_itself():
+    entry = client_payment(PAID_MILESTONE, ACCOUNT, job="JOB-0001")
+
+    assert source_of(entry, "TVC Tết Vinamilk") == "Đặt cọc (không hoàn lại)"
+
+
+def test_an_origin_with_no_title_of_its_own_reads_as_its_job():
+    entry = job_expense(expense(description=None, category=None), ACCOUNT)
+
+    assert source_of(entry, "TVC Tết Vinamilk") == "TVC Tết Vinamilk"
+
+
+def test_an_origin_with_no_title_and_no_job_still_says_something_true():
+    entry = job_expense(expense(description=None, category=None, job=None), ACCOUNT)
+
+    assert source_of(entry, None) == JOB_EXPENSE
+
+
+def test_a_source_is_never_a_doctype_and_a_hash():
+    entry = client_payment(PAID_MILESTONE, ACCOUNT, job="JOB-0001")
+
+    for shown in (source_of(entry, "TVC Tết Vinamilk"), source_of(entry, None)):
+        assert entry.source_doctype not in shown
+        assert entry.source_name not in shown
+
+
+# -- the shape a screen reads one movement in --
+
+
+def test_a_movement_reads_as_a_day_a_signed_amount_and_a_source():
+    view = entry_view(
+        {
+            "name": "PAY-abc123",
+            "account": ACCOUNT,
+            "amount": 55_000_000.0,
+            "entry_date": datetime(2026, 8, 19, 9, 30),
+            "flow": CLIENT_PAYMENT,
+            "source_doctype": SOURCES[CLIENT_PAYMENT],
+            "source_name": "abc123",
+            "job": "JOB-0001",
+            "description": "Đặt cọc (không hoàn lại)",
+        },
+        job_title="TVC Tết Vinamilk",
+    )
+
+    assert view == {
+        "name": "PAY-abc123",
+        "entry_date": "2026-08-19",
+        "amount": 55_000_000,
+        "direction": IN,
+        "flow": CLIENT_PAYMENT,
+        "source": "Đặt cọc (không hoàn lại)",
+        "source_doctype": SOURCES[CLIENT_PAYMENT],
+        "source_name": "abc123",
+        "job": "JOB-0001",
+        "job_title": "TVC Tết Vinamilk",
+    }
+    assert type(view["amount"]) is int
+
+
+def test_the_direction_a_movement_reads_as_comes_off_its_own_sign():
+    """Never off the stored column, which is where the two could differ."""
+    view = entry_view({**asdict(paid()), "name": "EXP-e1", "direction": IN})
+
+    assert view["direction"] == OUT

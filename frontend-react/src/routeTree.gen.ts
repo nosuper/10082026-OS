@@ -20,6 +20,7 @@ import { Route as ContactsPeopleRouteImport } from './routes/contacts.people'
 import { Route as DealsIndexRouteImport } from './routes/deals.index'
 import { Route as DealsDealCodeRouteImport } from './routes/deals.$dealCode'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
+import { Route as FinanceAccountsRouteImport } from './routes/finance.accounts'
 import { Route as FinanceExpensesRouteImport } from './routes/finance.expenses'
 import { Route as FinanceForecastRouteImport } from './routes/finance.forecast'
 import { Route as FinanceIncomeRouteImport } from './routes/finance.income'
@@ -85,6 +86,11 @@ const DealsDealCodeRoute = DealsDealCodeRouteImport.update({
 const FinanceIndexRoute = FinanceIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => FinanceRoute,
+} as any)
+const FinanceAccountsRoute = FinanceAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
   getParentRoute: () => FinanceRoute,
 } as any)
 const FinanceExpensesRoute = FinanceExpensesRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
+  '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
+  '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
+  '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/contacts/companies'
     | '/contacts/people'
     | '/deals/$dealCode'
+    | '/finance/accounts'
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/contacts/companies'
     | '/contacts/people'
+    | '/finance/accounts'
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
@@ -270,6 +281,7 @@ export interface FileRouteTypes {
     | '/contacts/companies'
     | '/contacts/people'
     | '/deals/$dealCode'
+    | '/finance/accounts'
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
@@ -379,6 +391,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceIndexRouteImport
       parentRoute: typeof FinanceRoute
     }
+    '/finance/accounts': {
+      id: '/finance/accounts'
+      path: '/accounts'
+      fullPath: '/finance/accounts'
+      preLoaderRoute: typeof FinanceAccountsRouteImport
+      parentRoute: typeof FinanceRoute
+    }
     '/finance/expenses': {
       id: '/finance/expenses'
       path: '/expenses'
@@ -460,6 +479,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface FinanceRouteChildren {
+  FinanceAccountsRoute: typeof FinanceAccountsRoute
   FinanceExpensesRoute: typeof FinanceExpensesRoute
   FinanceForecastRoute: typeof FinanceForecastRoute
   FinanceIncomeRoute: typeof FinanceIncomeRoute
@@ -469,6 +489,7 @@ interface FinanceRouteChildren {
 }
 
 const FinanceRouteChildren: FinanceRouteChildren = {
+  FinanceAccountsRoute: FinanceAccountsRoute,
   FinanceExpensesRoute: FinanceExpensesRoute,
   FinanceForecastRoute: FinanceForecastRoute,
   FinanceIncomeRoute: FinanceIncomeRoute,
