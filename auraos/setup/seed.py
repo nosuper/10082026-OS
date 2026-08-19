@@ -858,6 +858,16 @@ def seed_108_a_second_month(deal_name):
             "Job Payment Milestone", paid[0].name, "paid_on", spent_on,
             update_modified=False,
         )
+        # Re-save the job so the collection's ledger entry is restated to
+        # the date it now claims. set_value writes the column and nothing
+        # else, so without this the same 31.808.700 sits in July on the
+        # profit and loss - which buckets on paid_on - and in August in
+        # the cash ledger, which keeps the entry_date it was posted with.
+        # Two surfaces disagreeing about one đồng, introduced by the seed
+        # meant to make them checkable. Job.on_update posts collections
+        # and auraos.lib.ledger reconciles rather than duplicating, so a
+        # plain save is the whole fix.
+        frappe.get_doc("Job", job).save(ignore_permissions=True)
 
 
 def seed_106_paper_states(deal_name):
