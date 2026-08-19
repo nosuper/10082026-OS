@@ -26,6 +26,11 @@
 export const BANK = "Playwright Bank";
 export const PETTY = "Playwright Petty Cash";
 
+/** The client every seeded deal belongs to. Seeded with a name and nothing
+ *  else - no tax code - which is the case the invoice request has to name
+ *  rather than leave blank. */
+export const COMPANY = "Playwright Client";
+
 /** The deal that becomes the open job. Not `Playwright Existing Deal`, which
  *  the deals specs hold at Brief Received. */
 export const JOB_DEAL = "Playwright Job Deal";
@@ -36,5 +41,21 @@ export const JOB_DEAL = "Playwright Job Deal";
  *  the product forbids writing to. */
 export const CLOSED_DEAL = "Playwright Closed Deal";
 
+/** The two paperwork templates. Two rather than one because a generated file
+ *  is named `{job} - {template} - {stamp}` at MINUTE resolution and a status is
+ *  tied to a file by that name - so two papers off one template inside a minute
+ *  share a name and show one status between them. A person never hits it; a
+ *  seed makes both at once, which is what a seed is for. */
+export const TEMPLATE = "Playwright Contract";
+export const HANDOVER_TEMPLATE = "Playwright Biên bản nghiệm thu";
+
 /** Every name above, for the guard in fixture.spec.js. */
-export const FIXTURE_NAMES = { BANK, PETTY, JOB_DEAL, CLOSED_DEAL };
+export const FIXTURE_NAMES = {
+  COMPANY,
+  BANK,
+  PETTY,
+  JOB_DEAL,
+  CLOSED_DEAL,
+  TEMPLATE,
+  HANDOVER_TEMPLATE,
+};
