@@ -52,6 +52,42 @@ async function moneyTab(page) {
   return openJobTab(page, await openJob(page), "Money");
 }
 
+/**
+ * Run something that saves a milestone, and wait for the save to land.
+ *
+ * **Nothing in this panel awaits its own write.** Both the status select and
+ * the invoice-number blur call `statusSetter.mutate(...)` and return, and
+ * `setStatus` additionally updates `rows` *optimistically* - so the field
+ * reads enabled, and the row reads Invoiced, while the POST is still in
+ * flight. A `page.reload()` on the next line aborts it.
+ *
+ * **Measured, not guessed:** `set_milestone_status` with an invoice number
+ * takes ~26ms warm server-side (a Job save with its milestone stamps and
+ * ledger reconciliation) and 1780ms cold. Run 18's trace has this spec
+ * blurring at 527ms and reloading at 541ms - **14ms**. The request was always
+ * in flight at reload; whether it survived was a race between the browser
+ * dispatching it and the navigation cancelling it. That is why this file was
+ * green on one run and red on the next from the same commit.
+ *
+ * A fixed wait is the wrong fix for the same reason: 26ms is the warm floor,
+ * not the budget. This awaits the response itself.
+ *
+ * One thing to know if this ever hangs: `saveInvoiceNo` returns early without
+ * mutating when the stored number already equals the typed one. Within a run
+ * that cannot happen - the seed leaves this milestone blank and the last test
+ * puts it back - but a caller that saves the same value twice would wait for a
+ * request that is never sent.
+ */
+async function saving(page, action) {
+  const landed = page.waitForResponse(
+    (response) =>
+      response.url().includes("auraos.api.set_milestone_status") &&
+      response.request().method() === "POST",
+  );
+  await action();
+  await landed;
+}
+
 test("an invoice number belongs to an invoiced milestone and nowhere else", async ({ page }) => {
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
@@ -78,16 +114,21 @@ test("marking a milestone invoiced opens the field, and the number is kept", asy
 
   const panel = await moneyTab(page);
 
-  await statusOf(panel).selectOption("Invoiced");
+  await saving(page, () => statusOf(panel).selectOption("Invoiced"));
   await expect(invoiceOf(panel)).toBeEnabled();
 
   // Typed and blurred, the way it is entered: the number is saved on blur, not
   // by a button, so a test that only fills the box asserts nothing.
   await invoiceOf(panel).fill("PW-E2E-0126");
-  await invoiceOf(panel).blur();
+  await saving(page, () => invoiceOf(panel).blur());
 
   // Read back from the server rather than from React's state. Without the
   // reload a green would only prove the input holds what was typed into it.
+  //
+  // The reload is right and it was not enough: it answers *where* the value
+  // came from and says nothing about *whether the write finished*. Two
+  // questions, and the careful reasoning about the first is exactly what made
+  // the second easy to miss.
   await page.reload();
   const reloaded = await moneyTab(page);
   await expect(statusOf(reloaded)).toHaveValue("Invoiced");
@@ -105,7 +146,7 @@ test("walking the status back takes the invoice number with it", async ({ page }
   // the previous one left a number here.
   await expect(invoiceOf(panel)).toHaveValue("PW-E2E-0126");
 
-  await statusOf(panel).selectOption("Not requested");
+  await saving(page, () => statusOf(panel).selectOption("Not requested"));
 
   // The point of the whole spec. An invoice number that survived this would be
   // a number nobody issued, sitting on a milestone the client has not been
