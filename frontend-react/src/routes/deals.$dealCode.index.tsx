@@ -778,7 +778,7 @@ function DealPage() {
                   />
                 </Field>
 
-                <Field label="Est. client budget (VND)">
+                <Field label="Est. client budget">
                   <input
                     inputMode="numeric"
                     value={draft.budget ? vnd(parseVnd(draft.budget)) : ""}
