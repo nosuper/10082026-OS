@@ -86,6 +86,19 @@ react_status=0
 "${COMPOSE[@]}" run --rm playwright-react \
   bash -lc 'npm ci --no-audit --no-fund && npm run test:e2e' || react_status=$?
 
+# An extra command against the same seeded stack, before teardown. Booting the
+# stack costs eleven minutes and a window in which nobody else trusts the box,
+# so a follow-up run that needs the same seed - a --repeat-each pass to tell a
+# flaky test from a broken one - should share this boot rather than buy another.
+# Its exit status is reported but does not fail the run: it is a measurement,
+# not a gate.
+if [ -n "${E2E_AFTER:-}" ]; then
+  after_status=0
+  "${COMPOSE[@]}" run --rm playwright-react \
+    bash -lc "npm ci --no-audit --no-fund && ${E2E_AFTER}" || after_status=$?
+  echo "e2e: follow-up exit ${after_status}"
+fi
+
 echo "e2e: vue suite exit ${vue_status}, react suite exit ${react_status}"
 if [ "$vue_status" -ne 0 ] || [ "$react_status" -ne 0 ]; then
   exit 1
