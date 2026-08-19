@@ -109,24 +109,38 @@ test("the two halves are two lists, on the screen and in the payloads", async ({
 // while the user was still inside the section. Contacts never hit it because
 // it spends two nav items on two tabs.
 //
-// Asserted through the class, which is the only signal the DOM carries today.
-// #136 is open to give the nav an aria-current; when it lands this assertion
-// should move to it, and the move is a strict improvement rather than a
-// rewrite - the claim is the same claim.
+// The active state is expressed only through Tailwind classes today - there is
+// no aria-current, which #136 is open to add. **So the assertion is "unchanged",
+// not a class name**: capture whatever the lit value is on the tab where the
+// section is unambiguously current, and require the other tab to match it. That
+// survives a restyle, where naming `bg-secondary` would turn a colour change
+// into a red about navigation.
+//
+// This approach is the #115 lane's, from their own draft of this file. Two
+// lanes were sent #128 by mistake and theirs is being dropped; this assertion
+// was better than the one I wrote and is worth more than the tidiness of a
+// file with one author.
+//
+// The sibling check is what makes the captured value trustworthy. Without it
+// the test would pass just as happily against a nav that lit nothing at all,
+// because "unchanged" is also true of two identical unlit items.
 test("the Documents nav item stays lit on both tabs", async ({ page }) => {
-  for (const [url, tab] of [
-    [PAPERWORK_URL, "Paperwork"],
-    [LIBRARY_URL, "Library"],
-  ]) {
-    await openTab(page, url, tab);
-    // Not scoped through getByRole("navigation"): the sidebar is a <nav> and
-    // so is the tab strip, so that locator matches two landmarks and a strict
-    // mode violation is a crash, not a failure. The nav item is the only link
-    // on the page whose whole name is "Documents" - the tabs say Paperwork and
-    // Library - so it can be named directly.
-    const item = page.getByRole("link", { name: "Documents", exact: true });
-    await expect(item, `the section light went out on the ${tab} tab`).toHaveClass(/bg-secondary/);
-  }
+  // Not scoped through getByRole("navigation"): the sidebar is a <nav> and so
+  // is the tab strip, so that locator matches two landmarks and a strict mode
+  // violation is a crash, not a failure. The nav item is the only link on the
+  // page whose whole name is "Documents" - the tabs say Paperwork and Library.
+  const navItem = () => page.getByRole("link", { name: "Documents", exact: true });
+
+  await openTab(page, PAPERWORK_URL, "Paperwork");
+  const lit = await navItem().getAttribute("class");
+  const dark = await page.getByRole("link", { name: "Deals", exact: true }).getAttribute("class");
+  expect(lit, "the current section looks the same as one nobody is in").not.toBe(dark);
+
+  await openTab(page, LIBRARY_URL, "Library");
+  expect(
+    await navItem().getAttribute("class"),
+    "the section light went out on the Library tab",
+  ).toBe(lit);
 });
 
 // -- the document that used to be a page --
@@ -146,7 +160,11 @@ test("the SOP opens and its tier matrix renders as a table with visible rules", 
   // editor could not produce.
   const table = window.locator(".aura-rich table");
   await expect(table).toHaveCount(1);
-  await expect(table.locator("thead th")).toHaveCount(4);
+  // Named, not counted - also the #115 lane's, and better for the same reason:
+  // four columns of the wrong thing would pass a count. The coupling is to the
+  // migrated document, which the founder may now edit in the app, so a red here
+  // means "the tier matrix changed" and should be read before it is loosened.
+  await expect(table.locator("thead th")).toHaveText(["Trạm", "Tier 1", "Tier 2", "Tier 3"]);
   expect(await table.locator("tbody tr").count()).toBeGreaterThan(1);
 
   // `.aura-rich` carried no table rules at all until #66 added them, so a
