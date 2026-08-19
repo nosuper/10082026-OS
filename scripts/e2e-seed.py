@@ -27,7 +27,7 @@ import frappe
 from frappe.utils import add_months, today
 
 from auraos.auraos.doctype.job.job import CLOSED_STAGE, create_from_deal
-from auraos.api import generate_job_paperwork
+from auraos.api import generate_job_paperwork, set_paper_status
 
 
 PRODUCER = os.environ["E2E_PRODUCER_USER"]
@@ -45,7 +45,16 @@ CLOSED_DEAL = "Playwright Closed Deal"
 BANK = "Playwright Bank"
 PETTY = "Playwright Petty Cash"
 
+# Two templates, and the papers below are generated one from each -
+# deliberately not two from the same one. A generated file is named
+# `{job} - {template} - {stamp}` at MINUTE resolution and job_paperwork()
+# ties a status to a file by that name, so two papers off one template
+# inside the same minute share a name and show one status between them.
+# A person generating two papers hits different minutes and never sees
+# it; a seed makes both at once, which is what a seed is for. Same defect
+# as the file_url dedupe, arriving through the name instead of the url.
 TEMPLATE = "Playwright Contract"
+HANDOVER_TEMPLATE = "Playwright Biên bản nghiệm thu"
 
 # The quoted line whose treatment carries tax exposure to whatever spends
 # against it, and the ordinary one beside it - the contrast is the point:
@@ -425,7 +434,15 @@ def ensure_closed_job(company):
 
 
 def ensure_paperwork(job):
-    """A template, and a paper generated from it through the real path.
+    """Two templates, and a paper generated from each.
+
+    Two templates rather than two papers from one: the generated file is
+    named `{job} - {template} - {stamp}` at minute resolution, and
+    job_paperwork() ties a status to a file by that name. Two papers off
+    one template inside a minute therefore share a name and show one
+    status between them - invisible to a person, who never generates two
+    in the same minute, and guaranteed for a seed, which makes both at
+    once.
 
     The template is seeded as HTML source rather than an uploaded .docx:
     Paperwork Template.validate() builds the file from that source, so
@@ -446,28 +463,61 @@ def ensure_paperwork(job):
     spec asserting placeholders resolve finds a filled value rather than
     braces that came back untouched.
     """
-    existing = frappe.db.exists("Paperwork Template", {"template_name": TEMPLATE})
+    contract = ensure_template(
+        TEMPLATE,
+        "<p>Hợp đồng cho {{job.title}}</p>"
+        "<p>Khách hàng: {{client.company_name}}</p>"
+        "<p>Mã số thuế: {{client.tax_code}}</p>",
+    )
+    handover = ensure_template(
+        HANDOVER_TEMPLATE,
+        "<p>Biên bản nghiệm thu - {{job.title}}</p>"
+        "<p>Bên A: {{client.company_name}}</p>",
+    )
+
+    ensure_paper(job, contract)
+    signed = ensure_paper(job, handover)
+
+    # Through set_paper_status, not a direct write, so status_changed_by
+    # and status_changed_on are written by the controller that owns them
+    # rather than left null for a screen to render as a blank.
+    if signed is not None and signed.status != "Signed":
+        set_paper_status(signed.name, "Signed")
+
+    return contract
+
+
+def ensure_template(name, source):
+    """One template, seeded as HTML rather than an uploaded .docx.
+
+    Paperwork Template.validate() builds the .docx from template_source,
+    so this is a real template with a real file behind it and no fixture
+    binary enters the repo.
+    """
+    existing = frappe.db.exists("Paperwork Template", {"template_name": name})
     template = (
         frappe.get_doc("Paperwork Template", existing)
         if existing
-        else frappe.get_doc(
-            {"doctype": "Paperwork Template", "template_name": TEMPLATE}
-        )
+        else frappe.get_doc({"doctype": "Paperwork Template", "template_name": name})
     )
     template.disabled = 0
-    template.template_source = (
-        "<p>Hợp đồng cho {{job.title}}</p>"
-        "<p>Khách hàng: {{client.company_name}}</p>"
-        "<p>Mã số thuế: {{client.tax_code}}</p>"
-    )
+    template.template_source = source
     template.save(ignore_permissions=True)
+    return template
 
-    already = frappe.db.exists(
+
+def ensure_paper(job, template):
+    """One generated paper, or the one already there."""
+    existing = frappe.db.exists(
         "Generated Paper", {"job": job.name, "template": template.name}
     )
-    if not already:
-        generate_job_paperwork(job.name, template.name)
-    return template
+    if existing:
+        return frappe.get_doc("Generated Paper", existing)
+    generate_job_paperwork(job.name, template.name)
+    name = frappe.db.exists(
+        "Generated Paper", {"job": job.name, "template": template.name}
+    )
+    return frappe.get_doc("Generated Paper", name) if name else None
 
 
 def ensure_library_document():
