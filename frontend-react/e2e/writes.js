@@ -41,10 +41,24 @@
  * request URL. Registered *before* the action, so a fast response cannot land
  * between the two.
  *
- * If this ever hangs, the first thing to check is whether the panel actually
- * sent a request: several handlers here return early when the value has not
- * changed, and waiting for a request nobody sent looks exactly like a slow
- * server.
+ * **This helper's failure mode is a timeout, not a failure, and that is worth
+ * knowing before you meet one.** Every way it goes wrong looks identical from
+ * the outside: the test sits there and then Playwright gives up. **A hang here
+ * is a bug in the wait, not a slow box** - check these in order, because the
+ * list is roughly most-likely-first for someone who has just written a call:
+ *
+ *   1. **`method` does not match the URL the panel calls.** A typo, or the
+ *      panel calls a different endpoint than you assumed. `waitForResponse`
+ *      cannot tell "no such response yet" from "no such response ever".
+ *   2. **The handler returned early without mutating.** Several here do when
+ *      the value has not changed - `saveInvoiceNo` compares against the stored
+ *      row - so saving the same value twice waits for a request nobody sent.
+ *   3. **The action did not trigger the write at all** - a blur that did not
+ *      fire because focus was already elsewhere, a select set to the value it
+ *      already had.
+ *
+ * Only after those three is a slow server worth considering, and the cold path
+ * above is what that looks like: slow, then finished.
  */
 export async function saving(page, method, action) {
   const landed = page.waitForResponse(
