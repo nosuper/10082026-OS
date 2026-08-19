@@ -15,7 +15,8 @@
   "paid_from",
   "detail_section",
   "description",
-  "covers_cost_line",
+  "cost_line",
+  "invoice_no",
   "photo"
  ],
  "fields": [
@@ -86,10 +87,16 @@
    "label": "Description"
   },
   {
-   "fieldname": "covers_cost_line",
+   "fieldname": "cost_line",
    "fieldtype": "Data",
-   "label": "Covers Cost Line",
-   "description": "The Không hoá đơn cost line on this job that this expense is the replacement invoice for. Leave empty on an ordinary expense."
+   "label": "Quoted Line",
+   "description": "The quoted cost line this spend belongs to, so actual can be compared against quoted exactly rather than by matching a category name. An expense nobody quoted leaves this empty."
+  },
+  {
+   "fieldname": "invoice_no",
+   "fieldtype": "Data",
+   "label": "Invoice Number",
+   "description": "The invoice covering this spend, if one was obtained. Empty on a Không hoá đơn line means the company is carrying the tax on it."
   },
   {
    "description": "Photo of the receipt, taken when the money was handed over",

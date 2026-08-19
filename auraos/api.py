@@ -10,6 +10,7 @@ from auraos.auraos.doctype.deal.deal import (
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import STAGES as JOB_STAGES
+from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
@@ -751,6 +752,30 @@ def job_expense_categories(job):
 
 
 @frappe.whitelist()
+def job_cost_lines(job):
+    """The quoted lines an expense on this job may be spent against.
+
+    In quote order, carrying the tax type, because the screen has to be
+    able to say which of them come with no invoice - that is the whole
+    reason a payment against one of them is a tax exposure (#123). The
+    line's own expected cost travels too, so the person entering the
+    real figure can see what was quoted beside it.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    return [
+        {
+            "name": row.name,
+            "description": row.description,
+            "package": row.package,
+            "tax_type": row.tax_type,
+            "quoted": round_vnd(settlement.handed_over(row.as_dict())),
+        }
+        for row in doc.cost_lines
+    ]
+
+
+@frappe.whitelist()
 def record_job_advance(job, recipient, amount, transferred_on=None, note=None):
     """Record cash handed to someone for this job.
 
@@ -782,6 +807,8 @@ def log_job_expense(
     paid_by=None,
     paid_from=None,
     photo=None,
+    cost_line=None,
+    invoice_no=None,
 ):
     """Log one payment out, the way it happens on a shoot: fast.
 
@@ -790,6 +817,13 @@ def log_job_expense(
     `paid_by` exists for the case that isn't: money Linh spent that the
     founder is entering from a Zalo message, which has to land on her
     float rather than his.
+
+    `cost_line` is which quoted line this spend answers to, and it is
+    the reason the founder's tax exposure can be a fact rather than an
+    estimate: the tax treatment lives on the line, the money lives here,
+    and this link carries one to the other (#123). Optional, because
+    money gets spent on things nobody quoted and forcing a line would
+    invent one.
 
     Returns the payer's float, so the phone can answer the only
     follow-up question there is - how much of the advance is left.
@@ -805,6 +839,8 @@ def log_job_expense(
             "spent_on": spent_on or frappe.utils.today(),
             "paid_by": paid_by or frappe.session.user,
             "paid_from": paid_from or settlement.FROM_ADVANCE,
+            "cost_line": cost_line,
+            "invoice_no": invoice_no,
         }
     )
     expense.insert()
@@ -1247,9 +1283,10 @@ def finance_profit_and_loss(date_from, date_to):
 
 # -- what a job earned (the new UI's per-job profitability) --
 
-# A job stops being open at the end of the production flow; everything
-# before Complete is still running and still worth watching.
-CLOSED_JOB_STAGE = JOB_STAGES[-1]
+# Everything before Complete is still running and still worth watching.
+# The stage itself is named beside the list it ends, so this and the
+# expense freeze cannot drift apart.
+CLOSED_JOB_STAGE = JOB_CLOSED_STAGE
 
 
 def _job_profit(doc, client=None):
@@ -2023,43 +2060,35 @@ def _cash_job_titles(names):
 
 # -- no-invoice exposure (T9, issue #11) --
 
-# What one no-invoice cost line needs for its cash figure and its
-# identity on the tile. Read as a flat query rather than by loading each
-# Job document: the founder's tile asks about every job at once, and
-# forty document loads to add up forty numbers is a page that gets
-# slower every month the studio stays in business.
-EXPOSURE_LINE_FIELDS = [
-    "name",
-    "parent",
-    "description",
-    "tax_type",
-    "subtotal",
-    "vendor_mf_pct",
-    "input_vat",
-]
-
 
 @frappe.whitelist()
 def no_invoice_exposure():
-    """Cost handed over with no invoice, and the TNDN it exposes us to.
+    """Money paid out with no invoice, and the TNDN it exposes us to.
 
     Founder-only, and refused outright rather than blanked: this is the
     company's tax position, which sits behind the same boundary as the
-    profit chain. The UI hides the tile from a producer as a courtesy;
-    this is the part that means they cannot have it.
+    profit chain.
 
-    Not a range. An uncovered no-invoice cost is carried from the day
-    the money left until a replacement invoice arrives, so the question
-    is what the company is carrying now - the same reading
-    `finance_receivables` takes when it says what is owed is owed today.
+    **Read off the expenses, not off the quote.** An earlier version of
+    this endpoint totalled `Không hoá đơn` cost lines, which taxed money
+    that had been priced and never spent and missed money that had been
+    spent and never priced (#123). A liability arises when the company
+    pays out something it cannot deduct, so the source is the payment.
+
+    The tax treatment still lives on the quoted line - it is the only
+    record that carries it - and reaches the money through the line the
+    expense says it spends against. Spending that names no line counts
+    as exposed until somebody says otherwise: the founder chose the safe
+    direction, because understating is the error that costs money at an
+    audit. The payload keeps the two apart so the screen can show what
+    is established beside what is assumed.
+
+    Not a range. An uncovered payment is carried from the day it was
+    made until an invoice is obtained, so the question is what the
+    company is carrying now.
 
     Every job, not only the open ones. A finished shoot's missing
-    invoice is still missing, and the tax on it is still owed.
-
-    The covered/uncovered status is derived here and stored nowhere. A
-    line is covered when some expense says it covers it, so the only way
-    to change this number is to record or unrecord the paperwork - which
-    is what stops it becoming a figure somebody typed.
+    invoice is still missing.
     """
     if not _is_founder():
         frappe.throw(
@@ -2070,31 +2099,30 @@ def no_invoice_exposure():
     jobs = dict(
         frappe.get_all("Job", fields=["name", "title"], as_list=True, limit_page_length=0)
     )
-    rows = []
-    if jobs:
-        lines = frappe.get_all(
-            "Deal Cost Line",
-            filters={"parenttype": "Job", "parent": ["in", list(jobs)]},
-            fields=EXPOSURE_LINE_FIELDS,
-            order_by="parent asc, idx asc",
-            limit_page_length=0,
-        )
-        covers = frappe.get_all(
-            "Job Expense",
-            filters={"job": ["in", list(jobs)], "covers_cost_line": ["is", "set"]},
-            fields=["name", "amount", "covers_cost_line"],
-            limit_page_length=0,
-        )
-        by_job = {}
-        for line in lines:
-            by_job.setdefault(line.parent, []).append(line)
-        for job, job_lines in by_job.items():
-            rows.extend(
-                exposure.exposure_rows(
-                    job_lines, covers, job=job, job_title=jobs.get(job)
-                )
+    if not jobs:
+        return exposure.exposure_report([])
+
+    expenses = frappe.get_all(
+        "Job Expense",
+        filters={"job": ["in", list(jobs)]},
+        fields=["name", "job", "amount", "spent_on", "category", "description",
+                "cost_line", "invoice_no"],
+        order_by="spent_on desc",
+        limit_page_length=0,
+    )
+    named = {row.cost_line for row in expenses if row.cost_line}
+    lines = {}
+    if named:
+        lines = {
+            row.name: row
+            for row in frappe.get_all(
+                "Deal Cost Line",
+                filters={"name": ["in", list(named)]},
+                fields=["name", "description", "tax_type"],
+                limit_page_length=0,
             )
-    return exposure.exposure_report(rows)
+        }
+    return exposure.exposure_report(exposure.exposure_rows(expenses, lines, jobs=jobs))
 
 
 # -- what the pipeline is worth in the months ahead (#102) --

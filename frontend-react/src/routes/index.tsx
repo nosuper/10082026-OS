@@ -26,17 +26,24 @@ import { FOUNDER_PROBE } from "@/lib/session";
  * the line, and is stored on no doctype anywhere.
  */
 export type ExposureLine = {
+  /** The Job Expense. Exposure is money that moved, so a row is a payment. */
+  expense: string | null;
   job: string | null;
   job_title: string | null;
+  /** The quoted line it spends against, which is what carries Không hoá đơn. */
   line: string | null;
   description: string | null;
   amount: number;
   covered: boolean;
-  covering_expenses: string[];
-  covering_count: number;
-  covering_total: number;
+  invoice_no: string | null;
   spent_on: string | null;
+  /** "stated" or "unattributed" - established, or assumed until said. */
+  treatment: string;
 };
+
+/** How a payment came to be counted. auraos.lib.exposure names both. */
+export const STATED = "stated";
+export const UNATTRIBUTED = "unattributed";
 
 export type ExposureReport = {
   /** What was measured, printed rather than asserted by the screen. */
@@ -47,6 +54,12 @@ export type ExposureReport = {
   uncovered_count: number;
   covered_total: number;
   covered_count: number;
+  /** The half whose treatment is on record: paid against a no-invoice line. */
+  stated_total: number;
+  stated_count: number;
+  /** The half nobody has pointed at a line. Counted in the headline anyway. */
+  unattributed_total: number;
+  unattributed_count: number;
   /** Only the uncovered ones: this is a list of invoices to chase. */
   lines: ExposureLine[];
 };
@@ -424,30 +437,70 @@ function HomePage() {
                     TNDN at {percent(exposure.data?.rate_pct)}
                   </span>
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
+                {/* The headline counts both halves, which is the founder's
+                    call: understating is the error that costs money at an
+                    audit. The breakdown keeps them apart so they can see
+                    what is established beside what is only assumed - and
+                    the figure falls as they attribute each payment. */}
+                {/* title carries the server's own basis string. The sentence
+                    below says the same thing in better words, but a payload
+                    field the screen declares and ignores looks like one it
+                    honours - and if the server ever measures something else,
+                    this is where the two stop agreeing. */}
+                <p
+                  className="text-xs leading-relaxed text-muted-foreground"
+                  title={exposure.data?.basis}
+                >
                   On{" "}
                   <Money
                     value={exposure.data?.uncovered_total ?? 0}
                     className="font-medium text-foreground"
                   />{" "}
-                  of cost handed over with no invoice and no replacement on file, across{" "}
-                  {countLabel(exposure.data?.uncovered_count ?? 0, "line")}. Carried until the paper
-                  arrives, not billed to a month.
+                  <strong className="font-medium text-foreground">actually paid out</strong> with no
+                  invoice on file, across{" "}
+                  {countLabel(exposure.data?.uncovered_count ?? 0, "payment")}.
                 </p>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  <li className="flex items-baseline gap-2">
+                    <span className="text-muted-foreground">·</span>
+                    <span>
+                      <Money
+                        value={exposure.data?.stated_total ?? 0}
+                        className="font-medium text-foreground"
+                      />{" "}
+                      established as no-invoice spending
+                    </span>
+                  </li>
+                  <li className="flex items-baseline gap-2">
+                    <span className="text-muted-foreground">·</span>
+                    <span>
+                      <Money
+                        value={exposure.data?.unattributed_total ?? 0}
+                        className="font-medium text-foreground"
+                      />{" "}
+                      not yet pointed at a quoted line, counted as at risk
+                    </span>
+                  </li>
+                </ul>
+                {(exposure.data?.unattributed_count ?? 0) > 0 ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    This figure falls as each payment is pointed at the line it answers to.
+                  </p>
+                ) : null}
                 <QueryState
                   query={exposure}
                   loadingRows={2}
                   isEmpty={() => (exposure.data?.lines.length ?? 0) === 0}
                   empty={{
-                    title: "Every no-invoice cost has its replacement.",
-                    detail: "Nothing here is exposed.",
+                    title: "Nothing paid out is missing its invoice.",
+                    detail: "A quoted no-invoice line carries nothing until money moves.",
                     icon: <CheckCircle2 className="size-6" strokeWidth={1.5} />,
                   }}
                 >
                   {(report) => (
                     <ul className="space-y-1.5 border-t border-border pt-3">
                       {biggestUncovered(report.lines).map((row) => (
-                        <li key={row.line} className="flex items-baseline gap-2 text-xs">
+                        <li key={row.expense} className="flex items-baseline gap-2 text-xs">
                           <span className="truncate">{row.description || "Untitled line"}</span>
                           <Link
                             to="/jobs/$jobId"

@@ -30,10 +30,30 @@ function barWidth(row: { quoted: number; actual: number }): number {
   return Math.min(100, Math.round((row.actual / row.quoted) * 100));
 }
 
+/** One quoted line, as auraos.api.job_cost_lines sends it. */
+type CostLineOption = {
+  name: string;
+  description: string | null;
+  package: string | null;
+  tax_type: string | null;
+  quoted: number;
+};
+
+/**
+ * The tax type that carries exposure, spelled as the pricing engine spells it.
+ * The screen uses it only to mark which lines mean the company will be taxed
+ * on this spend. The decision itself stays the server's.
+ */
+const NO_INVOICE_TAX = "Không hoá đơn";
+
 export function JobMoneyPanel({ job }: { job: string }) {
   const money = useMethod<MoneyPayload>("auraos.api.job_money", { job });
   const users = useMethod<OperatingUser[]>("auraos.api.operating_users");
   const categories = useMethod<string[]>("auraos.api.job_expense_categories", { job });
+  // The quoted lines this spend can answer to. Naming one is what carries
+  // Không hoá đơn from the quote onto the money, which is the whole reason
+  // the founder's exposure can be a fact rather than an estimate (#123).
+  const costLines = useMethod<CostLineOption[]>("auraos.api.job_cost_lines", { job });
 
   // Entry forms stay collapsed until asked for: the page reads first and
   // writes second.
@@ -48,6 +68,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
 
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("");
+  const [expenseLine, setExpenseLine] = useState("");
   const [expenseWhat, setExpenseWhat] = useState("");
   const [expensePaidBy, setExpensePaidBy] = useState("");
   // paid_from is deliberately unset: it is the one field that decides who owes
@@ -80,6 +101,10 @@ export function JobMoneyPanel({ job }: { job: string }) {
       onSuccess: () => {
         setExpenseAmount("");
         setExpenseWhat("");
+        // The quoted line is deliberately left as it was. Several
+        // receipts in a row usually answer to the same line, and a form
+        // that makes you re-pick it each time is a form people stop
+        // using - which would put the spending back in unattributed.
       },
     },
   );
@@ -414,6 +439,21 @@ export function JobMoneyPanel({ job }: { job: string }) {
                 </option>
               ))}
             </select>
+            <select
+              value={expenseLine}
+              aria-label="Quoted line this spend answers to"
+              title="Which quoted line is this spending against? Leave it unattributed if nobody quoted it."
+              onChange={(event) => setExpenseLine(event.target.value)}
+              className="max-w-[13rem] rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+            >
+              <option value="">no quoted line</option>
+              {(costLines.data ?? []).map((line) => (
+                <option key={line.name} value={line.name}>
+                  {line.description || line.name}
+                  {line.tax_type === NO_INVOICE_TAX ? " (no invoice)" : ""}
+                </option>
+              ))}
+            </select>
             <input
               aria-label="What the money was for"
               placeholder="What was it for?"
@@ -455,6 +495,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
                   job,
                   amount: expenseValue,
                   category: expenseCategory || null,
+                  cost_line: expenseLine || null,
                   description: expenseWhat || null,
                   paid_by: expensePaidBy || null,
                   paid_from: expenseFrom,

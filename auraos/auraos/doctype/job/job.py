@@ -33,6 +33,14 @@ STAGES = [
     "Complete",
 ]
 
+# A job stops being open at the end of the production flow. Named here,
+# beside the list it is the end of, because more than one module needs
+# to know what closed means - the profitability board scopes on it and
+# Job Expense freezes on it - and two places deriving it positionally is
+# one more than can be kept in step. Append a stage after Complete and
+# every reader moves together.
+CLOSED_STAGE = STAGES[-1]
+
 # What a new job includes before a revision round becomes a chargeable
 # change order (spec #2, story 28). The standing house number only -
 # each job carries its own, negotiable count.

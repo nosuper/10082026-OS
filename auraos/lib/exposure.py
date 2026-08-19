@@ -1,137 +1,159 @@
 """No-invoice exposure: the tax the company owes because it has no paper.
 
-Framework-free by contract like the rest of auraos/lib. A cost line of
-type Không hoá đơn is money handed over with nothing to deduct it
-against, so the company's taxable profit is higher by that amount and it
-owes TNDN on it. That cost is real the day the money leaves and it stays
-real until a replacement invoice arrives; until then it is carried in
-somebody's head. This module is the number.
+Framework-free by contract like the rest of auraos/lib.
 
-**The exposure is derived, never stored.** Nothing here writes anything,
-and there is deliberately no field on any doctype holding a total. A
-stored exposure is a figure that can be edited into an opinion, and the
-first time it disagrees with the lines underneath it, the lines are
-right and the tile is a liability.
+**Exposure is money that moved, never money that was planned.** A
+`Không hoá đơn` cost line is a plan to spend without an invoice, and a
+plan creates no liability - the company owes TNDN when it has actually
+paid out something it cannot deduct. An earlier version of this module
+read the cost lines and taxed the quote, which reported a liability on
+meals that were priced and never bought, and missed the parking and
+coffee that were actually paid for. It was a plausible number on a
+dashboard beside figures that are facts, which is the worst kind.
 
-**The rate is auraos.lib.pricing's, not this module's.** TNDN_RATE is
-already what the founder profit chain computes with. Two copies of a tax
-rate is a defect waiting for the rate to change, so this imports the one
-that exists rather than declaring a second 20%.
+**The tax treatment lives on the plan, the money lives on the expense,
+and the link carries one to the other.** An expense names the quoted
+line it spends against; if that line is `Không hoá đơn`, the money that
+expense records is exposed. Nothing is duplicated onto the expense, and
+the person logging spending on a phone picks a line rather than
+answering a question about invoices.
 
-**Uncovered is the safe default.** A line whose replacement status
-nobody has recorded reads as still exposed, never as covered. The
-unrecorded direction has to be the one that keeps the number honest -
-the opposite default would quietly shrink the founder's tax bill on a
-screen and not on a filing.
+**An expense that names no line counts as exposed until somebody says
+otherwise.** The founder chose this over leaving it out, and their
+reason decides it: **understating is the error that costs money at an
+audit.** A tile that omits unattributed cash tells the company it is
+clean when nobody has looked.
 
-**Rounding is per part, before the parts are added**, as everywhere else
-in this app, so a printed total is exactly the sum of its printed rows
-and the tax is computed on the rounded base rather than the other way
-round.
+It is still reported apart from spending whose treatment is on record,
+because "we know this had no invoice" and "nobody has said yet" are
+different degrees of knowledge, and a founder deciding what to chase
+needs to tell them apart. **Attributing an expense moves it out of the
+assumed half**, so the figure falls as the work gets done - which makes
+the tile a prompt rather than a verdict.
 
-The caller decides what a row's `amount` is and whether it is covered -
-this module does not know where a replacement status is kept, and is
-deliberately written so that it does not have to.
+**Covered means an invoice was obtained, and it is recorded, not
+derived.** A replacement invoice is paper, not money: it answers for
+spending that already happened. Recording it as a second expense - which
+is what #11 did - adds its amount to the job's cost and posts a ledger
+entry for money that never moved.
+
+**The rate is auraos.lib.pricing's**, the same TNDN_RATE the founder
+profit chain computes with. Two copies of a tax rate is a defect waiting
+for the rate to change.
+
+Rounding is per part before the parts are added, so a printed total is
+exactly the sum of its printed rows.
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any, Iterable, Mapping
 
 from auraos.lib.finance import as_date, month_key
 from auraos.lib.money import round_vnd
 from auraos.lib.money import to_decimal as _d
 from auraos.lib.pricing import TNDN_RATE, TaxType
-# The cash a cost line is expected to hand over, borrowed rather than
-# rewritten. auraos.lib.settlement already owns that formula and the
-# job's money screen already prints it; a second copy here would be a
-# second opinion about the same đồng the first time one of them changed.
-from auraos.lib.settlement import handed_over
 
 Row = Mapping[str, Any]
 
 # What the tile is measured on, carried in the payload for the same
 # reason auraos.lib.finance carries its basis: the screen says it out
 # loud and the two have to be the same claim.
-TNDN_BASIS = "no-invoice cost with no replacement invoice on file"
+#
+# It names **both** halves on purpose. An earlier draft of this string
+# read "money paid out against a no-invoice line", which was true of the
+# stated half and silent about the assumed one - so the screen would
+# have declared a basis narrower than the number beside it. That is the
+# defect this whole module was rewritten for, in one line of prose: the
+# figure was not wrong, the sentence over it was.
+TNDN_BASIS = (
+    "money paid out with no invoice on file: against a no-invoice line, "
+    "or not yet attributed to any line"
+)
+
+# How a payment came to be counted. On every row, because the founder's
+# breakdown separates what is established from what is merely assumed,
+# and a caller should not have to re-derive that from a null.
+STATED = "stated"
+UNATTRIBUTED = "unattributed"
 
 
-def is_no_invoice(line: Row) -> bool:
-    """Whether a cost line is the kind that carries exposure at all.
+def is_no_invoice(line: Row | None) -> bool:
+    """Whether a quoted line is the kind that carries exposure.
 
     Read off the line's own tax type, matched the way the pricing engine
     matches it, so this and the price cannot disagree about which lines
-    have no invoice behind them.
+    have no invoice behind them. No line at all is not a no-invoice
+    line - it is an unstated treatment, which is a different thing.
     """
+    if not line:
+        return False
     try:
         return TaxType.parse(line.get("tax_type") or "") is TaxType.KHONG_HOA_DON
     except (ValueError, KeyError):
         return False
 
 
-def coverage(expenses: Iterable[Row]) -> dict[str, dict]:
-    """Which cost lines have a replacement invoice, keyed by line.
-
-    An expense names the line it covers; this folds the expenses into
-    one entry per line. **Many expenses may cover one line** - a
-    replacement invoice can arrive split across two receipts, and
-    refusing the second one would send somebody to edit the first.
-
-    The covering total is carried alongside the count because a 10 triệu
-    line covered by a 2 triệu invoice is not the same news as one
-    covered in full, and a binary status alone cannot say so.
-    """
-    covered: dict[str, dict] = {}
-    for row in expenses:
-        line = row.get("covers_cost_line")
-        if not line:
-            continue
-        entry = covered.setdefault(line, {"count": 0, "total": Decimal(0), "expenses": []})
-        entry["count"] += 1
-        entry["total"] += _d(row.get("amount") or 0)
-        entry["expenses"].append(row.get("name"))
-    return covered
+def has_invoice(expense: Row) -> bool:
+    """Whether paper was obtained for this spend."""
+    return bool(str(expense.get("invoice_no") or "").strip())
 
 
 def exposure_rows(
-    cost_lines: Iterable[Row],
     expenses: Iterable[Row],
+    lines: Mapping[str, Row],
     *,
-    job: Any = None,
-    job_title: Any = None,
+    jobs: Mapping[str, Any] | None = None,
 ) -> list[dict]:
-    """One job's no-invoice lines, each with its coverage resolved.
+    """Spending that carries tax exposure, one row per payment.
 
-    The status is derived here and stored nowhere. A line is covered
-    when an expense says it covers it, and the only way to change that
-    is to record or unrecord the expense - so the status cannot drift
-    from the paperwork, because it *is* the paperwork.
+    `expenses` are Job Expenses carrying `amount`, `spent_on`,
+    `cost_line`, `invoice_no` and the job they are on. `lines` maps a
+    cost line name to that line, so this can read its tax type without
+    knowing how the caller fetched it.
 
-    Lines that were never Không hoá đơn are not in the answer at all:
-    they had an invoice from the start and there is nothing to replace.
+    Two ways in, and every row says which:
+
+    - **stated** - it spends against a quoted line marked Không hoá đơn,
+      so the treatment is on record.
+    - **unattributed** - it names no quoted line at all, so nobody has
+      said what it is. Counted as exposed, because the founder chose the
+      safe direction and the unsafe one is the expensive one.
+
+    A payment against a line that *does* carry an invoice is not here at
+    all. That is the one case where naming a line takes money out of the
+    figure, and it is why attributing spending makes the number fall.
     """
-    covered = coverage(expenses)
+    jobs = jobs or {}
     rows = []
-    for line in cost_lines:
-        if not is_no_invoice(line):
+    for expense in expenses:
+        named = expense.get("cost_line")
+        line = lines.get(named) if named else None
+        if named and line is not None and not is_no_invoice(line):
+            # Attributed to a line that came with its paper.
             continue
-        cover = covered.get(line.get("name")) or {}
+        if named and line is None:
+            # The link points at a line nobody can find, so it states
+            # nothing. Under the founder's rule that is spending nobody
+            # has accounted for, not spending proved safe.
+            named = None
+        job = expense.get("job")
         rows.append(
             {
+                "expense": expense.get("name"),
                 "job": job,
-                "job_title": job_title,
-                "line": line.get("name"),
-                "description": line.get("description"),
-                "amount": round_vnd(handed_over(line)),
-                "covered": bool(cover),
-                # Every covering expense, not the first of them. A line
-                # covered by two receipts named after one of them is a
-                # partial truth, and the screen has to be able to show
-                # the reader all the paper that answers for it.
-                "covering_expenses": list(cover.get("expenses") or []),
-                "covering_count": cover.get("count") or 0,
-                "covering_total": round_vnd(cover.get("total") or 0),
+                "job_title": jobs.get(job),
+                "line": named or None,
+                "treatment": STATED if named else UNATTRIBUTED,
+                "description": (
+                    expense.get("description")
+                    or (line or {}).get("description")
+                    or expense.get("category")
+                ),
+                "amount": round_vnd(expense.get("amount") or 0),
+                "spent_on": _iso(expense.get("spent_on")),
+                "covered": has_invoice(expense),
+                "invoice_no": (expense.get("invoice_no") or "") or None,
             }
         )
     return rows
@@ -147,56 +169,38 @@ def tndn_on(amount: Any, rate: Any = TNDN_RATE) -> int:
     return round_vnd(_d(round_vnd(amount)) * _d(rate))
 
 
-def is_covered(row: Row) -> bool:
-    """Whether a replacement invoice is on file for this line.
-
-    True only when the row says so. A row that says nothing is exposed:
-    see the module docstring on why the unrecorded direction has to fall
-    this way.
-    """
-    return bool(row.get("covered"))
-
-
 def exposure_report(
     rows: Iterable[Row],
     *,
     rate: Any = TNDN_RATE,
     by_month: bool = False,
 ) -> dict:
-    """Uncovered no-invoice cost and the TNDN it exposes the company to.
+    """What the company is carrying, and the TNDN it exposes it to.
 
-    `rows` are no-invoice cost lines the caller has already priced and
-    already decided the covered state of. Each carries an `amount`, a
-    `covered` flag, and whatever identifying fields the screen wants to
-    print back - `job`, `job_title`, `description` are passed through
-    untouched.
-
-    Covered lines are counted separately rather than dropped. "Nothing
-    is uncovered" and "there was never any no-invoice spend" are very
-    different pieces of news, and a tile that cannot tell them apart
-    reads as the good one on a studio that simply has not started.
-
-    `by_month` groups the uncovered rows by the month of their
-    `spent_on`. Off by default: a cost line has no date of its own, and
-    an exposure is carried until the paper arrives rather than falling
-    in a month - the same reading auraos.lib.finance.receivables_report
-    takes when it says what is owed is owed today. The caller turns it
-    on only when it has a real date to group by, and a row with no date
-    lands in `undated` rather than being dropped or being guessed into
-    the current month.
+    The headline counts both halves. The breakdown keeps them apart, so
+    the founder can see how much of their own number is established and
+    how much is an assumption waiting to be resolved.
     """
-    lines = [_line(row) for row in rows]
-    uncovered = [line for line in lines if not line["covered"]]
-    covered = [line for line in lines if line["covered"]]
+    lines = list(rows)
+    uncovered = [row for row in lines if not row.get("covered")]
+    covered = [row for row in lines if row.get("covered")]
+    stated = [row for row in uncovered if row.get("treatment") == STATED]
+    assumed = [row for row in uncovered if row.get("treatment") == UNATTRIBUTED]
 
-    total = sum(line["amount"] for line in uncovered)
+    total = sum(row["amount"] for row in uncovered)
     report = {
         "basis": TNDN_BASIS,
         "rate_pct": float(_d(rate) * 100),
         "uncovered_total": total,
         "tndn_exposure": tndn_on(total, rate),
         "uncovered_count": len(uncovered),
-        "covered_total": sum(line["amount"] for line in covered),
+        # The two halves of that headline: spending whose treatment is
+        # on record, and spending nobody has pointed at a line yet.
+        "stated_total": sum(row["amount"] for row in stated),
+        "stated_count": len(stated),
+        "unattributed_total": sum(row["amount"] for row in assumed),
+        "unattributed_count": len(assumed),
+        "covered_total": sum(row["amount"] for row in covered),
         "covered_count": len(covered),
         "lines": uncovered,
     }
@@ -205,44 +209,25 @@ def exposure_report(
     return report
 
 
-def _line(row: Row) -> dict:
-    """One no-invoice line as the tile reads it, money rounded once."""
-    return {
-        "job": row.get("job"),
-        "job_title": row.get("job_title"),
-        "description": row.get("description"),
-        "amount": round_vnd(row.get("amount") or 0),
-        "covered": is_covered(row),
-        "covering_expenses": list(row.get("covering_expenses") or []),
-        "covering_count": row.get("covering_count") or 0,
-        "covering_total": round_vnd(row.get("covering_total") or 0),
-        "line": row.get("line"),
-        "spent_on": _iso(row.get("spent_on")),
-    }
-
-
 def _months(lines: Iterable[dict], rate: Any) -> list[dict]:
     """Uncovered exposure grouped by the month the money went out.
 
-    Only the months that have something in them: unlike a profit and
-    loss, this is not a run along a range the caller chose, so an empty
-    month here would be a month nobody asked about.
+    Every expense carries a date, so unlike the quoted lines this
+    replaces, a month is always a real answer rather than a guess.
     """
     buckets: dict[str, list[dict]] = {}
     for line in lines:
-        day = as_date(line["spent_on"])
+        day = as_date(line.get("spent_on"))
         buckets.setdefault(month_key(day) if day else UNDATED, []).append(line)
 
     rows = [_month(key, buckets[key], rate) for key in sorted(buckets)]
-    # Lines nobody has dated sort last rather than first, where a "u"
-    # would otherwise put them among the years.
     rows.sort(key=lambda row: (row["month"] == UNDATED, row["month"]))
     return rows
 
 
-# Where a line whose money has no recorded date goes. Named, not
-# dropped: an exposure with no date is still an exposure, and a tile
-# that hid it would understate the bill.
+# An expense with no spent_on should not exist - the field is how money
+# gets into a month - but a row that lost its date is still money out,
+# and hiding it would understate the bill.
 UNDATED = "undated"
 
 

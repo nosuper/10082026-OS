@@ -11,7 +11,7 @@ from frappe.model.document import Document
 
 from auraos.auraos.doctype.cash_account.cash_account import default_account
 from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
-from auraos.lib import exposure, ledger
+from auraos.lib import ledger
 from auraos.lib.settlement import FROM_ADVANCE
 
 
@@ -25,9 +25,10 @@ class JobExpense(Document):
             self.paid_from = FROM_ADVANCE
 
     def validate(self):
+        self.reject_change_after_close()
         self.validate_amount()
         self.validate_category()
-        self.validate_cover()
+        self.validate_cost_line()
 
     def on_update(self):
         # After the save, because an expense has no name to post against
@@ -35,6 +36,11 @@ class JobExpense(Document):
         post_payment(self)
 
     def on_trash(self):
+        # Gated for the same reason a save is: deleting an expense moves
+        # the recorded total exactly as editing one does, and it walks
+        # the ledger entry back with it. A closed job whose spending can
+        # be deleted but not corrected is the wrong way round.
+        self.reject_change_after_close()
         # A deleted expense paid nobody, so the entry it earned comes
         # back out - the same walk-back a milestone dragged out of đã
         # thanh toán gets.
@@ -64,48 +70,70 @@ class JobExpense(Document):
                 frappe.ValidationError,
             )
 
-    def validate_cover(self):
-        """A replacement invoice has to point at a line it could replace.
+    def reject_change_after_close(self):
+        """A closed job's spending is a record, not a draft.
 
-        `covers_cost_line` is what makes a no-invoice line count as
-        covered, and the status is derived from it rather than stored -
-        so this link is the only thing standing between the founder's
-        exposure tile and a number somebody typed. It is worth being
-        strict about.
+        The same rule Job.FROZEN_TABLES applies to the carried breakdown,
+        at the other end of the job: cost lines freeze when the deal is
+        won because they record what was sold, and expenses freeze when
+        the job closes because they record what it cost. In between,
+        both the amount and the category are meant to be corrected -
+        that is what makes the actual figure worth comparing against the
+        quote.
 
-        Two ways it can be wrong, and both are rejected rather than
-        ignored, because an ignored link reads on the tile as an
-        exposure that has been dealt with:
+        **All three ways of changing the record, not just editing.**
+        Adding an expense to a closed job and deleting one from it move
+        the recorded total exactly as correcting one does. An earlier
+        version of this gated only the edit, which left a closed job
+        where spending could be *deleted* but not *corrected* - and
+        because `on_trash` walks the ledger entry back, that is the one
+        direction that moves the money and leaves nothing saying it was
+        adjusted. A freeze with a hole in it is worse than none, because
+        it reads like a guarantee.
 
-        1. **A line that is not on this job.** A cost line name is a
-           child row, and a typo or a copied name would silently cover
-           somebody else's line - or nothing at all.
-        2. **A line that already had an invoice.** Công ty and Cá nhân
-           lines came with their paper. There is nothing to replace, so
-           an expense claiming to replace it is a mistake about which
-           line was meant.
-
-        Deliberately a Data field validated here rather than a Link: the
-        target is a child row, and a Link to a child doctype is a Frappe
-        oddity that would buy nothing this method is not already doing.
+        Reopen the job to change any of it. That is a deliberate, visible
+        act, which is what a correction to a closed record should be.
         """
-        if not self.covers_cost_line:
+        from auraos.auraos.doctype.job.job import CLOSED_STAGE
+
+        if frappe.db.get_value("Job", self.job, "stage") != CLOSED_STAGE:
             return
-        lines = {row.name: row for row in frappe.get_doc("Job", self.job).cost_lines}
-        line = lines.get(self.covers_cost_line)
-        if line is None:
+        frappe.throw(
+            _(
+                "Job {0} is closed, so its spending can no longer be changed. "
+                "Reopen the job to correct it."
+            ).format(self.job),
+            frappe.ValidationError,
+        )
+
+    def validate_cost_line(self):
+        """The quoted line this spend belongs to, if it belongs to one.
+
+        Optional, and that is the point rather than an oversight: money
+        gets spent on things nobody quoted, and forcing every expense at
+        a line would either invent a line or push real spending into the
+        wrong one. An expense naming no line reads as uncategorised,
+        which is a true statement about it.
+
+        What it must not be is a line on somebody else's job. A cost
+        line name is a child row, easy to paste wrong, and a link to
+        another job's line would quietly attribute this money there -
+        and, on a Không hoá đơn line, quietly move a tax exposure with
+        it.
+
+        Deliberately no tax-type check any more. Under #11 this field
+        meant "is the replacement invoice for", which only made sense on
+        a line with no invoice behind it. It now means "spends against",
+        which is true of every quoted line whatever its tax treatment,
+        and it is that link that carries Không hoá đơn from the plan to
+        the money.
+        """
+        if not self.cost_line:
+            return
+        lines = {row.name for row in frappe.get_doc("Job", self.job).cost_lines}
+        if self.cost_line not in lines:
             frappe.throw(
-                _("That cost line is not on job {0}, so this expense cannot replace it.").format(
-                    self.job
-                ),
-                frappe.ValidationError,
-            )
-        if not exposure.is_no_invoice(line.as_dict()):
-            frappe.throw(
-                _(
-                    "{0} is a {1} line, so it already has an invoice behind it "
-                    "and there is nothing to replace."
-                ).format(line.description or self.covers_cost_line, line.tax_type),
+                _("That quoted line is not on job {0}.").format(self.job),
                 frappe.ValidationError,
             )
 

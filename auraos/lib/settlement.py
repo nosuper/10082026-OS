@@ -232,10 +232,14 @@ def handed_over(line: Row) -> Decimal:
 
     Public because it is the answer to a question more than one report
     asks. The quoted-versus-actual comparison above needs it per
-    category; the no-invoice exposure needs it per line. Two callers
-    computing "cash out for this line" separately is how the job's money
-    screen and the founder's tax tile would come to disagree about the
-    same đồng, so there is one of it.
+    category, and now that an expense names the line it spends against
+    (#123), per-line quoted-versus-actual is a question the app can ask
+    again.
+
+    It is deliberately *not* what the no-invoice exposure is measured
+    on. That was the defect #123 fixes: this is what a line was
+    *expected* to cost, and a tax liability arises from what was
+    actually paid.
     """
     vendor_mf_rate = _d(line.get("vendor_mf_pct") or 0) / 100
     after_vendor_mf = _d(line.get("subtotal") or 0) * (1 + vendor_mf_rate)

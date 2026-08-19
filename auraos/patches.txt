@@ -3,6 +3,7 @@
 # and refuses a file that names only one of them.
 
 [pre_model_sync]
+auraos.patches.rename_covers_cost_line
 
 [post_model_sync]
 auraos.patches.backfill_generated_paper_status
