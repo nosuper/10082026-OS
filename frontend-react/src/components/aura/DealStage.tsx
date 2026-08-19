@@ -13,6 +13,7 @@
 // board that happened to implement them first.
 
 import { useEffect, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Modal, inputClass, pillToneClass } from "@/components/aura/primitives";
@@ -269,28 +270,33 @@ export function StageSelect({
   disabled?: boolean | undefined;
 }) {
   return (
-    <select
-      aria-label="Stage"
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      className={cn(
-        "inline-flex cursor-pointer appearance-none items-center rounded-md border py-0.5 pr-6 pl-2",
-        "text-[11px] font-medium whitespace-nowrap",
-        // The caret, drawn rather than imported: a background image keeps the
-        // control one element, so it stays the same size as the Pill it used
-        // to be and the header does not reflow when the stage changes.
-        "bg-[length:0.6rem] bg-[position:right_0.4rem_center] bg-no-repeat",
-        "bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 12 12%22><path d=%22M2 4.5L6 8.5L10 4.5%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%221.5%22/></svg>')]",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-        pillToneClass(STAGE_TONE[value]),
-      )}
-    >
-      {DEAL_STAGES.map((stage) => (
-        <option key={stage} value={stage}>
-          {stage}
-        </option>
-      ))}
-    </select>
+    <span className="relative inline-flex items-center">
+      <select
+        aria-label="Stage"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          "cursor-pointer appearance-none rounded-md border py-0.5 pr-6 pl-2",
+          "text-[11px] font-medium whitespace-nowrap",
+          "disabled:cursor-not-allowed disabled:opacity-60",
+          pillToneClass(STAGE_TONE[value]),
+        )}
+      >
+        {DEAL_STAGES.map((stage) => (
+          <option key={stage} value={stage}>
+            {stage}
+          </option>
+        ))}
+      </select>
+      {/* A real element rather than a background-image caret. An inline SVG
+          data URI in an arbitrary Tailwind value contains spaces, and Tailwind
+          splits classes on spaces - the rule would never be generated and the
+          caret would be silently absent, which reads as a design choice. */}
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-1.5 size-3 opacity-70"
+      />
+    </span>
   );
 }
