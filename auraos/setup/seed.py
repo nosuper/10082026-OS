@@ -726,6 +726,44 @@ FREELANCER_CONTRACT_SOURCE = "".join(
 )
 
 
+HANDOVER_NOTE = "Biên bản nghiệm thu (mẫu)"
+
+# A third template exists for a reason that is not variety: a generated
+# file is named "{job} - {template} - {stamp}" and the stamp is minute
+# resolution, so two papers from one template inside the same minute
+# share a file name. auraos.api.job_paperwork matches a status to a file
+# by name, so the two would show one status between them - board rule 8
+# in a new costume. Three states need three templates.
+HANDOVER_NOTE_SOURCE = "".join(
+    [
+        '<h2 style="text-align: center">BIÊN BẢN NGHIỆM THU</h2>',
+        "<p>Hôm nay, ngày {{today.day}} tháng {{today.month}} năm "
+        "{{today.year}}, hai bên cùng xác nhận:</p>",
+        "<p><strong>BÊN A:</strong> {{client.company_name}}</p>",
+        "<p><strong>BÊN B:</strong> công ty sản xuất</p>",
+        "<p>Công việc: {{job.title}} ({{job.code}}).</p>",
+        "<ul>",
+        "<li>Bên B đã bàn giao đầy đủ sản phẩm theo hợp đồng.</li>",
+        "<li>Bên A xác nhận nghiệm thu và đồng ý thanh toán phần còn lại.</li>",
+        "</ul>",
+        "<p>Biên bản được lập thành 02 bản, mỗi bên giữ 01 bản.</p>",
+    ]
+)
+
+
+def seed_a5_handover_note(deal_name):
+    if frappe.db.exists("Paperwork Template", {"template_name": HANDOVER_NOTE}):
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Paperwork Template",
+            "template_name": HANDOVER_NOTE,
+            "template_source": HANDOVER_NOTE_SOURCE,
+            "notes": "Seed data - nghiệm thu, dùng khi đóng job.",
+        }
+    ).insert(ignore_permissions=True)
+
+
 def seed_a5_freelancer_contract(deal_name):
     if frappe.db.exists(
         "Paperwork Template", {"template_name": FREELANCER_CONTRACT}
@@ -878,25 +916,48 @@ def seed_106_paper_states(deal_name):
     paper that was Signed and is not any more. That is the transition
     the status field exists to survive, and it cannot be seen on a site
     where every paper has only ever moved forwards.
+
+    **It generates the papers it needs.** An earlier version read
+    whatever `Generated Paper` rows happened to exist and returned
+    quietly when there were fewer than three (#129). That worked on a
+    site with history and did nothing at all on a freshly wiped one -
+    silently, which is the worst way for a seed to fail: the walkthrough
+    simply had no paperwork and nothing said why.
+
+    Generated through auraos.api rather than by inserting registry rows,
+    for the same reason the money flows post through their own doors: a
+    paper that exists without the file behind it is a row, not a
+    document.
     """
-    from auraos.api import set_paper_status
+    from auraos.api import generate_job_paperwork, set_paper_status
     from auraos.lib.paper_status import AWAITING_SIGNATURE, DRAFT, SIGNED
 
-    papers = frappe.get_all("Generated Paper", pluck="name", order_by="creation asc")
-    if len(papers) < 3:
+    job = frappe.db.get_value("Job", {"title": WON_DEAL})
+    if not job:
         return
-    # Already walked: the third paper only reads Draft again after this
-    # has run, because a generated paper starts with no status at all.
-    if frappe.db.get_value("Generated Paper", papers[2], "status") == DRAFT:
+    if frappe.db.count("Generated Paper", {"job": job}) >= 3:
+        return
+
+    for template_name in (STARTER_TEMPLATE, FREELANCER_CONTRACT, HANDOVER_NOTE):
+        template = frappe.db.get_value(
+            "Paperwork Template", {"template_name": template_name}
+        )
+        if template:
+            generate_job_paperwork(job, template)
+
+    papers = frappe.get_all(
+        "Generated Paper", filters={"job": job}, pluck="name", order_by="creation asc"
+    )
+    if len(papers) < 3:
         return
 
     # Through the endpoint, not through db.set_value. The doctype carries
     # status_changed_by and status_changed_on, and a status written
     # straight into the column leaves both empty - a paper that changed
-    # hands with no record of who or when, which is the same defect as a
-    # ledger row inserted by hand instead of posted by a flow.
+    # hands with no record of who or when.
     set_paper_status(papers[0], SIGNED)
     set_paper_status(papers[1], AWAITING_SIGNATURE)
+    # Walked back: signed, then not. The one a forwards-only seed hides.
     set_paper_status(papers[2], SIGNED)
     set_paper_status(papers[2], DRAFT)
 
@@ -910,6 +971,7 @@ FEATURE_SEEDS = {
     "T11 paperwork templates": seed_t11_paperwork,
     "A1 stale deal": seed_a1_stale_deal,
     "A5 freelancer contract": seed_a5_freelancer_contract,
+    "A5 handover note": seed_a5_handover_note,
     # Ordered after T8 and T10: both of these read records those seeds
     # create, and a dict preserves insertion order.
     "#123 no-invoice exposure": seed_123_no_invoice_exposure,
