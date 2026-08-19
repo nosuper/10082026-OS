@@ -20,24 +20,46 @@
 
 import { CLOSED_DEAL, JOB_DEAL } from "./fixture.js";
 
-/** One record's name, or null. Filters are a JSON list, the way Frappe takes them. */
+/**
+ * One record's name, or null. Filters are a JSON list, the way Frappe takes them.
+ *
+ * **Through `page.request`, not `page.evaluate(fetch(...))`, and that is the
+ * whole of run 17's eight failures.** The first version fetched a relative URL
+ * from inside the page. Every caller here resolves a record *before* deciding
+ * where to navigate - `openJobTab(page, await openJob(page), tab)` evaluates
+ * the argument first - so the fetch ran on `about:blank`, which has no origin
+ * to resolve `/api/...` against. The error is
+ * `TypeError: Failed to parse URL`, which says nothing whatsoever about
+ * navigation, and all eight tests died before reaching a single assertion.
+ *
+ * The tempting fix is a `goto` at each call site. **That documents the
+ * ordering constraint instead of removing it**, and leaves the next caller to
+ * rediscover it through the same unhelpful error.
+ *
+ * `page.request` has no such constraint: it is bound to the browser context,
+ * so it carries the same signed-in cookies, and it resolves relative URLs
+ * against the config's `baseURL` **without this file restating what that URL
+ * is**. So do not "simplify" this back to `fetch` inside `evaluate` - the
+ * relative path only looks equivalent from a page that has already navigated.
+ *
+ * `cash-accounts.spec.js` keeps its own inline `evaluate` version and is
+ * right to: it needs `window.csrf_token` for a POST, which genuinely only
+ * exists on a loaded page. It passed all five in run 15 because every test
+ * there navigates first. **The same idea written twice in one afternoon, once
+ * working and once not, and the only difference was where the page pointed.**
+ */
 export async function firstName(page, doctype, filters) {
-  return page.evaluate(
-    async ({ doctype, filters }) => {
-      const query = new URLSearchParams({
-        doctype,
-        filters: JSON.stringify(filters),
-        limit_page_length: "1",
-      });
-      const response = await fetch(`/api/method/frappe.client.get_list?${query}`, {
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) return null;
-      const body = await response.json();
-      return body?.message?.[0]?.name ?? null;
+  const response = await page.request.get("/api/method/frappe.client.get_list", {
+    params: {
+      doctype,
+      filters: JSON.stringify(filters),
+      limit_page_length: 1,
     },
-    { doctype, filters },
-  );
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok()) return null;
+  const body = await response.json();
+  return body?.message?.[0]?.name ?? null;
 }
 
 /** The job behind a seeded deal title. */
