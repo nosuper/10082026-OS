@@ -254,6 +254,20 @@ const inputClass =
 const ghostButton =
   "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-border-strong";
 
+/**
+ * One labelled control.
+ *
+ * The label sits *beside* the control from `sm` up rather than above it. This
+ * panel is a list of facts about one deal, and a stacked label costs a whole
+ * line per fact to say something a column heading says once - which on a wide
+ * screen is most of why the section read as loose. Below `sm` it stacks,
+ * because a 8.5rem label column on a phone leaves no room for the control.
+ *
+ * The hint stays under the control rather than under the label: it explains
+ * the value, and a hint sitting under a label reads as part of the label.
+ */
+const FIELD_ROW = "block sm:grid sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-start sm:gap-x-3";
+
 function Field({
   label,
   hint,
@@ -268,13 +282,15 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <label className={`block ${span ? "sm:col-span-2" : ""}`}>
-      <span className="label-caps">
+    <label className={`${FIELD_ROW} ${span ? "sm:col-span-2" : ""}`}>
+      <span className="label-caps mt-0 sm:mt-2">
         {label}
         {required ? <span className="text-ember"> *</span> : null}
       </span>
-      <div className="mt-1.5">{children}</div>
-      {hint ? <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div> : null}
+      <div className="mt-1 sm:mt-0">
+        {children}
+        {hint ? <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div> : null}
+      </div>
     </label>
   );
 }
@@ -292,10 +308,12 @@ function Readout({
   children: ReactNode;
 }) {
   return (
-    <div className={span ? "sm:col-span-2" : undefined}>
-      <div className="label-caps">{label}</div>
-      <div className="mt-1.5">{children}</div>
-      {hint ? <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div> : null}
+    <div className={`${FIELD_ROW} ${span ? "sm:col-span-2" : ""}`}>
+      <div className="label-caps mt-0 sm:mt-2">{label}</div>
+      <div className="mt-1 sm:mt-0">
+        {children}
+        {hint ? <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div> : null}
+      </div>
     </div>
   );
 }
@@ -678,7 +696,12 @@ function DealPage() {
               title="The deal"
               subtitle="The record itself. Pricing lives in the breakdown and the quote."
             >
-              <div className="grid gap-4 p-4 sm:grid-cols-2">
+              {/* Rows are one line tall now that the label is beside the
+                  control, so the vertical gap is the thing that decides how
+                  dense this reads. The horizontal gap stays wide: two
+                  label-and-control pairs side by side need a gutter between
+                  them or they read as one four-column table. */}
+              <div className="grid gap-x-8 gap-y-2 p-4 sm:grid-cols-2">
                 <Field label="Title" required span>
                   <input
                     value={draft.title}
@@ -737,7 +760,7 @@ function DealPage() {
                 </Field>
 
                 <Readout label="Stage" hint="Stages move on the board, where Lost can ask why.">
-                  <div className="flex items-center gap-2 py-1.5">
+                  <div className="flex items-center gap-2 sm:py-1.5">
                     <Pill tone={STAGE_TONE[doc?.stage ?? ""] ?? "neutral"}>{doc?.stage}</Pill>
                     <Link to="/deals" className="text-xs text-muted-foreground hover:text-ember">
                       Open the pipeline
@@ -747,7 +770,7 @@ function DealPage() {
 
                 <Field label="Brief" span>
                   <textarea
-                    rows={4}
+                    rows={3}
                     value={draft.brief}
                     onChange={(event) => edit({ brief: event.target.value })}
                     placeholder="What the client asked for"
@@ -834,7 +857,7 @@ function DealPage() {
                       : "Follows positioning and budget, decided on the server."
                   }
                 >
-                  <div className="flex flex-wrap items-center gap-2 py-1.5">
+                  <div className="flex flex-wrap items-center gap-2 sm:py-1.5">
                     {tier ? (
                       <>
                         <Pill tone={tier === "Tier 3" ? "ink" : "neutral"}>{tier}</Pill>
@@ -848,6 +871,15 @@ function DealPage() {
                   </div>
                 </Readout>
 
+                {/* The tags a deal carries, and the way to add one, on a
+                    single row. The add control used to be a full-width boxed
+                    input with its own button on a line of its own, which is
+                    why it read as a dialog dropped into the panel rather than
+                    as part of it: it was the widest control on the screen for
+                    the shortest value on it. Now it is a chip the same size as
+                    the tags it makes, so typing a tag looks like what it
+                    produces. Enter still commits; the + is for whoever does
+                    not know that. */}
                 <Field label="Tags" span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {draft.tags.map((tag) => (
@@ -867,44 +899,57 @@ function DealPage() {
                         </button>
                       </span>
                     ))}
-                    {draft.tags.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">No tags yet.</span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 flex gap-1.5">
-                    <input
-                      list="aura-deal-tags"
-                      value={tagInput}
-                      onChange={(event) => setTagInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        void addTag();
-                      }}
-                      placeholder="Add tag"
-                      aria-label="Add tag"
-                      className={inputClass}
-                    />
-                    <datalist id="aura-deal-tags">
-                      {(tagOptions.data ?? [])
-                        .filter((row) => !draft.tags.includes(row.name))
-                        .map((row) => (
-                          <option key={row.name} value={row.name} />
-                        ))}
-                    </datalist>
-                    <button
-                      type="button"
-                      onClick={() => void addTag()}
-                      disabled={createTag.isPending}
-                      className={ghostButton}
-                    >
-                      <Plus className="size-3" /> Add
-                    </button>
+
+                    <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-0.5 focus-within:border-border-strong">
+                      <input
+                        list="aura-deal-tags"
+                        value={tagInput}
+                        onChange={(event) => setTagInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          void addTag();
+                        }}
+                        placeholder="Add tag"
+                        aria-label="Add tag"
+                        // Grows with what is typed rather than sitting at a
+                        // fixed width. A tag like "cần báo giá gấp" is longer
+                        // than the box a fixed width can justify for an empty
+                        // one, and an input you cannot read what you typed into
+                        // is worse than the wide box this replaced.
+                        size={Math.max(8, tagInput.length + 1)}
+                        className="max-w-[14rem] bg-transparent text-[11px] font-medium outline-none placeholder:text-muted-foreground"
+                      />
+                      <datalist id="aura-deal-tags">
+                        {(tagOptions.data ?? [])
+                          .filter((row) => !draft.tags.includes(row.name))
+                          .map((row) => (
+                            <option key={row.name} value={row.name} />
+                          ))}
+                      </datalist>
+                      <button
+                        type="button"
+                        onClick={() => void addTag()}
+                        disabled={createTag.isPending || !tagInput.trim()}
+                        title="Add this tag"
+                        aria-label="Add this tag"
+                        className="text-muted-foreground hover:text-ember disabled:opacity-40"
+                      >
+                        <Plus className="size-3" />
+                      </button>
+                    </span>
                   </div>
                 </Field>
               </div>
 
-              <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+              {/* Both sentences stay. They are not decoration: one says the
+                  fields and the tags save together and by which key, the other
+                  says comments and files do not. Someone who loses a comment
+                  because they assumed Save covered it has been failed by a
+                  compact screen. Density is the goal here, silence is not - so
+                  this drops to the hint size the rest of the panel uses rather
+                  than dropping a clause. */}
+              <div className="border-t border-border px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
                 Tags, links and the fields above save together - Save, or Ctrl or Cmd plus S.
                 Comments and files are their own records and save themselves.
               </div>
