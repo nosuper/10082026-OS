@@ -52,9 +52,16 @@ test("unit price formats as typed, flags the page dirty, and Ctrl+S saves", asyn
   // saved" means the save landed - reloading any earlier kills the
   // in-flight request and reads back the seeded price (CI flake,
   // 2026-08-13).
+  //
+  // Same 15s the autosave assertion below already carries, and for the
+  // same reason. The two wait on the identical property - a Frappe save
+  // round trip landing in a container - and only one of them had been
+  // given a realistic budget. On a busy box this one failed 9 runs out
+  // of 10 at the default 5s while the value itself persisted correctly,
+  // so the five seconds were measuring the machine rather than the save.
   await expect(
     page.getByText("All changes saved", { exact: true })
-  ).toBeVisible()
+  ).toBeVisible({ timeout: 15_000 })
 
   await page.reload()
   await expect(
