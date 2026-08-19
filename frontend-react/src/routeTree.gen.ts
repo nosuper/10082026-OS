@@ -23,6 +23,7 @@ import { Route as FinanceIndexRouteImport } from './routes/finance.index'
 import { Route as FinanceExpensesRouteImport } from './routes/finance.expenses'
 import { Route as FinanceForecastRouteImport } from './routes/finance.forecast'
 import { Route as FinanceIncomeRouteImport } from './routes/finance.income'
+import { Route as FinanceReceivablesRouteImport } from './routes/finance.receivables'
 import { Route as FinanceReportsRouteImport } from './routes/finance.reports'
 import { Route as JobsIndexRouteImport } from './routes/jobs.index'
 import { Route as JobsJobIdRouteImport } from './routes/jobs.$jobId'
@@ -101,6 +102,11 @@ const FinanceIncomeRoute = FinanceIncomeRouteImport.update({
   path: '/income',
   getParentRoute: () => FinanceRoute,
 } as any)
+const FinanceReceivablesRoute = FinanceReceivablesRouteImport.update({
+  id: '/receivables',
+  path: '/receivables',
+  getParentRoute: () => FinanceRoute,
+} as any)
 const FinanceReportsRoute = FinanceReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
+  '/finance/receivables': typeof FinanceReceivablesRoute
   '/finance/reports': typeof FinanceReportsRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
   '/quotations/$quoteRef': typeof QuotationsQuoteRefRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
+  '/finance/receivables': typeof FinanceReceivablesRoute
   '/finance/reports': typeof FinanceReportsRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
   '/quotations/$quoteRef': typeof QuotationsQuoteRefRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
+  '/finance/receivables': typeof FinanceReceivablesRoute
   '/finance/reports': typeof FinanceReportsRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
   '/quotations/$quoteRef': typeof QuotationsQuoteRefRoute
@@ -219,6 +228,7 @@ export interface FileRouteTypes {
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
+    | '/finance/receivables'
     | '/finance/reports'
     | '/jobs/$jobId'
     | '/quotations/$quoteRef'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
+    | '/finance/receivables'
     | '/finance/reports'
     | '/jobs/$jobId'
     | '/quotations/$quoteRef'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
+    | '/finance/receivables'
     | '/finance/reports'
     | '/jobs/$jobId'
     | '/quotations/$quoteRef'
@@ -388,6 +400,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceIncomeRouteImport
       parentRoute: typeof FinanceRoute
     }
+    '/finance/receivables': {
+      id: '/finance/receivables'
+      path: '/receivables'
+      fullPath: '/finance/receivables'
+      preLoaderRoute: typeof FinanceReceivablesRouteImport
+      parentRoute: typeof FinanceRoute
+    }
     '/finance/reports': {
       id: '/finance/reports'
       path: '/reports'
@@ -444,6 +463,7 @@ interface FinanceRouteChildren {
   FinanceExpensesRoute: typeof FinanceExpensesRoute
   FinanceForecastRoute: typeof FinanceForecastRoute
   FinanceIncomeRoute: typeof FinanceIncomeRoute
+  FinanceReceivablesRoute: typeof FinanceReceivablesRoute
   FinanceReportsRoute: typeof FinanceReportsRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
 }
@@ -452,6 +472,7 @@ const FinanceRouteChildren: FinanceRouteChildren = {
   FinanceExpensesRoute: FinanceExpensesRoute,
   FinanceForecastRoute: FinanceForecastRoute,
   FinanceIncomeRoute: FinanceIncomeRoute,
+  FinanceReceivablesRoute: FinanceReceivablesRoute,
   FinanceReportsRoute: FinanceReportsRoute,
   FinanceIndexRoute: FinanceIndexRoute,
 }

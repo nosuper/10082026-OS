@@ -1,45 +1,65 @@
-// The deal breakdown, on real data.
+// The deal breakdown and the client-facing quote built on top of it.
 //
-// A producer prices a deal line by line against the record itself: quantities,
-// units, unit price, tax type, vendor management fee and markup, with the three
-// money columns - subtotal, quote price, margin - coming back from the server's
-// pricing engine on every edit. Nothing here multiplies money.
+// The top half is internal: a producer prices a deal line by line against the
+// record itself - quantities, units, unit price, tax type, vendor management fee
+// and markup - with the three money columns (subtotal, quote price, margin)
+// coming back from the server's pricing engine on every edit. Nothing here
+// multiplies money.
 //
-// The Vue screen this replaces is frontend/src/pages/DealBreakdownPage.vue: same
-// doctype, same field list, the same auraos.api.compute_breakdown recompute and
-// the same frappe.client.save write.
+// The bottom half is what a client reads: packages that gather those lines and
+// may override their price, the management fee and VAT rates, how much of the
+// build to show, and publishing, which freezes all of it into the next version
+// at its own link. The engine prices packages too, so an override's variance
+// against the member sum is a server figure like every other one.
 //
-// Packages, the fee and VAT dials, the detail level and publishing are the quote
-// surface (#88) and are deliberately not edited here; this screen passes the
-// deal's stored packages and rates through to the engine untouched, because the
-// client-facing prices are what the margin and the floor warning are measured
-// against.
+// The Vue screens this replaces are frontend/src/pages/DealBreakdownPage.vue and
+// frontend/src/components/QuotePanel.vue: same doctype, same field list, the
+// same auraos.api.compute_breakdown recompute, the same frappe.client.save
+// write, and the same publish / mark / open-log endpoints.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronUp, Plus, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronUp,
+  ExternalLink,
+  FileDown,
+  MousePointerClick,
+  Plus,
+  Send,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
 import { useSession } from "@/components/aura/SessionProvider";
 import { Card, Money, Pill, Td, Th } from "@/components/aura/primitives";
-import { Empty, ErrorState, QueryStates } from "@/components/aura/states";
-import { countLabel, parseVnd, vnd } from "@/lib/format";
-import { listsOf, useDoc, useList, useMethod, useMethodMutation } from "@/lib/queries";
+import {
+  activityLabel,
+  statusTone,
+  versionActivity,
+  type QuoteVersion,
+} from "@/components/aura/QuoteVersions";
+import { Empty, ErrorState, QueryState, QueryStates } from "@/components/aura/states";
+import { countLabel, formatDate, formatDateTime, parseVnd, vnd } from "@/lib/format";
+import { listsOf, resultOf, useDoc, useList, useMethod, useMethodMutation } from "@/lib/queries";
 
 export const Route = createFileRoute("/deals/$dealCode/quote")({
   head: () => ({
     meta: [
-      { title: "Deal breakdown - AuraOS" },
+      { title: "Deal breakdown and quote - AuraOS" },
       {
         name: "description",
         content:
-          "Price a deal line by line: quantities, unit prices, tax type and markup, with subtotal, quote price and margin computed by the server.",
+          "Price a deal line by line, gather the lines into packages, set the management fee, VAT and detail level, then publish a version with its own client link.",
       },
-      { property: "og:title", content: "Deal breakdown - AuraOS" },
+      { property: "og:title", content: "Deal breakdown and quote - AuraOS" },
       {
         property: "og:description",
-        content: "Cost lines with server-computed subtotal, quote price and margin.",
+        content:
+          "Cost lines with server-computed subtotal, quote price and margin, then packages and published quote versions.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -57,6 +77,30 @@ const TAX_TYPES = ["Công ty", "Cá nhân", "Không hoá đơn"];
 const COST_PHASES = ["Pre-production", "Production", "Post-production", "Appendix"];
 
 const SOURCE_TYPES = ["Internal", "Freelancer", "Vendor"];
+
+// Deal.quote_detail_level, exactly as the doctype spells them, with what each
+// one puts in front of a client (playbook 3.3). The wording matters: choosing
+// this is choosing how much of the build the client gets to argue with.
+const DETAIL_LEVELS = [
+  {
+    value: "Package totals",
+    label: "Package totals",
+    detail: "One row per package, at the package price. Cost lines stay internal.",
+  },
+  {
+    value: "Line by line",
+    label: "Line by line",
+    detail:
+      "Every line with its quantities and sell price, AICP style. Cost and markup never leave.",
+  },
+  {
+    value: "Lump sum",
+    label: "Lump sum",
+    detail: "One figure for the whole job, under the deal's own title.",
+  },
+] as const;
+
+const DEFAULT_DETAIL_LEVEL = "Package totals";
 
 // A new row carries the doctype's own defaults, so an untouched line saves.
 const NEW_LINE: LineFields = {
@@ -107,12 +151,26 @@ type LineFields = {
 /** A row on screen. `key` is React's, never the server's, and never sent. */
 type Line = LineFields & { key: string };
 
+/** A Deal Package as the document stores it. */
 type PackageRow = {
   title: string | null;
   description: string | null;
   price_override: number | null;
   has_price_override: number | null;
 };
+
+/**
+ * A package being edited.
+ *
+ * `override` is the whole reason this is not just `price_override`: the column
+ * is NOT NULL, so the document carries a flag beside it saying whether the
+ * number means anything. Blank here is null and quotes the member sum; 0 is a
+ * real price and quotes the package free of charge. Collapsing the two would
+ * silently give away work.
+ */
+type PackageFields = { title: string; description: string; override: number | null };
+
+type Package = PackageFields & { key: string };
 
 type DealDoc = {
   name: string;
@@ -149,8 +207,19 @@ type FounderView = {
   margin_floor_pct: number;
 };
 
+/** What the engine makes of one package: the sum of its members, then the
+ *  price the client is quoted, and the gap between them. */
+type PackageView = {
+  title: string | null;
+  default_price: number;
+  price: number;
+  variance: number;
+  overridden: boolean;
+};
+
 type BreakdownView = {
   lines: LineView[];
+  packages: PackageView[];
   subtotal: number;
   management_fee: number;
   vat: number;
@@ -163,6 +232,16 @@ type BreakdownView = {
 
 type NamedRow = { name: string };
 type ContactRow = { name: string; full_name: string | null };
+
+/** One row of auraos.api.quote_opens: when the client looked, and how. */
+type OpenEvent = {
+  opened_on: string | null;
+  via: string | null;
+  ip_address: string | null;
+};
+
+/** The three rates and dials a client's copy is built from. */
+type Terms = { mfPct: number; vatPct: number; detailLevel: string };
 
 // -- the detail columns ------------------------------------------------------
 //
@@ -260,9 +339,29 @@ function toLine(row: Partial<LineFields>): Line {
   };
 }
 
+/** A stored package row as an editable row. */
+function toPackage(row: PackageRow): Package {
+  return {
+    key: nextKey(),
+    title: text(row.title),
+    description: text(row.description),
+    override: row.has_price_override ? num(row.price_override) : null,
+  };
+}
+
 /** What "unsaved" is measured against: the editable state, and nothing else. */
-function snapshotOf(lines: Line[], commission: number | null): string {
-  return JSON.stringify({ lines: lines.map(wireLine), commission });
+function snapshotOf(
+  lines: Line[],
+  packages: Package[],
+  terms: Terms,
+  commission: number | null,
+): string {
+  return JSON.stringify({
+    lines: lines.map(wireLine),
+    packages: packages.map(wirePackage),
+    terms,
+    commission,
+  });
 }
 
 /** An untouched optional field goes back as it came: empty, not "". */
@@ -290,6 +389,19 @@ function wireLine(line: Line): Record<string, string | number | null> {
   };
 }
 
+/**
+ * A package as the engine and the document both want it: the override split
+ * back into the flag that says "this is set" and the number itself.
+ */
+function wirePackage(pkg: Package): Record<string, string | number | null> {
+  return {
+    title: pkg.title.trim(),
+    description: blank(pkg.description),
+    has_price_override: pkg.override === null ? 0 : 1,
+    price_override: pkg.override ?? 0,
+  };
+}
+
 const cellInput =
   "rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong";
 // Numerals read as a ledger. Vietnamese units and tax types stay in the sans
@@ -300,6 +412,9 @@ const ghostButton =
   "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-border-strong";
 const rowIcon =
   "rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent";
+// Quiet chrome for the delivery actions - the ember belongs to Publish alone.
+const chip =
+  "inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground disabled:opacity-40";
 const headCell = "px-2 py-2";
 const bodyCell = "px-2 py-1.5";
 // This is the widest table in the app and it scrolls sideways. Two things must
@@ -350,9 +465,20 @@ function BreakdownPage() {
 
   const [serverDoc, setServerDoc] = useState<DealDoc | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [terms, setTerms] = useState<Terms>({
+    mfPct: 0,
+    vatPct: 0,
+    detailLevel: DEFAULT_DETAIL_LEVEL,
+  });
   const [commission, setCommission] = useState<number | null>(null);
   const [visibleMeta, setVisibleMeta] = useState<MetaKey[]>(() => loadColumns(session.userId));
   const [failure, setFailure] = useState<unknown>(null);
+  const [notes, setNotes] = useState("");
+  // Which version's open log is expanded. The counts are on every row already;
+  // this is the "when", which is what decides the timing of a follow-up.
+  const [openLogFor, setOpenLogFor] = useState<string | null>(null);
+  const [copied, setCopied] = useState("");
 
   // Dirty is a snapshot comparison, not a flag: loading the deal must not count
   // as an edit, and an edit typed while a save is in flight must stay dirty.
@@ -366,50 +492,54 @@ function BreakdownPage() {
     if (!data || seeded.current === data.name) return;
     seeded.current = data.name;
     const seededLines = (data.cost_lines ?? []).map(toLine);
+    const seededPackages = (data.packages ?? []).map(toPackage);
+    const seededTerms: Terms = {
+      mfPct: data.quote_mf_pct ?? 0,
+      vatPct: data.vat_pct ?? 0,
+      detailLevel: data.quote_detail_level || DEFAULT_DETAIL_LEVEL,
+    };
     setServerDoc(data);
     setLines(seededLines);
+    setPackages(seededPackages);
+    setTerms(seededTerms);
     setCommission(data.commission_pct ?? null);
-    setBaseline(snapshotOf(seededLines, data.commission_pct ?? null));
+    setBaseline(snapshotOf(seededLines, seededPackages, seededTerms, data.commission_pct ?? null));
   }, [deal.data]);
 
   const wireLines = useMemo(() => JSON.stringify(lines.map(wireLine)), [lines]);
-  const snapshot = useMemo(() => snapshotOf(lines, commission), [lines, commission]);
+  const wirePackages = useMemo(() => JSON.stringify(packages.map(wirePackage)), [packages]);
+  const snapshot = useMemo(
+    () => snapshotOf(lines, packages, terms, commission),
+    [lines, packages, terms, commission],
+  );
 
   const dirty = Boolean(baseline) && snapshot !== baseline;
-  // Autosave holds off while a line has no description: the save would only
-  // bounce off the server's own validation, and the row says why in the border.
-  const complete = lines.every((line) => line.description.trim());
+  // Autosave holds off while a line has no description or a package has no
+  // title: the save would only bounce off the server's own validation, and the
+  // row says why in the border.
+  const complete =
+    lines.every((line) => line.description.trim()) && packages.every((pkg) => pkg.title.trim());
 
   // -- the engine -----------------------------------------------------------
   //
-  // Subtotal, quote price and margin are pricing decisions, so they are asked
-  // for rather than worked out here. The deal's stored packages and rates ride
-  // along untouched: the margin is measured against the prices a client reads,
-  // and a line inside a package is priced through that package.
-
-  const packagesJson = useMemo(
-    () =>
-      JSON.stringify(
-        (serverDoc?.packages ?? []).map((row) => ({
-          title: row.title,
-          description: row.description,
-          price_override: row.price_override,
-          has_price_override: row.has_price_override,
-        })),
-      ),
-    [serverDoc],
-  );
+  // Subtotal, quote price, package prices, the management fee, the VAT and the
+  // margin are all pricing decisions, so they are asked for rather than worked
+  // out here. The packages and rates being edited below ride along on every
+  // call: the margin is measured against the prices a client reads, and a line
+  // inside a package is priced through that package.
 
   const settledLines = useDebounced(wireLines, RECOMPUTE_MS);
+  const settledPackages = useDebounced(wirePackages, RECOMPUTE_MS);
+  const settledTerms = useDebounced(terms, RECOMPUTE_MS);
   const settledCommission = useDebounced(commission, RECOMPUTE_MS);
 
   const live = useMethod<BreakdownView>(
     "auraos.api.compute_breakdown",
     {
       lines: settledLines,
-      packages: packagesJson,
-      quote_mf_pct: serverDoc?.quote_mf_pct ?? 0,
-      vat_pct: serverDoc?.vat_pct ?? 0,
+      packages: settledPackages,
+      quote_mf_pct: settledTerms.mfPct,
+      vat_pct: settledTerms.vatPct,
       commission_pct: settledCommission,
     },
     { enabled: Boolean(serverDoc), staleTime: Number.POSITIVE_INFINITY },
@@ -423,7 +553,11 @@ function BreakdownPage() {
   }, [live.data]);
   const view = live.data ?? lastView.current;
   const settling =
-    settledLines !== wireLines || settledCommission !== commission || live.isFetching;
+    settledLines !== wireLines ||
+    settledPackages !== wirePackages ||
+    settledTerms !== terms ||
+    settledCommission !== commission ||
+    live.isFetching;
 
   // -- writes ---------------------------------------------------------------
 
@@ -454,9 +588,14 @@ function BreakdownPage() {
     { invalidate: [listsOf("Cost Item Category")] },
   );
 
-  async function save(): Promise<void> {
+  /**
+   * Write the document. Answers whether the server now holds what is on screen,
+   * which is what publishing has to know: a version freezes the *saved* deal, so
+   * an unsaved override would be published at its old price.
+   */
+  async function save(): Promise<boolean> {
     const base = serverDoc;
-    if (!base || saveDeal.isPending) return;
+    if (!base || saveDeal.isPending) return false;
 
     const known = new Set((categories.data ?? []).map((row) => row.name));
     const missing = [
@@ -469,7 +608,7 @@ function BreakdownPage() {
         });
       } catch (error) {
         setFailure(error);
-        return;
+        return false;
       }
     }
 
@@ -478,11 +617,23 @@ function BreakdownPage() {
       ...base,
       doctype: "Deal",
       cost_lines: lines.map((line) => ({ ...wireLine(line), doctype: "Deal Cost Line" })),
+      packages: packages.map((pkg) => ({ ...wirePackage(pkg), doctype: "Deal Package" })),
+      quote_mf_pct: terms.mfPct,
+      vat_pct: terms.vatPct,
+      quote_detail_level: terms.detailLevel,
     };
     // Producers never receive this field and the server ignores it from them.
     if (view?.founder && commission !== null) doc["commission_pct"] = commission;
     setFailure(null);
-    saveDeal.mutate({ doc });
+    // Awaited rather than fired and forgotten, because publish waits on it. The
+    // catch is what keeps that from becoming an unhandled rejection.
+    try {
+      await saveDeal.mutateAsync({ doc });
+      return true;
+    } catch (error) {
+      setFailure(error);
+      return false;
+    }
   }
 
   // The handlers below fire from timers and from a window listener, both of
@@ -545,11 +696,102 @@ function BreakdownPage() {
 
   const showing = (key: MetaKey) => visibleMeta.includes(key);
 
+  function updatePackage(index: number, patch: Partial<PackageFields>) {
+    setPackages((current) => current.map((pkg, i) => (i === index ? { ...pkg, ...patch } : pkg)));
+  }
+
+  function addPackage() {
+    setPackages((current) => [
+      ...current,
+      { key: nextKey(), title: "", description: "", override: null },
+    ]);
+  }
+
+  /**
+   * Drop a package. The cost lines that pointed at it keep their own text and
+   * fall back out of any package, which is what the engine does with a member
+   * whose package no longer exists - so the money on screen does not move under
+   * a rename either.
+   */
+  function removePackage(index: number) {
+    const gone = packages[index]?.title.trim();
+    setPackages((current) => current.filter((_, i) => i !== index));
+    if (gone) {
+      setLines((current) =>
+        current.map((line) => (line.package === gone ? { ...line, package: "" } : line)),
+      );
+    }
+  }
+
+  // -- publishing -----------------------------------------------------------
+  //
+  // Every version of this deal, newest first. Publishing appends the next
+  // integer to that list: there is no branch, no variant and no way to edit a
+  // version that a client may already have opened.
+
+  const versions = useMethod<QuoteVersion[]>("auraos.api.deal_quotes", { deal: dealCode });
+
+  const history = versions.data ?? [];
+  const nextVersion = (history[0]?.version ?? 0) + 1;
+
+  const quoteKeys = [
+    resultOf("auraos.api.deal_quotes"),
+    resultOf("auraos.api.quotation_list"),
+    listsOf("Deal Quote"),
+    listsOf("Deal"),
+    // Marking sent can move the deal's own stage, which the header pill reads.
+    ["doc", "Deal", dealCode],
+  ];
+
+  const publishQuote = useMethodMutation<QuoteVersion, { deal: string; notes: string }>(
+    "auraos.api.publish_quote",
+    { invalidate: quoteKeys, onSuccess: () => setNotes("") },
+  );
+
+  const markSent = useMethodMutation<QuoteVersion, { quote: string }>(
+    "auraos.api.mark_quote_sent",
+    { invalidate: quoteKeys },
+  );
+
+  const markConfirmed = useMethodMutation<QuoteVersion, { quote: string }>(
+    "auraos.api.mark_quote_confirmed",
+    { invalidate: quoteKeys },
+  );
+
+  const opens = useMethod<OpenEvent[]>(
+    "auraos.api.quote_opens",
+    { quote: openLogFor },
+    { enabled: Boolean(openLogFor) },
+  );
+
+  async function publish(): Promise<void> {
+    // The version freezes the saved document, so what is on screen has to be
+    // the saved document first. This is the Vue panel's beforePublish, awaited.
+    if (dirty && !(await save())) return;
+    publishQuote.mutate({ deal: dealCode, notes: notes.trim() });
+  }
+
+  function copyLink(url: string) {
+    void navigator.clipboard?.writeText(url);
+    setCopied(url);
+  }
+
   // -- chrome ---------------------------------------------------------------
 
-  const packageTitles = (serverDoc?.packages ?? [])
-    .map((row) => row.title)
-    .filter((title): title is string => Boolean(title));
+  // Straight off the editable packages, so a package added below is selectable
+  // on a cost line above it without a round trip.
+  const packageTitles = [...new Set(packages.map((pkg) => pkg.title.trim()).filter(Boolean))];
+
+  // A line may still name a package that is no longer in the table. Keep it in
+  // the dropdown rather than showing the row as unassigned, which would be a
+  // silent reassignment the producer never asked for.
+  const strayPackages = [
+    ...new Set(
+      lines
+        .map((line) => line.package.trim())
+        .filter((title) => title && !packageTitles.includes(title)),
+    ),
+  ];
 
   const columnCount = 14 + visibleMeta.length;
 
@@ -565,7 +807,7 @@ function BreakdownPage() {
   const status = saveDeal.isPending
     ? "Saving..."
     : dirty && !complete
-      ? "A line is missing its description - autosave is waiting"
+      ? "A line needs a description, or a package needs a title - autosave is waiting"
       : dirty
         ? "Unsaved changes - autosaves in a moment, Ctrl+S saves now"
         : baseline
@@ -816,10 +1058,10 @@ function BreakdownPage() {
                               onChange={(event) => update(index, { package: event.target.value })}
                               aria-label={`Package, line ${index + 1}`}
                               className={`w-full ${cellSelect}`}
-                              title="Packages are created on the quote surface"
+                              title="Packages are created in the packages table below"
                             >
                               <option value="">No package</option>
-                              {packageTitles.map((title) => (
+                              {[...packageTitles, ...strayPackages].map((title) => (
                                 <option key={title} value={title}>
                                   {title}
                                 </option>
@@ -1027,6 +1269,12 @@ function BreakdownPage() {
           >
             <dl className="space-y-1.5 p-4 text-sm">
               <Row label="Subtotal" value={view?.subtotal} settling={settling} />
+              <Row
+                label={`Management fee ${terms.mfPct}%`}
+                value={view?.management_fee}
+                settling={settling}
+              />
+              <Row label={`VAT ${terms.vatPct}%`} value={view?.vat} settling={settling} />
               <Row label="Quote total" value={view?.total} settling={settling} strong />
               <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
                 <dt className="flex items-baseline gap-1.5 text-muted-foreground">
@@ -1098,6 +1346,430 @@ function BreakdownPage() {
             </Card>
           ) : null}
         </div>
+
+        {/* -- the client-facing half ------------------------------------- */}
+
+        <Card
+          title="Packages"
+          subtitle="What the client is offered. A package is priced at the sum of its lines unless it carries an override, and the variance is the engine's, not this browser's."
+          action={
+            <button
+              type="button"
+              onClick={addPackage}
+              disabled={!serverDoc}
+              className={ghostButton}
+            >
+              <Plus className="size-3" /> Add package
+            </button>
+          }
+        >
+          <QueryStates queries={[deal]} loadingRows={3}>
+            {() =>
+              packages.length === 0 ? (
+                <Empty
+                  title="No packages yet."
+                  detail="A quote is published from packages - add one and put cost lines in it."
+                  action={
+                    <button type="button" onClick={addPackage} className={ghostButton}>
+                      <Plus className="size-3" /> Add package
+                    </button>
+                  }
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px]">
+                    <thead className="border-b border-border">
+                      <tr>
+                        <Th>Package</Th>
+                        <Th>What the client reads</Th>
+                        <Th className="text-right">Member sum</Th>
+                        <Th className="text-right">Override</Th>
+                        <Th className="text-right">Quoted</Th>
+                        <Th className="text-right">Variance</Th>
+                        <Th />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {packages.map((pkg, index) => {
+                        const priced = view?.packages?.[index];
+                        return (
+                          <tr key={pkg.key} className="hover:bg-secondary/40">
+                            <Td>
+                              <input
+                                value={pkg.title}
+                                onChange={(event) =>
+                                  updatePackage(index, { title: event.target.value })
+                                }
+                                placeholder="Tên gói"
+                                aria-label={`Package title, package ${index + 1}`}
+                                title="A package needs a title before it can save"
+                                className={`w-full ${cellInput} ${
+                                  pkg.title.trim() ? "" : "border-ember bg-ember-soft"
+                                }`}
+                              />
+                            </Td>
+                            <Td>
+                              <textarea
+                                rows={2}
+                                value={pkg.description}
+                                onChange={(event) =>
+                                  updatePackage(index, { description: event.target.value })
+                                }
+                                placeholder="Client-facing wording"
+                                aria-label={`Package description, package ${index + 1}`}
+                                className={`w-full resize-y ${cellInput}`}
+                              />
+                            </Td>
+                            <Td
+                              className={`num text-right text-muted-foreground ${
+                                settling ? "opacity-50" : ""
+                              }`}
+                            >
+                              {priced ? <Money value={priced.default_price} /> : "-"}
+                            </Td>
+                            <Td>
+                              <input
+                                inputMode="numeric"
+                                value={pkg.override === null ? "" : vnd(pkg.override)}
+                                onChange={(event) => {
+                                  const typed = event.target.value;
+                                  // Blank is "no override" and quotes the member
+                                  // sum; a typed 0 is a real price and quotes the
+                                  // package free of charge.
+                                  updatePackage(index, {
+                                    override: typed.trim() ? parseVnd(typed) : null,
+                                  });
+                                }}
+                                placeholder="Auto"
+                                aria-label={`Price override, package ${index + 1}`}
+                                title="Leave blank to quote the member sum. Type 0 to quote it free of charge."
+                                className={`w-full font-medium ${cellNum}`}
+                              />
+                            </Td>
+                            <Td className={`text-right ${settling ? "opacity-50" : ""}`}>
+                              {priced ? (
+                                <Money value={priced.price} className="font-semibold" />
+                              ) : (
+                                <span className="num text-muted-foreground">-</span>
+                              )}
+                            </Td>
+                            <Td className={`text-right ${settling ? "opacity-50" : ""}`}>
+                              {!priced ? (
+                                <span className="num text-muted-foreground">-</span>
+                              ) : priced.overridden ? (
+                                <Money
+                                  value={priced.variance}
+                                  sign
+                                  className={
+                                    priced.variance < 0
+                                      ? "text-ember"
+                                      : priced.variance > 0
+                                        ? "text-positive"
+                                        : "text-muted-foreground"
+                                  }
+                                />
+                              ) : (
+                                // No override, so there is nothing to vary from.
+                                <span className="num text-muted-foreground">-</span>
+                              )}
+                            </Td>
+                            <Td className="text-right">
+                              <button
+                                type="button"
+                                className={rowIcon}
+                                title="Remove package"
+                                aria-label={`Remove package ${index + 1}`}
+                                onClick={() => removePackage(index)}
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                            </Td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            }
+          </QueryStates>
+          <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+            Blank quotes the member sum. A typed <span className="num">0</span> quotes the package
+            free of charge - the two are different offers and the record keeps them apart.
+          </div>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card
+            title="Client terms"
+            subtitle="The rates the engine applies above, and how much of the build a published version puts in front of the client."
+          >
+            <div className="grid gap-4 p-4 sm:grid-cols-2">
+              <label className="block text-xs text-muted-foreground">
+                Management fee %
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={terms.mfPct}
+                  disabled={!serverDoc}
+                  onChange={(event) =>
+                    setTerms((current) => ({
+                      ...current,
+                      mfPct: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className={`num mt-1 block w-24 ${cellInput} text-right`}
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground">
+                VAT %
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={terms.vatPct}
+                  disabled={!serverDoc}
+                  onChange={(event) =>
+                    setTerms((current) => ({
+                      ...current,
+                      vatPct: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className={`num mt-1 block w-24 ${cellInput} text-right`}
+                />
+              </label>
+            </div>
+
+            <fieldset className="border-t border-border p-4">
+              <legend className="label-caps px-0">Detail level</legend>
+              <div className="mt-2 space-y-2">
+                {DETAIL_LEVELS.map((level) => (
+                  <label
+                    key={level.value}
+                    className={`flex cursor-pointer gap-2.5 rounded-lg border p-2.5 transition-colors ${
+                      terms.detailLevel === level.value
+                        ? "border-border-strong bg-secondary"
+                        : "border-border hover:bg-secondary/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="quote-detail-level"
+                      value={level.value}
+                      checked={terms.detailLevel === level.value}
+                      disabled={!serverDoc}
+                      onChange={() =>
+                        setTerms((current) => ({ ...current, detailLevel: level.value }))
+                      }
+                      className="mt-0.5"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">{level.label}</span>
+                      <span className="block text-xs text-muted-foreground">{level.detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </Card>
+
+          <Card
+            title="Publish a version"
+            subtitle="Publishing freezes the packages, the rates and the detail level into the next version at its own link. A published version never changes - send a new one instead."
+          >
+            <div className="p-4">
+              <label className="block text-xs text-muted-foreground">
+                Note for the client
+                <textarea
+                  rows={3}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Hiệu lực báo giá, điều khoản thanh toán..."
+                  className={`mt-1 w-full resize-y ${cellInput}`}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => void publish()}
+                disabled={publishQuote.isPending || saveDeal.isPending || !serverDoc || !complete}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-ember px-3 py-2 text-sm font-medium text-ember-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                <Send className="size-3.5" strokeWidth={1.75} />
+                {publishQuote.isPending || saveDeal.isPending
+                  ? "Publishing..."
+                  : `Publish version ${nextVersion}`}
+              </button>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                {dirty
+                  ? "Unsaved edits are saved first, so the version freezes what is on screen."
+                  : "Versions are numbered in sequence and publishing cannot be undone."}
+              </p>
+
+              {publishQuote.isError ? (
+                <ErrorState error={publishQuote.error} className="py-6" />
+              ) : null}
+              {markSent.isError ? <ErrorState error={markSent.error} className="py-6" /> : null}
+              {markConfirmed.isError ? (
+                <ErrorState error={markConfirmed.error} className="py-6" />
+              ) : null}
+            </div>
+          </Card>
+        </div>
+
+        <Card
+          title="Published versions"
+          subtitle="Newest first. Opens and PDF downloads are counted apart by the server, so the page's own download button is not scored twice."
+        >
+          <QueryState
+            query={versions}
+            loadingRows={3}
+            empty={{
+              title: "No version published yet.",
+              detail: "Publish one and the link to send the client appears here.",
+            }}
+          >
+            {(rows) => (
+              <ul className="divide-y divide-border">
+                {rows.map((version) => {
+                  const activity = versionActivity(version);
+                  const url = version.url;
+                  const pdf = version.pdf_url;
+                  const expanded = openLogFor === version.name;
+                  return (
+                    <li key={version.name} className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          to="/quotations/$quoteRef"
+                          params={{ quoteRef: version.name }}
+                          className="num text-sm font-semibold hover:text-ember"
+                        >
+                          v{version.version}
+                        </Link>
+                        <Pill tone={statusTone[version.status] ?? "neutral"}>{version.status}</Pill>
+                        <span className="num text-xs text-muted-foreground">
+                          published {formatDate(version.published_on)}
+                        </span>
+                        {version.sent_on ? (
+                          <span className="num text-xs text-muted-foreground">
+                            sent {formatDate(version.sent_on)}
+                          </span>
+                        ) : null}
+                        {version.confirmed_on ? (
+                          <span className="num text-xs text-muted-foreground">
+                            signed {formatDate(version.confirmed_on)}
+                          </span>
+                        ) : null}
+                        <span className="ml-auto">
+                          <Money value={version.total} className="font-semibold" />
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {url ? (
+                          <>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={chip}
+                            >
+                              Public link <ExternalLink className="size-3" strokeWidth={1.75} />
+                            </a>
+                            <button type="button" className={chip} onClick={() => copyLink(url)}>
+                              {copied === url ? "Copied" : "Copy"}
+                            </button>
+                          </>
+                        ) : null}
+                        {pdf ? (
+                          <a href={pdf} target="_blank" rel="noopener noreferrer" className={chip}>
+                            PDF <FileDown className="size-3" strokeWidth={1.75} />
+                          </a>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={chip}
+                          aria-expanded={expanded}
+                          onClick={() => setOpenLogFor(expanded ? null : version.name)}
+                        >
+                          <MousePointerClick className="size-3" strokeWidth={1.75} />
+                          {activityLabel(activity)}
+                        </button>
+
+                        <span className="ml-auto flex flex-wrap gap-1.5">
+                          {version.status === "Sent" ? null : (
+                            <button
+                              type="button"
+                              className={chip}
+                              disabled={markSent.isPending}
+                              onClick={() => markSent.mutate({ quote: version.name })}
+                            >
+                              {version.status === "Confirmed" ? "Undo confirm" : "Mark sent"}
+                            </button>
+                          )}
+                          {version.status === "Confirmed" ? null : (
+                            <button
+                              type="button"
+                              className={chip}
+                              disabled={markConfirmed.isPending}
+                              onClick={() => markConfirmed.mutate({ quote: version.name })}
+                            >
+                              Mark confirmed
+                            </button>
+                          )}
+                        </span>
+                      </div>
+
+                      {expanded ? (
+                        <div className="mt-2 border-t border-border pt-2">
+                          <QueryState
+                            query={opens}
+                            loadingRows={2}
+                            empty={{
+                              title: "Not opened yet.",
+                              detail:
+                                "Nothing has reached the client's screen from this version's link.",
+                              icon: <MousePointerClick className="size-6" strokeWidth={1.5} />,
+                            }}
+                          >
+                            {(events) => (
+                              <ul className="space-y-1 text-xs">
+                                {events.map((event, i) => (
+                                  <li
+                                    key={`${event.opened_on}-${i}`}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <span className="num text-muted-foreground">
+                                      {formatDateTime(event.opened_on)}
+                                    </span>
+                                    <Pill tone={event.via === "PDF" ? "ink" : "neutral"}>
+                                      {event.via === "PDF" ? "PDF download" : "Page open"}
+                                    </Pill>
+                                    <span className="num text-muted-foreground/70">
+                                      {event.ip_address || ""}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </QueryState>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </QueryState>
+          {versions.data?.length ? (
+            <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+              {countLabel(versions.data.length, "version")} published. The next one is{" "}
+              <span className="num">v{nextVersion}</span>.
+            </div>
+          ) : null}
+        </Card>
       </div>
     </AppShell>
   );

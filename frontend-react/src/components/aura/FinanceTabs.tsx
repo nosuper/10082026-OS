@@ -4,6 +4,7 @@ const tabs = [
   { to: "/finance", label: "Dashboard", exact: true },
   { to: "/finance/income", label: "Income" },
   { to: "/finance/expenses", label: "Expenses" },
+  { to: "/finance/receivables", label: "Receivables" },
   { to: "/finance/reports", label: "Reports" },
   { to: "/finance/forecast", label: "Forecast" },
 ] as const;
