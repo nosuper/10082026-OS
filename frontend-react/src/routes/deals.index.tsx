@@ -16,7 +16,8 @@ import { AppShell } from "@/components/aura/AppShell";
 import { RichText } from "@/components/aura/RichText";
 import { ViewToggle } from "@/components/aura/Kanban";
 import { useSession } from "@/components/aura/SessionProvider";
-import { Card, Money, Pill, Td, Th } from "@/components/aura/primitives";
+import { Card, Modal, Money, Pill, Td, Th, inputClass } from "@/components/aura/primitives";
+import { useDealStageChange } from "@/components/aura/DealStage";
 import { ErrorState, QueryStates } from "@/components/aura/states";
 import { countLabel, daysSince, formatDate, formatDateTime, parseVnd, vnd } from "@/lib/format";
 import { listsOf, resultOf, useList, useMethod, useMethodMutation } from "@/lib/queries";
@@ -265,70 +266,10 @@ function MoneyInput({
   );
 }
 
-const inputClass =
-  "w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong";
-
 const editClass =
   "w-full rounded-lg border border-ember bg-background px-2 py-1 text-sm outline-none";
 
 /** The dialog chrome the three deal dialogs share. Same shape as FormDialog. */
-function Modal({
-  title,
-  subtitle,
-  onClose,
-  children,
-  footer,
-}: {
-  title: ReactNode;
-  subtitle?: ReactNode;
-  onClose: () => void;
-  children: ReactNode;
-  footer: ReactNode;
-}) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="fixed inset-0 bg-primary/25 backdrop-blur-[1px]"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative z-10 w-full max-w-xl rounded-xl border border-border bg-card shadow-lg"
-      >
-        <header className="flex items-start gap-3 border-b border-border px-5 py-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="font-display text-base font-semibold tracking-tight">{title}</h2>
-            {subtitle ? (
-              <div className="mt-0.5 text-xs text-muted-foreground">{subtitle}</div>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
-        {children}
-        <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-          {footer}
-        </footer>
-      </div>
-    </div>
-  );
-}
-
 // -- the screen --------------------------------------------------------------
 
 function DealsPage() {
@@ -450,8 +391,6 @@ function DealsPage() {
   // A card lands where it was dropped before the server answers; the refetch is
   // the correction if the server disagrees.
   const [moved, setMoved] = useState<Record<string, string>>({});
-  const [pendingLost, setPendingLost] = useState<DealRow | null>(null);
-  const [pendingJob, setPendingJob] = useState<{ name: string; title: string } | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState("");
 
@@ -463,33 +402,23 @@ function DealsPage() {
     resultOf("auraos.api.deal_quote_links"),
   ];
 
-  function offerJob(name: string, title: string | null) {
-    if (jobFor(name)) return;
-    setPendingJob({ name, title: title ?? name });
-  }
-
-  const setStage = useMethodMutation<
-    unknown,
-    { doctype: string; name: string; fieldname: Record<string, unknown> }
-  >("frappe.client.set_value", {
+  // The one way a stage moves, shared with the deal detail header (#117).
+  // Keeping a second copy here would be a second set of rules about what a
+  // stage change means, and the payment milestone triggers read stage.
+  const stageChange = useDealStageChange({
     invalidate: dealWrites,
-    onSuccess: (_result, args) => {
+    hasJob: (deal) => Boolean(jobFor(deal)),
+    onWrite: (deal, stage) => {
       setFailure(null);
-      const stage = args.fieldname["stage"];
-      // Winning a deal is where the job is created; ask right here rather than
-      // leaving it to be remembered later.
-      if (stage === "Won") {
-        const row = (deals.data ?? []).find((deal) => deal.name === args.name);
-        offerJob(args.name, row?.title ?? args.name);
-      }
+      setMoved((previous) => ({ ...previous, [deal]: stage }));
     },
   });
 
   useEffect(() => {
-    if (!setStage.isError) return;
-    setFailure(setStage.error);
+    if (!stageChange.error) return;
+    setFailure(stageChange.error);
     setMoved({});
-  }, [setStage.isError, setStage.error]);
+  }, [stageChange.error]);
 
   // Drop an optimistic stage as soon as the server's own answer agrees.
   useEffect(() => {
@@ -508,38 +437,13 @@ function DealsPage() {
     });
   }, [deals.data]);
 
-  function moveTo(deal: DealRow, stage: string) {
-    if (deal.stage === stage) return;
-    if (stage === "Lost") {
-      // The server refuses Lost without a reason; collect it first.
-      setPendingLost(deal);
-      return;
-    }
-    setFailure(null);
-    setMoved((previous) => ({ ...previous, [deal.name]: stage }));
-    setStage.mutate({ doctype: "Deal", name: deal.name, fieldname: { stage } });
-  }
-
-  function markLost(reason: string, note: string) {
-    const deal = pendingLost;
-    setPendingLost(null);
-    if (!deal) return;
-    setFailure(null);
-    setMoved((previous) => ({ ...previous, [deal.name]: "Lost" }));
-    setStage.mutate({
-      doctype: "Deal",
-      name: deal.name,
-      fieldname: { stage: "Lost", lost_reason: reason, lost_note: note },
-    });
-  }
-
   const updateRow = useMethodMutation<TableRow, { deal: string; values: Record<string, unknown> }>(
     "auraos.api.update_deal_table_row",
     {
       invalidate: dealWrites,
       onSuccess: (row) => {
         setFailure(null);
-        if (row.stage === "Won") offerJob(row.name, row.title);
+        if (row.stage === "Won") stageChange.offerJob(row.name, row.title);
       },
     },
   );
@@ -556,7 +460,7 @@ function DealsPage() {
       onSuccess: (doc) => {
         setFailure(null);
         setNewOpen(false);
-        if (doc.stage === "Won") offerJob(doc.name, doc.title);
+        if (doc.stage === "Won") stageChange.offerJob(doc.name, doc.title);
       },
     },
   );
@@ -572,32 +476,15 @@ function DealsPage() {
     },
   );
 
-  const createJob = useMethodMutation<JobResult, { deal: string }>(
-    "auraos.api.create_job_from_deal",
-    {
-      invalidate: [...dealWrites, listsOf("Job")],
-      onSuccess: (job) => {
-        setPendingJob(null);
-        void navigate({ to: "/jobs/$jobId", params: { jobId: job.name } });
-      },
-    },
-  );
-
   useEffect(() => {
-    for (const write of [updateRow, createRow, insertDeal, deleteDeal, createJob]) {
+    for (const write of [updateRow, createRow, insertDeal, deleteDeal]) {
       if (write.isError) {
         setFailure(write.error);
         return;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    updateRow.isError,
-    createRow.isError,
-    insertDeal.isError,
-    deleteDeal.isError,
-    createJob.isError,
-  ]);
+  }, [updateRow.isError, createRow.isError, insertDeal.isError, deleteDeal.isError]);
 
   // -- what the screen shows ------------------------------------------------
 
@@ -765,7 +652,7 @@ function DealsPage() {
                 <div className="p-3">
                   <Board
                     byStage={byStage}
-                    onMove={moveTo}
+                    onMove={(deal, stage) => stageChange.request(deal, stage)}
                     companyName={companyName}
                     ownerLabel={ownerLabel}
                     stageAge={stageAge}
@@ -773,7 +660,7 @@ function DealsPage() {
                     silenceDays={silence.data?.silence_days ?? 0}
                     quoteLinks={quoteLinks.data ?? {}}
                     jobFor={jobFor}
-                    onWin={(deal) => offerJob(deal.name, deal.title)}
+                    onWin={(deal) => stageChange.offerJob(deal.name, deal.title)}
                   />
                 </div>
               ) : (
@@ -797,7 +684,7 @@ function DealsPage() {
                     setFailure(null);
                     updateRow.mutate({ deal, values: { [key]: value } });
                   }}
-                  onLose={(deal) => setPendingLost(deal)}
+                  onLose={(deal) => stageChange.requestLost(deal)}
                   onCreate={(values) => {
                     setFailure(null);
                     createRow.mutate({ values });
@@ -838,44 +725,7 @@ function DealsPage() {
         />
       ) : null}
 
-      {pendingLost ? (
-        <LostReasonDialog
-          title={pendingLost.title || pendingLost.name}
-          onClose={() => setPendingLost(null)}
-          onConfirm={markLost}
-        />
-      ) : null}
-
-      {pendingJob ? (
-        <Modal
-          title={`"${pendingJob.title}" is won`}
-          onClose={() => setPendingJob(null)}
-          footer={
-            <>
-              <button
-                type="button"
-                onClick={() => setPendingJob(null)}
-                className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
-              >
-                Not yet
-              </button>
-              <button
-                type="button"
-                disabled={createJob.isPending}
-                onClick={() => createJob.mutate({ deal: pendingJob.name })}
-                className="rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90 disabled:opacity-40"
-              >
-                {createJob.isPending ? "Creating..." : "Create job"}
-              </button>
-            </>
-          }
-        >
-          <p className="px-5 py-5 text-sm text-muted-foreground">
-            Create the job now? It carries the breakdown, packages and links across, so nothing is
-            re-entered.
-          </p>
-        </Modal>
-      ) : null}
+      {stageChange.dialogs}
     </AppShell>
   );
 }
@@ -1822,76 +1672,6 @@ function NewDealDialog({
               className="min-h-[5rem]"
             />
           </div>
-        </label>
-      </div>
-    </Modal>
-  );
-}
-
-function LostReasonDialog({
-  title,
-  onClose,
-  onConfirm,
-}: {
-  title: string;
-  onClose: () => void;
-  onConfirm: (reason: string, note: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [note, setNote] = useState("");
-
-  return (
-    <Modal
-      title={`Mark "${title}" as Lost`}
-      subtitle="A reason is required. The note is for anything the list cannot say."
-      onClose={onClose}
-      footer={
-        <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={!reason}
-            onClick={() => onConfirm(reason, note)}
-            className="rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90 disabled:opacity-40"
-          >
-            Mark Lost
-          </button>
-        </>
-      }
-    >
-      <div className="space-y-4 px-5 py-5">
-        <label className="block">
-          <span className="label-caps">
-            Why was it lost?<span className="text-ember"> *</span>
-          </span>
-          <select
-            autoFocus
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className={`mt-1.5 ${inputClass}`}
-          >
-            <option value="">Pick a reason...</option>
-            {LOST_REASONS.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="label-caps">Note (optional)</span>
-          <textarea
-            rows={3}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            className={`mt-1.5 ${inputClass}`}
-          />
         </label>
       </div>
     </Modal>

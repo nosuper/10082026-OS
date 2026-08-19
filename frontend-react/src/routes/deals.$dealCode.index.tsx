@@ -36,6 +36,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/aura/AppShell";
 import { RichText } from "@/components/aura/RichText";
 import { Card, Money, Pill } from "@/components/aura/primitives";
+import { STAGE_TONE, StageSelect, useDealStageChange } from "@/components/aura/DealStage";
 import { Empty, ErrorState, Loading } from "@/components/aura/states";
 import { FrappeError, uploadFile } from "@/lib/frappe";
 import { countLabel, formatDateTime, parseVnd, vnd } from "@/lib/format";
@@ -81,14 +82,6 @@ const TIER_HINTS: Record<string, string> = {
   "Tier 1": "cơm áo",
   "Tier 2": "trung bình",
   "Tier 3": "đúng định vị",
-};
-
-const STAGE_TONE: Record<string, string> = {
-  Breakdown: "ink",
-  "Quote Sent": "outline",
-  Negotiation: "ember",
-  Won: "positive",
-  Lost: "ember",
 };
 
 // The pause after the last keystroke before the tier chip is asked for again.
@@ -482,6 +475,25 @@ function DealPage() {
     resultOf("auraos.api.deal_stage_entries"),
   ];
 
+  // Whether this deal already has a job, so reaching Won does not offer a
+  // second one. Same source the board reads, because the prompt has to appear
+  // in the same cases from either screen.
+  const jobs = useMethod<Record<string, string>>("auraos.api.jobs_by_deal");
+
+  // The one way a stage moves (#117). The write is a set_value on Deal.stage,
+  // which loads and saves the document - so before_save runs and
+  // append_stage_change writes the history row. Setting the field directly
+  // would move the stage and leave the deal's history with a hole in it.
+  const stageChange = useDealStageChange({
+    invalidate: [...dealWrites, resultOf("auraos.api.jobs_by_deal")],
+    hasJob: (deal) => Boolean(jobs.data?.[deal]),
+    onWrite: () => setFailure(null),
+  });
+
+  useEffect(() => {
+    if (stageChange.error) setFailure(stageChange.error);
+  }, [stageChange.error]);
+
   const sent = useRef("");
 
   const saveDeal = useMethodMutation<DealDoc, { doc: Record<string, unknown> }>(
@@ -649,7 +661,13 @@ function DealPage() {
           </Link>
           <span className="num">{dealCode}</span>
           {companyLabel ? <span>· {companyLabel}</span> : null}
-          {doc ? <Pill tone={STAGE_TONE[doc.stage] ?? "neutral"}>{doc.stage}</Pill> : null}
+          {doc ? (
+            <StageSelect
+              value={doc.stage}
+              disabled={stageChange.pending}
+              onChange={(stage) => stageChange.request(doc, stage)}
+            />
+          ) : null}
           {tier ? <Pill tone={tier === "Tier 3" ? "ink" : "neutral"}>{tier}</Pill> : null}
         </span>
       }
@@ -766,7 +784,10 @@ function DealPage() {
                   </select>
                 </Field>
 
-                <Readout label="Stage" hint="Stages move on the board, where Lost can ask why.">
+                <Readout
+                  label="Stage"
+                  hint="Change it in the header. Lost asks why; Won offers the job."
+                >
                   <div className="flex items-center gap-2 sm:py-1.5">
                     <Pill tone={STAGE_TONE[doc?.stage ?? ""] ?? "neutral"}>{doc?.stage}</Pill>
                     <Link to="/deals" className="text-xs text-muted-foreground hover:text-ember">
@@ -1219,6 +1240,7 @@ function DealPage() {
           ) : null}
         </div>
       )}
+      {stageChange.dialogs}
     </AppShell>
   );
 }

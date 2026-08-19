@@ -1,0 +1,296 @@
+// Moving a deal to another stage, in one place.
+//
+// The move itself is a `frappe.client.set_value` on Deal.stage, which is not an
+// arbitrary choice: set_value loads the document and saves it, so Deal's
+// before_save runs and append_stage_change writes the stage_history row. A
+// direct db write would change the stage and leave no history, and the payment
+// milestone triggers read stage - so a second way into that field is a second
+// set of rules about what a stage change means.
+//
+// Two stages carry a question with them. Lost needs a reason before the server
+// will accept it, and Won is where a job gets created. Both are part of moving
+// a deal, not of any one screen, which is why they live here rather than on the
+// board that happened to implement them first.
+
+import { useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+
+import { Modal, inputClass, pillToneClass } from "@/components/aura/primitives";
+import { cn } from "@/lib/utils";
+import { listsOf, resultOf, useMethodMutation } from "@/lib/queries";
+
+export const DEAL_STAGES = [
+  "Brief Received",
+  "De-brief",
+  "Breakdown",
+  "Quote Sent",
+  "Negotiation",
+  "Won",
+  "Lost",
+] as const;
+
+export const RESOLVED_STAGES = new Set<string>(["Won", "Lost"]);
+
+// Deal.lost_reason is a Select with exactly these options.
+export const LOST_REASONS = ["Price", "Timing", "Silence", "Competitor", "Scope"];
+
+// Only tones primitives actually defines. An unknown tone falls back to
+// neutral without complaining, so an invented name here would look like a
+// styling choice rather than the mistake it is.
+export const STAGE_TONE: Record<string, string> = {
+  Breakdown: "ink",
+  "Quote Sent": "outline",
+  Negotiation: "ember",
+  Won: "positive",
+  Lost: "ember",
+};
+
+type JobResult = { name: string };
+
+export type StageChange = {
+  /** Ask for a stage. Lost and Won open their dialog instead of writing. */
+  request: (deal: { name: string; title?: string | null; stage: string }, stage: string) => void;
+  /** Ask for the Lost reason without naming a stage - the row control's shape. */
+  requestLost: (deal: { name: string; title?: string | null }) => void;
+  /**
+   * Offer the job for a deal that reached Won by some other write - a table
+   * edit, an insert. The prompt belongs to reaching Won, not to this control.
+   */
+  offerJob: (name: string, title: string | null) => void;
+  /** Render this somewhere in the screen: it is the two dialogs. */
+  dialogs: ReactNode;
+  pending: boolean;
+  error: unknown;
+};
+
+export function useDealStageChange({
+  invalidate,
+  hasJob,
+  onWrite,
+}: {
+  invalidate: (readonly unknown[])[];
+  /** True when this deal already has a job, so Won does not offer a second. */
+  hasJob?: (deal: string) => boolean;
+  /** Fires the moment the write is sent, for optimistic screens. */
+  onWrite?: (deal: string, stage: string) => void;
+}): StageChange {
+  const navigate = useNavigate();
+  const [pendingLost, setPendingLost] = useState<{ name: string; title: string } | null>(null);
+  const [pendingJob, setPendingJob] = useState<{ name: string; title: string } | null>(null);
+
+  const setStage = useMethodMutation<
+    unknown,
+    { doctype: string; name: string; fieldname: Record<string, unknown> }
+  >("frappe.client.set_value", {
+    invalidate,
+    onSuccess: (_result, args) => {
+      if (args.fieldname["stage"] !== "Won") return;
+      if (hasJob?.(args.name)) return;
+      // Winning a deal is where the job is created; ask right here rather than
+      // leaving it to be remembered later.
+      setPendingJob({ name: args.name, title: String(args.fieldname["_title"] ?? args.name) });
+    },
+  });
+
+  const createJob = useMethodMutation<JobResult, { deal: string }>(
+    "auraos.api.create_job_from_deal",
+    {
+      invalidate: [...invalidate, listsOf("Job")],
+      onSuccess: (job) => {
+        setPendingJob(null);
+        void navigate({ to: "/jobs/$jobId", params: { jobId: job.name } });
+      },
+    },
+  );
+
+  function write(name: string, title: string, fieldname: Record<string, unknown>) {
+    onWrite?.(name, String(fieldname["stage"]));
+    setStage.mutate({ doctype: "Deal", name, fieldname: { ...fieldname, _title: title } });
+  }
+
+  function request(deal: { name: string; title?: string | null; stage: string }, stage: string) {
+    if (deal.stage === stage) return;
+    const title = deal.title || deal.name;
+    if (stage === "Lost") {
+      // The server refuses Lost without a reason; collect it first.
+      setPendingLost({ name: deal.name, title });
+      return;
+    }
+    write(deal.name, title, { stage });
+  }
+
+  const dialogs = (
+    <>
+      {pendingLost ? (
+        <LostReasonDialog
+          title={pendingLost.title}
+          onClose={() => setPendingLost(null)}
+          onConfirm={(reason, note) => {
+            const deal = pendingLost;
+            setPendingLost(null);
+            if (!deal) return;
+            write(deal.name, deal.title, {
+              stage: "Lost",
+              lost_reason: reason,
+              lost_note: note,
+            });
+          }}
+        />
+      ) : null}
+
+      {pendingJob ? (
+        <Modal
+          title={`"${pendingJob.title}" is won`}
+          onClose={() => setPendingJob(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setPendingJob(null)}
+                className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Not yet
+              </button>
+              <button
+                type="button"
+                disabled={createJob.isPending}
+                onClick={() => createJob.mutate({ deal: pendingJob.name })}
+                className="rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90 disabled:opacity-40"
+              >
+                {createJob.isPending ? "Creating..." : "Create job"}
+              </button>
+            </>
+          }
+        >
+          <p className="px-5 py-5 text-sm text-muted-foreground">
+            Create the job now? It carries the breakdown, packages and links across, so nothing is
+            re-entered.
+          </p>
+        </Modal>
+      ) : null}
+    </>
+  );
+
+  return {
+    request,
+    requestLost: (deal) => setPendingLost({ name: deal.name, title: deal.title || deal.name }),
+    offerJob: (name, title) => {
+      if (hasJob?.(name)) return;
+      setPendingJob({ name, title: title ?? name });
+    },
+    dialogs,
+    pending: setStage.isPending || createJob.isPending,
+    error: setStage.isError ? setStage.error : createJob.isError ? createJob.error : null,
+  };
+}
+
+function LostReasonDialog({
+  title,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  onClose: () => void;
+  onConfirm: (reason: string, note: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+
+  return (
+    <Modal
+      title={`Mark "${title}" as Lost`}
+      subtitle="A reason is required. The note is for anything the list cannot say."
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!reason}
+            onClick={() => onConfirm(reason, note)}
+            className="rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90 disabled:opacity-40"
+          >
+            Mark Lost
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4 px-5 py-5">
+        <label className="block">
+          <span className="label-caps">
+            Why was it lost?<span className="text-ember"> *</span>
+          </span>
+          <select
+            autoFocus
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            className={`mt-1.5 ${inputClass}`}
+          >
+            <option value="">Pick a reason...</option>
+            {LOST_REASONS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="label-caps">Note (optional)</span>
+          <textarea
+            rows={3}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            className={`mt-1.5 ${inputClass}`}
+          />
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * The stage control itself: a select that looks like the Pill it replaces.
+ * Shared so the header on the detail screen and any future caller cannot drift
+ * into offering different stages.
+ */
+export function StageSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (stage: string) => void;
+  disabled?: boolean | undefined;
+}) {
+  return (
+    <select
+      aria-label="Stage"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      className={cn(
+        "inline-flex cursor-pointer appearance-none items-center rounded-md border py-0.5 pr-6 pl-2",
+        "text-[11px] font-medium whitespace-nowrap",
+        // The caret, drawn rather than imported: a background image keeps the
+        // control one element, so it stays the same size as the Pill it used
+        // to be and the header does not reflow when the stage changes.
+        "bg-[length:0.6rem] bg-[position:right_0.4rem_center] bg-no-repeat",
+        "bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 12 12%22><path d=%22M2 4.5L6 8.5L10 4.5%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%221.5%22/></svg>')]",
+        "disabled:cursor-not-allowed disabled:opacity-60",
+        pillToneClass(STAGE_TONE[value]),
+      )}
+    >
+      {DEAL_STAGES.map((stage) => (
+        <option key={stage} value={stage}>
+          {stage}
+        </option>
+      ))}
+    </select>
+  );
+}
