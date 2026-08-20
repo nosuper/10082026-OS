@@ -38,14 +38,19 @@ then touches its spending. Until #125 the rule was reachable only from the
 Desk, which is presumably why. It is reachable from the app now, so the three
 cases below are the first coverage that rule has ever had.
 
-**On who may correct.** There is no per-job boundary in this app to
-assert: `Job` grants read and write to the Founder, Producer and System
-Manager roles outright, and there is no `permission_query_conditions`
-hook, no `has_permission` hook and no User Permission seeding anywhere
-in `auraos`. So a producer may correct spending on any job, exactly as
-they may log it on any job. The boundary that exists is the one asserted
-below - somebody with no role at all is refused - and a test claiming
-otherwise would be describing a product we do not have.
+**On who may correct.** There is no per-job boundary in this app: `Job`
+grants read and write to the Founder, Producer and System Manager roles
+outright, and there is no `permission_query_conditions` hook, no
+`has_permission` hook and no User Permission seeding anywhere in
+`auraos`. So a producer may correct spending on any job, exactly as they
+may log it on any job. This lane found that while going to assert the
+opposite, and filed #143 rather than writing a test describing a product
+we do not have; the founder ruled that it is the model, and **ADR-0003**
+now records it along with the assignee model it becomes one day. The
+positive is asserted in `TestWhoMayWriteAJobsMoney` (test_job_money.py),
+which is where the correction endpoints below are pinned as open. The
+boundary asserted here is the other one - somebody with no role at all
+is refused.
 
 Runs via: bench --site <site> run-tests --app auraos
 """

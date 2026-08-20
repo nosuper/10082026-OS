@@ -67,12 +67,19 @@ def fell_due(job_name, milestone, days_ago):
     )
 
 
+# A second producer, with no connection to the job under test. Only
+# ADR-0003's assertion needs one - see test_job_money.py, where the
+# same decision is pinned on the expense endpoints.
+OTHER_PRODUCER = "producer2@test.auraos.local"
+
+
 class MilestoneTestCase(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         make_test_user(FOUNDER, "Founder")
         make_test_user(PRODUCER, "Producer")
+        make_test_user(OTHER_PRODUCER, "Producer")
         make_test_user(OUTSIDER)
 
     def setUp(self):
@@ -352,6 +359,21 @@ class TestCollectionFlow(MilestoneTestCase):
         asked = set_milestone_status(self.job.name, self.milestone, "Requested")
         paid = set_milestone_status(self.job.name, self.milestone, "Paid")
         self.assertEqual(paid["requested_on"], asked["requested_on"])
+
+    def test_any_producer_may_walk_any_jobs_money_along(self):
+        """ADR-0003: collection status is inside the decided width.
+
+        `set_milestone_status` writes a child table of Job, so it rides
+        on Job write and has no per-job boundary either. The day the
+        assignee model lands it has to cover this endpoint with the
+        three in test_job_money.py, not just those - which is what this
+        test is here to make impossible to forget.
+        """
+        frappe.set_user(OTHER_PRODUCER)
+
+        row = set_milestone_status(self.job.name, self.milestone, "Requested")
+
+        self.assertEqual(row["status"], "Requested")
 
     def test_a_status_set_by_accident_can_be_walked_back(self):
         """The T6 lesson: no one-way doors."""
