@@ -4,20 +4,6 @@ x-e2e-producer: &e2e-producer
 
 services:
   frappe:
-    # The prebaked bench (docker/Dockerfile.bench). Software only: the site,
-    # its database and the auraos clone are still created per run and thrown
-    # away with the stack, which is the attributability every result this week
-    # rests on. What the image saves is `bench init`, which is the same bytes
-    # every boot and was most of the ten minutes.
-    #
-    # e2e only. The dev and prod stacks keep frappe/bench:latest until the
-    # compose restructure lands: changing the base file would change what dev
-    # becomes on its next recreation, and that is not a thing to do to the
-    # stack the founder is walking through.
-    image: auraos/bench-prebaked:v15
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.bench
     environment: *e2e-producer
 
   # The runner for the React app. There was a second one alongside it for the
