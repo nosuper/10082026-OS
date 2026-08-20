@@ -22,10 +22,12 @@ import { expect, test } from "@playwright/test";
 
 import { producerState } from "./auth-state.js";
 import { callAs } from "./call.js";
+import { saving } from "./writes.js";
 
 const producerTest = test.extend({ storageState: producerState });
 
 const LIBRARY = "auraos.api.library_documents";
+const SAVE_DOCUMENT = "auraos.api.save_library_document";
 const DETAIL = "auraos.api.library_document_detail";
 const TEMPLATES = "auraos.api.paperwork_library";
 const PAPERS = "auraos.api.generated_papers";
@@ -282,10 +284,39 @@ test("a document written in the app is there after a reload", async ({ page }) =
     await editor.getByLabel("Title").fill(title);
     await editor.getByLabel("Category").fill("SOP");
     await editor.getByRole("textbox", { name: "Document body" }).fill(body);
-    await editor.getByRole("button", { name: "Save", exact: true }).click();
+
+    // Waited for, not raced (#148). Run 28 caught this assertion timing out
+    // with the button still reading "Saving..." and no error rendered - the
+    // POST was genuinely in flight when Playwright gave up, on a minutes-old
+    // site where the measured cold path for a *lighter* write is 1780ms. The
+    // save button is not a synchronisation point: the editor calls mutate()
+    // and returns, and the dialog it opens next is driven by the response.
+    try {
+      await saving(page, SAVE_DOCUMENT, () =>
+        editor.getByRole("button", { name: "Save", exact: true }).click(),
+      );
+    } catch (waited) {
+      // **The check that tells slow from never**, and it only costs anything
+      // on the run that fails. `saving()` cannot distinguish "no response yet"
+      // from "no response ever", so ask the server directly: if the document
+      // is on file, the save landed and something raced it; if it is absent,
+      // the write did not happen and this is a product bug wearing a timeout's
+      // clothes. Without this the next occurrence starts where this one did.
+      const index = await callAs(page, LIBRARY);
+      const landed = (index.body?.message?.documents ?? []).some((one) => one.title === title);
+      throw new Error(
+        (landed
+          ? `the save DID land - ${JSON.stringify(title)} is on file - so the wait raced a slow write rather than a missing one`
+          : `the save did NOT land - ${JSON.stringify(title)} is not on file - so this is a failed write, not a slow one`) +
+          `. Original: ${waited.message}`,
+      );
+    }
 
     // Saving opens the new document, which is the app's own confirmation that
-    // the write came back with a name rather than that a dialog closed.
+    // the write came back with a name rather than that a dialog closed. Kept
+    // after the wait rather than replaced by it: the response landing and the
+    // screen acting on it are two claims, and #137 was the second one failing
+    // while the first held.
     await expect(page.getByRole("dialog", { name: title })).toBeVisible();
     // Scoped to the dialog and taken last: Modal renders a backdrop button and
     // a header X, both labelled Close, and the footer's is the one a person
