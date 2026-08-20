@@ -1670,6 +1670,7 @@ function BreakdownPage() {
               <label className="block text-xs text-muted-foreground">
                 Assumptions
                 <textarea
+                  aria-label="Assumptions"
                   rows={4}
                   value={quoteTerms.assumptions}
                   disabled={!serverDoc}
@@ -1687,6 +1688,7 @@ function BreakdownPage() {
               <label className="block text-xs text-muted-foreground">
                 Not included
                 <textarea
+                  aria-label="Not included"
                   rows={4}
                   value={quoteTerms.exclusions}
                   disabled={!serverDoc}
@@ -1701,6 +1703,7 @@ function BreakdownPage() {
               <label className="block text-xs text-muted-foreground">
                 Revision rounds included
                 <input
+                  aria-label="Revision rounds included"
                   type="number"
                   min={0}
                   step={1}
