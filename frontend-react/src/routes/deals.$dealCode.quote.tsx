@@ -35,11 +35,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
 import { useSession } from "@/components/aura/SessionProvider";
-import { Card, Money, Pill, Td, Th } from "@/components/aura/primitives";
+import { Card, Modal, Money, Pill, Td, Th } from "@/components/aura/primitives";
 import {
   activityLabel,
   statusTone,
   versionActivity,
+  isAmendable,
   type QuoteVersion,
 } from "@/components/aura/QuoteVersions";
 import { Empty, ErrorState, QueryState, QueryStates } from "@/components/aura/states";
@@ -806,6 +807,19 @@ function BreakdownPage() {
     "auraos.api.publish_quote",
     { invalidate: quoteKeys, onSuccess: () => setNotes("") },
   );
+
+  // #35: fixing a typo on a version nobody can be holding, rather than
+  // publishing a v2 that says nothing new. The server refuses once the
+  // version has hardened - Sent, Confirmed, or simply opened - so this is an
+  // affordance over a rule rather than the rule itself.
+  const [amending, setAmending] = useState<QuoteVersion | null>(null);
+  const amendQuote = useMethodMutation<
+    QuoteVersion,
+    { quote: string; values: Record<string, unknown> }
+  >("auraos.api.amend_quote", {
+    invalidate: quoteKeys,
+    onSuccess: () => setAmending(null),
+  });
 
   const markSent = useMethodMutation<QuoteVersion, { quote: string }>(
     "auraos.api.mark_quote_sent",
@@ -1850,6 +1864,15 @@ function BreakdownPage() {
                         </button>
 
                         <span className="ml-auto flex flex-wrap gap-1.5">
+                          {isAmendable(version) ? (
+                            <button
+                              type="button"
+                              className={chip}
+                              onClick={() => setAmending(version)}
+                            >
+                              Fix wording
+                            </button>
+                          ) : null}
                           {version.status === "Sent" ? null : (
                             <button
                               type="button"
@@ -1922,6 +1945,15 @@ function BreakdownPage() {
           ) : null}
         </Card>
       </div>
+      {amending ? (
+        <AmendDialog
+          version={amending}
+          pending={amendQuote.isPending}
+          error={amendQuote.error}
+          onClose={() => setAmending(null)}
+          onSave={(values) => amendQuote.mutate({ quote: amending.name, values })}
+        />
+      ) : null}
     </AppShell>
   );
 }
@@ -1976,5 +2008,118 @@ function InkRow({
         <Money value={value} className={strong ? "font-semibold" : ""} />
       </dd>
     </div>
+  );
+}
+
+/**
+ * Correcting the wording on a version that has not gone out (#35).
+ *
+ * **Text only, and the omission is the design.** Package prices and line
+ * figures come from the deal, so editing them here would put a number on the
+ * client's page that the deal cannot reproduce - worse than the typo this
+ * exists to fix. Money still moves by publishing a new version, and the
+ * subtitle says so rather than leaving someone hunting for the field.
+ */
+function AmendDialog({
+  version,
+  pending,
+  error,
+  onClose,
+  onSave,
+}: {
+  version: QuoteVersion;
+  pending: boolean;
+  error: unknown;
+  onClose: () => void;
+  onSave: (values: Record<string, unknown>) => void;
+}) {
+  const [draft, setDraft] = useState({
+    title: version.title ?? "",
+    client_name: version.client_name ?? "",
+    client_address: version.client_address ?? "",
+    client_tax_code: version.client_tax_code ?? "",
+    client_contact: version.client_contact ?? "",
+    notes: version.notes ?? "",
+    assumptions: version.assumptions ?? "",
+    exclusions: version.exclusions ?? "",
+    included_revision_rounds: version.included_revision_rounds ?? 0,
+  });
+
+  const field = (key: keyof typeof draft, label: string, rows = 0) => (
+    <label className="block text-xs text-muted-foreground">
+      {label}
+      {rows ? (
+        <textarea
+          aria-label={label}
+          rows={rows}
+          value={String(draft[key])}
+          onChange={(event) => setDraft((d) => ({ ...d, [key]: event.target.value }))}
+          className={`mt-1 w-full resize-y ${cellInput}`}
+        />
+      ) : (
+        <input
+          aria-label={label}
+          value={String(draft[key])}
+          onChange={(event) => setDraft((d) => ({ ...d, [key]: event.target.value }))}
+          className={`mt-1 w-full ${cellInput}`}
+        />
+      )}
+    </label>
+  );
+
+  return (
+    <Modal
+      title={`Fix the wording on v${version.version}`}
+      subtitle="Only the words. Figures come from the deal - to change those, publish a new version. This stops being possible the moment the version is sent or the client opens it."
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onSave(draft)}
+            className="rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            {pending ? "Saving..." : "Save wording"}
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-3 p-4">
+        {field("title", "Quote title")}
+        {field("client_name", "Client name")}
+        {field("client_address", "Client address", 2)}
+        {field("client_tax_code", "Client tax code")}
+        {field("client_contact", "Client contact")}
+        {field("notes", "Note for the client", 3)}
+        {field("assumptions", "Assumptions", 4)}
+        {field("exclusions", "Not included", 4)}
+        <label className="block text-xs text-muted-foreground">
+          Revision rounds included
+          <input
+            aria-label="Revision rounds included"
+            type="number"
+            min={0}
+            step={1}
+            value={draft.included_revision_rounds}
+            onChange={(event) =>
+              setDraft((d) => ({
+                ...d,
+                included_revision_rounds: Number(event.target.value) || 0,
+              }))
+            }
+            className={`num mt-1 block w-24 ${cellInput} text-right`}
+          />
+        </label>
+        {error ? <ErrorState error={error} className="py-4" /> : null}
+      </div>
+    </Modal>
   );
 }
