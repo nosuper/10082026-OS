@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test"
 import { readFile } from "node:fs/promises"
 
 import { administratorState, producerState } from "./auth-state.js"
+import { saving } from "./writes.js"
+
+// The table's inline cells write through one endpoint - deals.index.tsx calls
+// it on blur, not on a button - so every edit below is a request to wait for.
+const UPDATE_ROW = "auraos.api.update_deal_table_row"
 
 // The deals table: inline money editing, and the column and view choices
 // that are a habit rather than data.
@@ -76,7 +81,11 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
   // formatted cells is what the A1 walkthrough failed on.
   await editor.fill("12500000")
   await expect(editor).toHaveValue(typedBudget)
-  await editor.blur()
+  // Awaited rather than polled for. The blur fires the write and returns; the
+  // cell then re-renders from the response. Run 20 read 10.000.000 back here -
+  // the seeded figure - because the assertion asked before the write landed
+  // and the reload two lines down cancelled it.
+  await saving(page, UPDATE_ROW, () => editor.blur())
   await expect(cell).toHaveText(typedCell)
 
   await page.reload()
@@ -89,6 +98,9 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
   await cell.click()
   await cell.locator("input").fill("-abc")
   await expect(cell.locator("input")).toHaveValue("")
+  // No saving() here on purpose: Escape abandons the edit without writing, and
+  // that is what the next reload proves. Waiting for a request nobody sends
+  // would hang until timeout and look like a slow box.
   await cell.locator("input").press("Escape")
 
   await page.reload()
@@ -103,7 +115,10 @@ test("inline money edits format as typed, persist, and swallow non-digits", asyn
   cell = await budgetCell(page)
   await cell.click()
   await cell.locator("input").fill("10000000")
-  await cell.locator("input").blur()
+  // The last statement in the test, so nothing after it would force the wait:
+  // an unawaited restore here dies with the context and leaves the shared deal
+  // carrying 12.500.000 for whoever runs next.
+  await saving(page, UPDATE_ROW, () => cell.locator("input").blur())
   await expect(cell).toHaveText(seededCell)
 })
 

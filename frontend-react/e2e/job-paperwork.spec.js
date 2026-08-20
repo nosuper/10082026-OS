@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { producerState } from "./auth-state.js";
 import { HANDOVER_TEMPLATE, TEMPLATE } from "./fixture.js";
 import { openJob, openJobTab } from "./records.js";
+import { saving } from "./writes.js";
 
 // #114, the job's Paperwork tab (#106).
 //
@@ -37,6 +38,8 @@ import { openJob, openJobTab } from "./records.js";
 //   - A paper's file name is a `<button>`, not a link.
 
 const producerTest = test.extend({ storageState: producerState });
+
+const SET_STATUS = "auraos.api.set_paper_status";
 
 /** The row for one template's paper. Files are named `{job} - {template} - {stamp}`. */
 function paperRow(panel, template) {
@@ -91,7 +94,9 @@ producerTest("moving a status records the person who moved it, by name", async (
   const panel = await openJobTab(page, await openJob(page), "Paperwork");
   const row = paperRow(panel, TEMPLATE);
 
-  await statusSelect(panel, TEMPLATE).selectOption("Awaiting signature");
+  await saving(page, SET_STATUS, () =>
+    statusSelect(panel, TEMPLATE).selectOption("Awaiting signature"),
+  );
   await expect(statusSelect(panel, TEMPLATE)).toHaveValue("Awaiting signature");
 
   // **Run as the producer deliberately, and this is the reason.** The stamp
@@ -110,7 +115,10 @@ producerTest("moving a status records the person who moved it, by name", async (
   // links. A red is not by itself a verdict on which - except that the
   // name-vs-login pair above separates the third from the rest.
 
-  await statusSelect(panel, TEMPLATE).selectOption("Draft");
+  // Awaited like the rest: this restore is the last statement in the test, so
+  // there is nothing after it to keep the page alive while the POST lands -
+  // and #134 means the seed will not put the contract back if it does not.
+  await saving(page, SET_STATUS, () => statusSelect(panel, TEMPLATE).selectOption("Draft"));
   await expect(statusSelect(panel, TEMPLATE)).toHaveValue("Draft");
   expect(failures).toEqual([]);
 });
@@ -130,10 +138,11 @@ test("a status set by mistake is not a one-way door", async ({ page }) => {
   await expect(select.locator("option")).toHaveText(["Draft", "Awaiting signature", "Signed"]);
 
   // And walking it back is the behaviour itself rather than the offer of it.
-  await select.selectOption("Draft");
+  await saving(page, SET_STATUS, () => select.selectOption("Draft"));
   await expect(select).toHaveValue("Draft");
 
-  await select.selectOption("Signed");
+  // The restore, and the same reasoning as the contract's above.
+  await saving(page, SET_STATUS, () => select.selectOption("Signed"));
   await expect(select).toHaveValue("Signed");
   expect(failures).toEqual([]);
 });

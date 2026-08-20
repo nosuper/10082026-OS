@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+import { saving } from "./writes.js";
+
 const seededDeal = "Playwright Existing Deal";
+
+// The header's stage control writes through frappe.client.set_value - see
+// DealStage.tsx, which uses it rather than db.set_value so before_save runs
+// and the history row gets written.
+const SET_VALUE = "frappe.client.set_value";
 const seededCompany = "Playwright Client";
 
 // Regression test for the bug the founder reported: clicking any deal landed
@@ -47,7 +54,13 @@ test("changing the stage in the header records the move in stage history", async
   const stage = page.getByLabel("Stage");
   await expect(stage).toHaveValue("Brief Received");
 
-  await stage.selectOption("De-brief");
+  // Awaited, not polled for. StageSelect is controlled by the document the
+  // screen holds, so this assertion cannot pass until the write comes back -
+  // and on a busy box it does not come back inside the assertion's timeout.
+  // Run 20 caught it at load 5-7 with the select still disabled after nine
+  // polls, which is stageChange.pending still true: the assertion was right
+  // about what it wanted and early about when it asked.
+  await saving(page, SET_VALUE, () => stage.selectOption("De-brief"));
   await expect(stage).toHaveValue("De-brief");
 
   // Read it back from the server rather than from the control that just
@@ -74,7 +87,12 @@ test("changing the stage in the header records the move in stage history", async
   // Put it back. The seed restores this too, but a spec that leaves the shared
   // deal moved is the defect that cost three e2e runs this morning, and the
   // next spec should not have to know this one ran.
-  await page.getByLabel("Stage").selectOption("Brief Received");
+  // The restore is the worst place in a spec for an unawaited write: there is
+  // nothing after it to force the wait, so the test ends and the request dies
+  // with the context. The next spec then reads a deal this one moved.
+  await saving(page, SET_VALUE, () =>
+    page.getByLabel("Stage").selectOption("Brief Received"),
+  );
   await expect(page.getByLabel("Stage")).toHaveValue("Brief Received");
 });
 
@@ -86,6 +104,10 @@ test("moving to Lost asks for a reason before it writes", async ({ page }) => {
   await page.getByRole("link", { name: seededDeal }).first().click();
   await expect(page).toHaveURL(/\/aura-next\/deals\/DEAL-/);
 
+  // Deliberately not wrapped in saving(): choosing Lost opens the dialog and
+  // writes nothing, which is the claim. A saving() here would hang until it
+  // timed out - failure cause 3 in writes.js, an action that never triggered
+  // the write - and would read as a slow box rather than as this test passing.
   await page.getByLabel("Stage").selectOption("Lost");
 
   const dialog = page.getByRole("dialog");

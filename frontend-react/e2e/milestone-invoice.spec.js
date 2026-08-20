@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { COMPANY } from "./fixture.js";
 import { openJob, openJobTab } from "./records.js";
+import { saving } from "./writes.js";
 
 // #126, the invoice on a payment milestone.
 //
@@ -52,6 +53,13 @@ async function moneyTab(page) {
   return openJobTab(page, await openJob(page), "Money");
 }
 
+// `saveInvoiceNo` returns early without mutating when the stored number
+// already equals the typed one, so saving the same value twice would wait for
+// a request that is never sent. It cannot happen within a run - the seed
+// leaves this milestone blank and the last test puts it back - but it is how
+// `saving` hangs here, and a hang is not self-explaining.
+const SET_STATUS = "auraos.api.set_milestone_status";
+
 test("an invoice number belongs to an invoiced milestone and nowhere else", async ({ page }) => {
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
@@ -78,16 +86,21 @@ test("marking a milestone invoiced opens the field, and the number is kept", asy
 
   const panel = await moneyTab(page);
 
-  await statusOf(panel).selectOption("Invoiced");
+  await saving(page, SET_STATUS, () => statusOf(panel).selectOption("Invoiced"));
   await expect(invoiceOf(panel)).toBeEnabled();
 
   // Typed and blurred, the way it is entered: the number is saved on blur, not
   // by a button, so a test that only fills the box asserts nothing.
   await invoiceOf(panel).fill("PW-E2E-0126");
-  await invoiceOf(panel).blur();
+  await saving(page, SET_STATUS, () => invoiceOf(panel).blur());
 
   // Read back from the server rather than from React's state. Without the
   // reload a green would only prove the input holds what was typed into it.
+  //
+  // The reload is right and it was not enough: it answers *where* the value
+  // came from and says nothing about *whether the write finished*. Two
+  // questions, and the careful reasoning about the first is exactly what made
+  // the second easy to miss.
   await page.reload();
   const reloaded = await moneyTab(page);
   await expect(statusOf(reloaded)).toHaveValue("Invoiced");
@@ -105,7 +118,7 @@ test("walking the status back takes the invoice number with it", async ({ page }
   // the previous one left a number here.
   await expect(invoiceOf(panel)).toHaveValue("PW-E2E-0126");
 
-  await statusOf(panel).selectOption("Not requested");
+  await saving(page, SET_STATUS, () => statusOf(panel).selectOption("Not requested"));
 
   // The point of the whole spec. An invoice number that survived this would be
   // a number nobody issued, sitting on a milestone the client has not been
