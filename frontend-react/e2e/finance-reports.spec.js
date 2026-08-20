@@ -211,6 +211,14 @@ producerTest("a producer gets the same report, carrying no founder figure", asyn
   // position and merely declined to draw it would satisfy every assertion
   // above while putting the figure in the browser - which is where a devtools
   // tab would find it.
+  //
+  // **One claim, two surfaces - do not split this into its own test.** "A
+  // producer's screen contains nothing tax-shaped" has a DOM face and a
+  // network face, and they come apart in exactly one scenario: fetched but
+  // not rendered. Separated, the network half reads as redundant with the
+  // DOM half and gets dropped by whoever is tidying, which is the day the
+  // scenario stops being covered. The server refusing is the real guarantee;
+  // this is the detector for a gate loosened client-side.
   expect(asked, "the screen asked the server for the founder's tax position").toEqual([]);
   expect(failures).toEqual([]);
 });
