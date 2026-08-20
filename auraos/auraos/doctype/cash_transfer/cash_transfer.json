@@ -1,0 +1,99 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:CT-{YYYY}-{#####}",
+ "creation": "2026-08-20 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "moved_on",
+  "amount",
+  "column_break_head",
+  "from_account",
+  "to_account",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "moved_on",
+   "fieldtype": "Date",
+   "label": "Moved on",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "The day the money changed accounts."
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_account",
+   "fieldtype": "Link",
+   "label": "From",
+   "options": "Cash Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Named rather than defaulted: a transfer says where the money came from, and a blank end is an unfinished record rather than an unknown place."
+  },
+  {
+   "fieldname": "to_account",
+   "fieldtype": "Link",
+   "label": "To",
+   "options": "Cash Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "description": "What it was for. Shown on both halves in the ledger; without it each half says which account it faced."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-08-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Cash Transfer",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Founder",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "search_fields": "from_account,to_account,moved_on",
+ "sort_field": "moved_on",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

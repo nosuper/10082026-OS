@@ -30,9 +30,18 @@ this module.
 """
 
 from dataclasses import asdict
+import json
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
+
+# The doctype whose Select has to agree with FLOWS, read as a file
+# because that is all it takes to know.
+FLOW_FIELD = (
+    Path(__file__).resolve().parents[1]
+    / "auraos/auraos/doctype/cash_ledger_entry/cash_ledger_entry.json"
+)
 
 from auraos.lib.ledger import (
     CLIENT_PAYMENT,
@@ -46,6 +55,8 @@ from auraos.lib.ledger import (
     POST,
     REPOST,
     SOURCES,
+    TRANSFER_IN,
+    TRANSFER_OUT,
     UNPOST,
     Entry,
     Holding,
@@ -68,6 +79,7 @@ from auraos.lib.ledger import (
     source_of,
     total_held,
     transferred,
+    transfer,
 )
 from auraos.lib.milestones import INVOICED, PAID, REQUESTED
 from auraos.lib.settlement import FROM_ADVANCE, FROM_COMPANY
@@ -143,6 +155,15 @@ def test_the_flows_the_ledger_carries_are_named_here():
     fifth, because the company pays for things that belong to no job and
     the ledger had no way to say so.
 
+    Widened a second time by #151, and that one added **two words for one
+    concept**: money moving between two of our own accounts touches both,
+    and `entry_name` is `{code}-{source}` - two entries from one record
+    would collide on the ledger's primary key. Splitting the flow was the
+    cheaper answer than widening the key's shape for every flow to serve
+    one. **So Transfer out and Transfer in are not tidy-uppable into a
+    single "Transfer"**, and this test is where somebody about to try
+    will find out why.
+
     This test is not here to freeze the list. It is here so that
     widening it is a deliberate act with a failing test in front of it,
     rather than something a later ticket does in passing - which is
@@ -154,8 +175,43 @@ def test_the_flows_the_ledger_carries_are_named_here():
         "Crew advance",
         "Float settlement",
         "Company expense",
+        "Transfer out",
+        "Transfer in",
     )
     assert set(SOURCES) == set(FLOWS)
+
+
+def test_the_doctype_offers_exactly_the_flows_this_module_names():
+    """The Select and FLOWS are one vocabulary in two files.
+
+    **This test exists because they came apart.** #151 added Transfer out
+    and Transfer in here, and not to `Cash Ledger Entry.flow`'s options -
+    so all 100 tests in this file passed over transfer logic that the
+    database refused on every write: *Flow cannot be "Transfer out"*.
+
+    A pure test rather than a seam test, deliberately. The gap is
+    readable in a JSON file, so catching it should not need a site, a
+    boot or eleven minutes - it should fail in CI the moment somebody
+    widens one side and not the other, which is the only moment the fix
+    is free.
+    """
+    field = next(
+        one
+        for one in json.loads(FLOW_FIELD.read_text(encoding="utf-8"))["fields"]
+        if one["fieldname"] == "flow"
+    )
+
+    assert tuple(field["options"].split("\n")) == FLOWS
+
+
+def test_both_halves_of_a_transfer_come_from_one_record():
+    assert SOURCES[TRANSFER_OUT] == SOURCES[TRANSFER_IN] == "Cash Transfer"
+
+
+def test_the_two_halves_are_named_apart_on_that_one_record():
+    """The reason there are two flows at all. Same source, two entries,
+    and the ledger's primary key is what would have refused them."""
+    assert entry_name(TRANSFER_OUT, "CT-0001") != entry_name(TRANSFER_IN, "CT-0001")
 
 
 def test_a_client_payment_comes_from_a_milestone_row_not_a_record():
@@ -769,3 +825,93 @@ def test_an_overhead_and_a_job_expense_with_one_name_do_not_collide():
     """Two doctypes number their own rows, so the flow code is what keeps
     their entries apart on a primary key."""
     assert entry_name("Company expense", "0001") != entry_name("Job expense", "0001")
+
+
+# -- money that never leaves the company (#151) --
+
+
+def a_transfer(**overrides):
+    record = {
+        "name": "CT-0001",
+        "from_account": "Vietcombank",
+        "to_account": "Két tiền mặt",
+        "amount": 15_000_000,
+        "moved_on": "2026-07-01",
+        "note": None,
+    }
+    record.update(overrides)
+    return record
+
+
+def test_a_transfer_is_two_entries_that_are_exact_negatives():
+    out, arrived = transfer(a_transfer())
+
+    assert out.amount == -15_000_000
+    assert arrived.amount == 15_000_000
+    assert out.account == "Vietcombank"
+    assert arrived.account == "Két tiền mặt"
+
+
+def test_the_company_holds_exactly_what_it_held_before():
+    """The invariant the whole design exists to keep. A transfer moves
+    money inside the company, so a sum across every account is unchanged
+    - and a pair that came apart would either invent money or lose it in
+    transit while looking sound on any screen that reads one account at
+    a time."""
+    before = [Entry(account="Vietcombank", amount=20_000_000,
+                    entry_date=date(2026, 6, 1), flow=CLIENT_PAYMENT,
+                    source_doctype="Job Payment Milestone", source_name="m1",
+                    job="JOB-1", description=None)]
+    after = list(before) + list(transfer(a_transfer()))
+
+    assert balance(after) == balance(before)
+
+
+def test_both_halves_share_the_day_and_the_record():
+    out, arrived = transfer(a_transfer())
+
+    assert out.entry_date == arrived.entry_date == date(2026, 7, 1)
+    assert out.source_name == arrived.source_name == "CT-0001"
+
+
+def test_neither_half_belongs_to_a_job():
+    """Money moving between our own pockets belongs to no shoot, which
+    is why Entry.job was optional from the day it was written."""
+    out, arrived = transfer(a_transfer())
+
+    assert out.job is None and arrived.job is None
+
+
+def test_each_half_says_where_the_money_went_or_came_from():
+    out, arrived = transfer(a_transfer())
+
+    assert "Két tiền mặt" in out.description
+    assert "Vietcombank" in arrived.description
+
+
+def test_a_note_replaces_the_derived_description_on_both_halves():
+    out, arrived = transfer(a_transfer(note="Rút quỹ đi Phan Thiết"))
+
+    assert out.description == arrived.description == "Rút quỹ đi Phan Thiết"
+
+
+def test_money_moved_to_the_account_it_came_from_is_not_a_transfer():
+    """Two entries cancelling on one account is noise, not movement."""
+    assert transfer(a_transfer(to_account="Vietcombank")) is None
+
+
+def test_a_transfer_with_one_end_missing_is_unfinished_rather_than_defaulted():
+    """Every other flow falls back on the company's default account. A
+    transfer says where the money came from and where it went, so a
+    missing end is a record nobody finished - not a movement to an
+    unknown place."""
+    assert transfer(a_transfer(to_account=None)) is None
+    assert transfer(a_transfer(from_account=None)) is None
+
+
+def test_a_transfer_of_nothing_is_not_a_transfer():
+    assert transfer(a_transfer(amount=0)) is None
+
+
+def test_a_transfer_nobody_has_dated_has_not_happened():
+    assert transfer(a_transfer(moved_on=None)) is None

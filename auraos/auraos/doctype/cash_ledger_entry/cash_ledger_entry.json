@@ -65,9 +65,10 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Flow",
-   "options": "Client payment\nJob expense\nCrew advance\nFloat settlement\nCompany expense",
+   "options": "Client payment\nJob expense\nCrew advance\nFloat settlement\nCompany expense\nTransfer out\nTransfer in",
    "read_only": 1,
-   "reqd": 1
+   "reqd": 1,
+   "description": "Which kind of movement this entry records. The list must match auraos.lib.ledger.FLOWS exactly: the library decides what a flow is and this Select is what lets it reach the database, so a word added to one and not the other passes every pure test and refuses every write."
   },
   {
    "fieldname": "source_doctype",

@@ -3172,3 +3172,74 @@ def unmatch_statement_line(statement_name, line):
     row.matched_entry = None
     doc.save()
     return {"line": row.name, "matched_entry": None}
+
+
+# -- money moving between our own accounts (#151) --
+
+
+@frappe.whitelist()
+def record_cash_transfer(from_account, to_account, amount, moved_on=None, note=None):
+    """Record money moved from one of our accounts to another.
+
+    Founder-only, on the Company Expense precedent - the other record of
+    money that belongs to no job - rather than on a founder ruling. See
+    the doctype's docstring, which is where a delegation decision should
+    start.
+
+    **Both ledger entries are written by the save**, not here: the
+    endpoint is the door a screen happens to use and a Desk edit walks
+    straight past it, so the pairing rule lives in `Cash Transfer` where
+    both paths meet it.
+
+    Returns both accounts' balances afterwards, because the only reason
+    to record a withdrawal is to make two figures right and the person
+    doing it wants to see them.
+    """
+    # Imported here, the way cash_account_entries does it: the ledger
+    # adapter pulls in the doctype layer, and api.py is imported by
+    # everything.
+    from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+    from auraos.lib import ledger
+
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may move money between accounts"), frappe.PermissionError
+        )
+    doc = frappe.get_doc(
+        {
+            "doctype": "Cash Transfer",
+            "from_account": from_account,
+            "to_account": to_account,
+            "amount": amount,
+            "moved_on": moved_on or frappe.utils.today(),
+            "note": note,
+        }
+    )
+    doc.insert()
+    return {
+        "name": doc.name,
+        "amount": round_vnd(doc.amount),
+        "from_account": doc.from_account,
+        "to_account": doc.to_account,
+        "balances": {
+            doc.from_account: ledger.balance(
+                cash_ledger_entry.entries_for(doc.from_account)
+            ),
+            doc.to_account: ledger.balance(cash_ledger_entry.entries_for(doc.to_account)),
+        },
+    }
+
+
+@frappe.whitelist()
+def cash_transfers(limit=50):
+    """The company's own movements between its accounts, newest first."""
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may read cash transfers"), frappe.PermissionError
+        )
+    return frappe.get_all(
+        "Cash Transfer",
+        fields=["name", "moved_on", "amount", "from_account", "to_account", "note"],
+        order_by="moved_on desc, creation desc",
+        limit_page_length=frappe.utils.cint(limit) or 50,
+    )
