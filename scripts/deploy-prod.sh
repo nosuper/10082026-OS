@@ -102,6 +102,25 @@ ok "$CONTAINER is up, site $SITE"
 
 # -- what we are deploying, and whether we are allowed to --
 
+# **$REPO has to be the repo the container mounts, not merely a copy of
+# it.** The app clone's remote points at /workspace/repo, so a commit
+# fetched into some other checkout is a commit the container cannot see -
+# and the failure is a `couldn't find remote ref` three steps later,
+# which reads like a bad branch name rather than a wrong directory.
+# Found by running this with $REPO pointing at the wrong clone.
+step "Repo"
+# Compared by inode, because paths cannot be compared across a mount:
+# inside the container it is always /workspace/repo whatever it is
+# outside. A bind mount is the same file on the same host, so the inode
+# matches; a different clone's does not. (My first attempt compared
+# basenames and refused every invocation, including the correct one.)
+MOUNTED=$(inside "stat -c %i /workspace/repo/.git/HEAD 2>/dev/null" | tr -d '\r')
+HERE=$(stat -c %i "$(git -C "$REPO" rev-parse --absolute-git-dir)/HEAD" 2>/dev/null || echo "")
+if [ -n "$MOUNTED" ] && [ -n "$HERE" ] && [ "$MOUNTED" != "$HERE" ]; then
+  die "$CONTAINER does not mount $REPO - set AURA_DEPLOY_REPO to the repo the stack was started from"
+fi
+ok "$REPO is what the container mounts"
+
 step "Resolving $REF"
 git -C "$REPO" fetch --quiet origin || die "could not fetch origin in $REPO"
 TARGET=$(git -C "$REPO" rev-parse --verify "$REF^{commit}" 2>/dev/null) \
@@ -123,10 +142,31 @@ ok "contained in $GATE"
 # has to be reachable from a branch the container's fetch will advertise:
 # fetching a bare sha from a non-bare repo is not something git promises.
 BRANCH="${GATE#origin/}"
-git -C "$REPO" fetch --quiet origin "$BRANCH:refs/heads/$BRANCH" 2>/dev/null \
-  || git -C "$REPO" fetch --quiet origin "$BRANCH" \
-  || die "could not update local $BRANCH from origin"
+git -C "$REPO" fetch --quiet origin "$BRANCH:refs/heads/$BRANCH" 2>/dev/null || true
+# Verified rather than assumed: the fetch above is refused outright when
+# $BRANCH is the branch this checkout has open, which is the normal case
+# on a box where somebody works. So the question is not whether the fetch
+# succeeded - it is whether the commit is reachable from the local
+# branch, because that is the only thing the container will be able to
+# fetch.
+git -C "$REPO" merge-base --is-ancestor "$TARGET" "$BRANCH" 2>/dev/null \
+  || die "$REPO's local $BRANCH does not contain ${TARGET:0:12} - run: git -C $REPO pull --ff-only origin $BRANCH"
 ok "local $BRANCH carries the commit"
+
+# **A dirty clone stops the deploy before it starts.** Git would refuse
+# the checkout anyway, three steps in, with its own message about
+# overwriting local changes - but by then the run has already fetched and
+# the operator is reading git's words rather than an instruction. And
+# refusing is right: uncommitted files in a production app directory are
+# either somebody's emergency edit or the wreckage of a failed deploy,
+# and a deploy script is not the thing that should decide which.
+step "Working tree"
+DIRT=$(inside "cd $APP_DIR && git status --porcelain" | tr -d '\r')
+if [ -n "$DIRT" ]; then
+  printf '%s\n' "$DIRT" | sed 's/^/     /'
+  die "the app clone in $CONTAINER has uncommitted changes - a deploy will not discard them"
+fi
+ok "the app clone is clean"
 
 step "Current version"
 FROM=$(inside "cd $APP_DIR && git rev-parse HEAD" | tr -d '\r')
@@ -139,8 +179,18 @@ fi
 # -- the app itself --
 
 step "Updating the app clone"
+# **The remote is discovered, not assumed.** `bench get-app` names it
+# `upstream`, not `origin`, and narrows its fetch refspec to the single
+# branch the app was installed from - so `git fetch origin` fails outright
+# and a bare `git fetch` would bring back one branch that is probably not
+# the one being deployed. Both were found by running this against a real
+# stack; neither is visible from the host.
+REMOTE=$(inside "cd $APP_DIR && git remote | head -1" | tr -d '\r')
+[ -n "$REMOTE" ] || die "the app clone in $CONTAINER has no remote to fetch from"
+ok "fetching from '$REMOTE' inside the container"
+
 if change "check out ${TARGET:0:12} in $CONTAINER"; then
-  inside "cd $APP_DIR && git fetch --quiet origin && git checkout --quiet --detach $TARGET" \
+  inside "cd $APP_DIR && git fetch --quiet $REMOTE $BRANCH && git checkout --quiet --detach $TARGET" \
     || die "could not check out ${TARGET:0:12} inside $CONTAINER"
   AT=$(inside "cd $APP_DIR && git rev-parse HEAD" | tr -d '\r')
   [ "$AT" = "$TARGET" ] || die "clone is at ${AT:0:12}, not ${TARGET:0:12}"
