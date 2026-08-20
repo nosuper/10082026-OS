@@ -120,8 +120,18 @@ def propose_contract_number(job, template, signed_on):
     frappe.has_permission("Paperwork Template", "read", throw=True)
 
     kind = frappe.db.get_value("Paperwork Template", template, "kind") or ""
+    # Said whatever the kind is: a paper that carries no number can still
+    # describe a payment plan it cannot describe.
+    plan_refusal = contracts.payment_split(
+        frappe.get_all(
+            "Job Payment Milestone",
+            filters={"parent": job},
+            fields=["pct", "amount"],
+            order_by="idx asc",
+        )
+    )[1]
     if not kind:
-        return {"kind": "", "number": None, "needs": None}
+        return {"kind": "", "number": None, "needs": None, "plan": plan_refusal}
 
     company = frappe.db.get_value("Job", job, "company")
     short_code = frappe.db.get_value("Party Company", company, "short_code") or ""
@@ -132,10 +142,11 @@ def propose_contract_number(job, template, signed_on):
             "kind": kind,
             "number": parent,
             "needs": None if parent else "contract",
+            "plan": plan_refusal,
         }
 
     if not short_code:
-        return {"kind": kind, "number": None, "needs": "short_code"}
+        return {"kind": kind, "number": None, "needs": "short_code", "plan": plan_refusal}
 
     return {
         "kind": kind,
@@ -146,6 +157,7 @@ def propose_contract_number(job, template, signed_on):
             taken=_numbers_taken(kind, frappe.utils.getdate(signed_on), short_code),
         ),
         "needs": None,
+        "plan": plan_refusal,
     }
 
 

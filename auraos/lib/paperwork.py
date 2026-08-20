@@ -319,6 +319,11 @@ MONEY_FIELDS = {
     "vat_amount": "quote_vat_amount",
     "total": "quote_total",
 }
+# The deposit and final halves of the payment plan (#146). Percentages
+# and amounts are formatted differently, so they are listed apart.
+PLAN_PCT_FIELDS = ("deposit_pct", "final_pct")
+PLAN_MONEY_FIELDS = ("deposit_amount", "final_amount")
+
 # Entered at generation, held by no record. See document_values.
 TERM_FIELDS = (
     "signed_on",
@@ -339,6 +344,7 @@ def document_values(
     today: date | None = None,
     contract_number: str | None = None,
     terms: Mapping[str, Any] | None = None,
+    plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str | None]:
     """Every placeholder a template may use, filled from plain records.
 
@@ -378,6 +384,16 @@ def document_values(
     terms = terms or {}
     for name in TERM_FIELDS:
         values[f"terms.{name}"] = _text(terms.get(name))
+
+    # The two halves a contract describes (#146). Absent rather than
+    # zero when the plan cannot say them: a contract whose final
+    # instalment reads 0% is worse than one with a visible gap, because
+    # only one of the two stops somebody signing it.
+    plan = plan or {}
+    for name in PLAN_PCT_FIELDS:
+        values[f"plan.{name}"] = _pct(plan.get(name)) if plan.get(name) is not None else None
+    for name in PLAN_MONEY_FIELDS:
+        values[f"plan.{name}"] = _money(plan.get(name)) if plan.get(name) is not None else None
 
     for name, fieldname in JOB_FIELDS.items():
         values[f"job.{name}"] = _text(job.get(fieldname))

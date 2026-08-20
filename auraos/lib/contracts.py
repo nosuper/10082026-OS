@@ -173,3 +173,48 @@ def contract_number(
     while f"{stem}-{suffix}" in existing:
         suffix += 1
     return f"{stem}-{suffix}"
+
+
+# -- what a two-part contract says about payment (#139/#146) ----------------
+
+#: The plan shape a two-part contract can describe. The founder's rule:
+#: "đa phần là 2 mốc, 3 mốc thì sẽ có hợp đồng 3 mốc" - most deals are
+#: two milestones, and a three-milestone deal gets a three-milestone
+#: contract rather than a two-milestone one that quietly leaves a third
+#: of the money undescribed.
+TWO_PART = 2
+
+
+def payment_split(milestones):
+    """The deposit and final halves of a plan, or why they cannot be said.
+
+    Returns `(values, refusal)`. `refusal` is None when the plan fits.
+
+    **The first milestone is always the deposit** - "mốc đầu auto là
+    cọc" - so that half never needs asking about.
+
+    **The final half is only sayable when the plan has exactly two
+    milestones.** Against three, "final" could mean the last one or
+    everything after the deposit, and those differ by a quarter of the
+    contract value. A wrong percentage here is not a display bug: it is
+    a number on a document somebody signs. So this refuses, names the
+    shape it found, and leaves the gap visible - the same choice as a
+    child paper carrying no number rather than minting a plausible one.
+
+    A plan's three-milestone default is internal tracking, not a claim
+    about what any contract says.
+    """
+    rows = list(milestones or [])
+    if not rows:
+        return {}, "no_milestones"
+
+    values = {
+        "deposit_pct": rows[0].get("pct"),
+        "deposit_amount": rows[0].get("amount"),
+    }
+    if len(rows) != TWO_PART:
+        return values, f"plan_has_{len(rows)}"
+
+    values["final_pct"] = rows[1].get("pct")
+    values["final_amount"] = rows[1].get("amount")
+    return values, None

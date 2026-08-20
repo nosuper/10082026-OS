@@ -30,6 +30,8 @@ export type Proposal = {
   number: string | null;
   /** What is missing, when the server could not propose a number. */
   needs: "short_code" | "contract" | null;
+  /** Why the payment halves cannot be filled, when they cannot (#146). */
+  plan?: string | null;
 };
 
 const EMPTY: ContractTerms = {
@@ -48,6 +50,22 @@ const INPUT =
  *  Both cases have a person as the remedy and neither has a sensible
  *  default, so the dialog says who has to do what rather than showing a
  *  blank field the founder has to interpret. */
+/** Why the deposit and final halves cannot be stated.
+ *
+ *  A two-part contract can only describe a two-milestone plan. Against
+ *  three, "final" could mean the last milestone or everything after the
+ *  deposit, and those differ by a quarter of the contract value - so the
+ *  gap stays visible rather than being filled with a guess. */
+function planNote(refusal: string | null | undefined) {
+  if (!refusal) return null;
+  const count = /^plan_has_(\d+)$/.exec(refusal)?.[1];
+  if (count)
+    return `This template describes a two-part payment and the job's plan has ${count} milestones. The deposit still fills; the final instalment is left blank rather than guessed. A ${count}-milestone deal wants a ${count}-milestone contract.`;
+  if (refusal === "no_milestones")
+    return "This job has no payment milestones yet, so neither instalment can be filled.";
+  return null;
+}
+
 function absence(needs: Proposal["needs"]) {
   if (needs === "short_code")
     return "This client has no short code yet, and the number is built from it. Add one in Contacts, or type the number below.";
@@ -102,6 +120,7 @@ export function ContractDetails({
   });
 
   const note = absence(proposal?.needs ?? null);
+  const plan = planNote(proposal?.plan);
 
   return (
     <Modal
@@ -165,6 +184,8 @@ export function ContractDetails({
             <input type="date" {...field("service_end")} />
           </div>
         </div>
+
+        {plan ? <p className="text-[11px] text-ember">{plan}</p> : null}
 
         <ErrorState error={proposer.error} />
       </div>

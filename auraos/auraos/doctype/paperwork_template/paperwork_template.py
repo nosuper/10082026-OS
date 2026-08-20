@@ -14,7 +14,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from auraos.lib import paperwork
+from auraos.lib import contracts, paperwork
 
 # The generated file's name: the job it belongs to, the paper it is, and
 # when it was made - so a regenerated contract sits beside the first one
@@ -134,6 +134,11 @@ def values_for(job, vendor=None, freelancer=None, contract_number=None, terms=No
         today=frappe.utils.getdate(),
         contract_number=contract_number,
         terms=terms,
+        # The plan the job actually carries, split by the rule rather
+        # than by this function - see contracts.payment_split.
+        plan=contracts.payment_split(
+            [row.as_dict() for row in job.get("payment_milestones") or []]
+        )[0],
     )
 
 

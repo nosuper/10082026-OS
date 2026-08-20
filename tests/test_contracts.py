@@ -10,6 +10,7 @@ from auraos.lib.contracts import (
     fold,
     normalise_short_code,
     number_for,
+    payment_split,
     suggest_short_code,
 )
 
@@ -180,3 +181,61 @@ class TestNumberFor:
 
     def test_an_unknown_kind_carries_nothing_rather_than_inventing(self):
         assert number_for("XXXX", date(2026, 8, 20), "SUMO") is None
+
+
+class TestPaymentSplit:
+    """cọc and cuối, and the plans that cannot say them (#146)."""
+
+    def two(self):
+        return [{"pct": 50, "amount": 5_000_000}, {"pct": 50, "amount": 5_000_000}]
+
+    def three(self):
+        return [
+            {"pct": 50, "amount": 5_000_000},
+            {"pct": 25, "amount": 2_500_000},
+            {"pct": 25, "amount": 2_500_000},
+        ]
+
+    def test_a_two_milestone_plan_fills_both_halves(self):
+        values, refusal = payment_split(self.two())
+        assert refusal is None
+        assert values == {
+            "deposit_pct": 50,
+            "deposit_amount": 5_000_000,
+            "final_pct": 50,
+            "final_amount": 5_000_000,
+        }
+
+    def test_the_first_milestone_is_always_the_deposit(self):
+        # "mốc đầu auto là cọc" - true whatever the split is, so this
+        # half never needs a question.
+        values, _ = payment_split(
+            [{"pct": 30, "amount": 3_000_000}, {"pct": 70, "amount": 7_000_000}]
+        )
+        assert values["deposit_pct"] == 30
+
+    def test_three_milestones_refuse_the_final_half_rather_than_guess(self):
+        # "final" could be the last milestone or everything after the
+        # deposit, and those differ by a quarter of the contract value.
+        values, refusal = payment_split(self.three())
+        assert refusal == "plan_has_3"
+        assert "final_pct" not in values
+        assert "final_amount" not in values
+
+    def test_the_deposit_still_fills_when_the_final_cannot(self):
+        # Refusing the half we cannot say must not withhold the half we
+        # can - the deposit is the first milestone whatever follows it.
+        values, refusal = payment_split(self.three())
+        assert refusal
+        assert values["deposit_pct"] == 50
+
+    def test_an_empty_plan_says_so(self):
+        values, refusal = payment_split([])
+        assert (values, refusal) == ({}, "no_milestones")
+        assert payment_split(None) == ({}, "no_milestones")
+
+    def test_one_milestone_is_refused_too(self):
+        # Not a two-part contract either. Named by its shape so the
+        # message can say what it found.
+        _, refusal = payment_split([{"pct": 100, "amount": 10_000_000}])
+        assert refusal == "plan_has_1"
