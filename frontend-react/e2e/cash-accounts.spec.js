@@ -114,7 +114,12 @@ test("the balance is derived: post an entry and it moves", async ({ page }) => {
   // flow runs is the entry worth asserting on.
   const spend = 1_234_000;
   const posted = await postExpense(page, spend);
-  expect(posted, "the expense endpoint should accept a company-paid spend").toBeTruthy();
+  // The message is built from what came back rather than fixed, because a
+  // bare "expected truthy" here sends the next reader to the endpoint when
+  // the answer is usually in the status or the clock (#154).
+  expect(posted.ok, `the expense endpoint did not accept the spend: ${describe(posted)}`).toBe(
+    true,
+  );
 
   await page.reload();
   await page.getByText(BANK).first().click();
@@ -169,6 +174,17 @@ async function firstName(page, doctype, filters) {
   );
 }
 
+/** A postExpense result, as a sentence. Every branch names itself. */
+function describe(result) {
+  if (result.reason === "no-deal") return `no seeded deal titled ${JSON.stringify(JOB_DEAL)}`;
+  if (result.reason === "no-job") return `the seeded deal has not become a job`;
+  if (result.reason === "timeout") {
+    return `the POST did not answer within ${result.ms}ms - the request was still in flight`;
+  }
+  if (result.reason === "threw") return `the request failed: ${result.error}`;
+  return `HTTP ${result.status}${result.exception ? ` (${result.exception})` : ""}`;
+}
+
 /**
  * Log a company-paid expense against the seeded **open** job, through the API
  * the app itself calls. Frappe refuses a POST without the CSRF token the page
@@ -181,16 +197,21 @@ async function firstName(page, doctype, filters) {
  * **not** `window.csrf_token`, which exists only on a document Frappe served,
  * so Frappe would refuse the POST outright.
  *
- * **And this test would go green on that refusal.** `response.ok` would be
- * false and `postExpense` would return false - and the only thing between a
- * tidy-up and a test reporting a derived balance without ever posting an entry
- * is the single `expect(posted).toBeTruthy()` below. A permission spec has it
- * worse: it reads a refusal as a pass, and would keep passing on the day the
- * permission check was deleted.
+ * **And this test would go green on that refusal.** The response would come
+ * back not-ok, and the only thing between a tidy-up and a test reporting a
+ * derived balance without ever posting an entry is the single assertion on
+ * `posted.ok` below. A permission spec has it worse: it reads a refusal as a
+ * pass, and would keep passing on the day the permission check was deleted.
  *
  * The two helpers look gratuitously different. They are, because a GET and a
  * POST need different things - "resolve relative URLs against baseURL" is not
  * the universal rule it reads as.
+ *
+ * **Returns a result rather than a boolean** (#154). This POST timed out once
+ * at Playwright's 30s and passed on the same tree an hour earlier, and the
+ * failure it left named `page.evaluate` - which points at the spec when the
+ * fact worth having was about the request. Every branch below now says which
+ * branch it was, and `describe` turns it into the assertion's own message.
  *
  * Named rather than "whatever job comes back first", and that is not fussiness.
  * The seed converts the closed job last, so it is the most recently modified
@@ -201,27 +222,66 @@ async function firstName(page, doctype, filters) {
  */
 async function postExpense(page, amount) {
   const deal = await firstName(page, "Deal", [["title", "=", JOB_DEAL]]);
-  if (!deal) return false;
+  if (!deal) return { ok: false, reason: "no-deal" };
   const job = await firstName(page, "Job", [["deal", "=", deal]]);
-  if (!job) return false;
+  if (!job) return { ok: false, reason: "no-job" };
 
   return page.evaluate(
-    async ({ job, amount }) => {
-      const response = await fetch("/api/method/auraos.api.log_job_expense", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Frappe-CSRF-Token": window.csrf_token,
-        },
-        body: JSON.stringify({
-          job,
-          amount,
-          paid_from: "Company",
-          description: "e2e derived-balance probe",
-        }),
-      });
-      return response.ok;
+    async ({ job, amount, budget }) => {
+      // **The budget is ours so the message is ours.** Left to Playwright,
+      // a request that never answers kills `page.evaluate` at 30s with an
+      // error naming the evaluate - which sends the reader to the spec
+      // rather than to the request. Aborting first, inside the page, means
+      // the failure can say the POST was still in flight and for how long,
+      // which is the only fact worth having about that failure (#154).
+      //
+      // Twenty seconds, comfortably inside Playwright's thirty so this
+      // fires first, and comfortably outside any real save: the measured
+      // cold path for a milestone write on a freshly booted site was
+      // ~1.8s, and this posts a ledger entry on top of an expense.
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), budget);
+      const started = Date.now();
+      try {
+        const response = await fetch("/api/method/auraos.api.log_job_expense", {
+          method: "POST",
+          signal: abort.signal,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Frappe-CSRF-Token": window.csrf_token,
+          },
+          body: JSON.stringify({
+            job,
+            amount,
+            paid_from: "Company",
+            description: "e2e derived-balance probe",
+          }),
+        });
+        // Frappe names its own refusals, and the name is the difference
+        // between "the lock worked" and "the endpoint is broken".
+        let exception = null;
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          exception = body?.exc_type ?? null;
+        }
+        return {
+          ok: response.ok,
+          status: response.status,
+          exception,
+          ms: Date.now() - started,
+        };
+      } catch (error) {
+        const timedOut = error?.name === "AbortError";
+        return {
+          ok: false,
+          reason: timedOut ? "timeout" : "threw",
+          error: timedOut ? null : String(error),
+          ms: Date.now() - started,
+        };
+      } finally {
+        clearTimeout(timer);
+      }
     },
-    { job, amount },
+    { job, amount, budget: 20_000 },
   );
 }
