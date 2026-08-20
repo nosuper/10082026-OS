@@ -18,20 +18,25 @@ The width is narrower than it first reads, because two of the money
 endpoints were never producer-reachable:
 
 - **Open to any producer, on any job:** `log_job_expense`,
-  `update_job_expense`, `delete_job_expense` and `set_milestone_status`.
-  Job Expense grants the Producer role create, write and delete; milestones
-  are a child table of Job and ride on Job write.
+  `update_job_expense`, `delete_job_expense`, `set_milestone_status` and
+  `save_job_milestones`. Job Expense grants the Producer role create, write
+  and delete; milestones are a child table of Job and ride on Job write, so
+  both the collection flow and the plan behind it are open. The count is
+  five after all - just not the five the ticket named.
 - **Founder-only everywhere, on every job:** `record_job_advance` and
   `settle_job`. Job Advance and Job Settlement give the Producer role read
   and nothing else, so handing out and closing a float stay the founder's
   moves. That gate is about the act, not about whose job it is, and this
   decision does not touch it.
 
-**Founder-only *figures* are a separate layer and are unaffected.** Overhead,
-commission and margin sit at `permlevel` 1 on Job, granted to Founder and
-System Manager only. A producer who may write every expense on a job still
-cannot read what the company makes on it. Widening the write side has never
-been what hides those numbers.
+**Founder-only *figures* are a separate layer and are unaffected.** On Job
+that layer is exactly one field - `commission_pct` at `permlevel` 1, granted
+to Founder and System Manager only, proved three ways in `test_job.py`. The
+rest of the profit block (`total_commission`, `cm`, `profit_before_tax`,
+`tndn`, `net_profit`, `vat_payable`) sits at `permlevel` 1 on Deal, where the
+pricing is still edited. A producer who may write every expense on a job
+still cannot read what the company makes on it. Widening the write side has
+never been what hides those numbers.
 
 ## The target model, when it is picked up
 
@@ -46,11 +51,14 @@ the right being an assignee (or team) on the Job.
   is the one outcome this design rules out. A `has_permission` hook that
   discriminates on `ptype` is the shape that survives the constraint.
 - **One change, all the write endpoints at once.** They share a single
-  seam: every money write in `auraos/api.py` goes through
+  seam: all seven money-writing endpoints in `auraos/api.py` - the five
+  above plus the two founder-only ones - go through
   `_check_job_permission(job, "write")`, and nothing writes job money
   around it. That is where the gate belongs, and a per-endpoint patch on
   any one of them is the failure mode to avoid - a boundary with a hole in
-  it reads as a guarantee.
+  it reads as a guarantee. The claim is mechanically checkable: no
+  whitelisted endpoint that both writes a money doctype and names a job
+  reaches the write without that call.
 - Nothing is scheduled. This section is the brief, not a plan.
 
 ## Consequences

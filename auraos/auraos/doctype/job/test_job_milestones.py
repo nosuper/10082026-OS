@@ -211,6 +211,27 @@ class TestMilestonePlan(MilestoneTestCase):
                 job.name, [{"title": "Đặt cọc", "pct": 50, "trigger_stage": "Đi nhậu"}]
             )
 
+    def test_any_producer_may_replan_any_jobs_money_in(self):
+        """ADR-0003: the plan behind the flow is open too.
+
+        `set_milestone_status` walks a milestone along and
+        `save_job_milestones` decides what the milestones are - both
+        write a child table of Job, so both ride on Job write. A gate
+        that covered the flow and left the plan open would let a
+        stranger re-cut the shares instead of moving one along, which
+        is the larger of the two acts.
+        """
+        job = make_job()
+
+        frappe.set_user(OTHER_PRODUCER)
+        save_job_milestones(
+            job.name, [{"title": "Đặt cọc", "pct": 40, "trigger_stage": "Pre-production"}]
+        )
+
+        (row,) = job_milestones(job.name)["milestones"]
+        self.assertEqual(row["title"], "Đặt cọc")
+        self.assertEqual(row["pct"], 40)
+
     def test_the_producer_may_plan_the_money_in_too(self):
         """The producer runs the stages that make a payment due; the
         founder-only boundary is overhead and commission, not the
