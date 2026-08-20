@@ -28,6 +28,14 @@ test("the breakdown shows the seeded line and prices it on the server", async ({
   // So: the subtotal, and then that the priced columns exist and are not a
   // copy of it. Whether the engine's number is *correct* is lib/pricing's
   // question and it is answered by its own tests, not by a browser.
+  //
+  // **This literal is safe only while the seeded deal carries no
+  // contingency.** #69 put a reserve inside the cost, before the markup, and
+  // the seeded deal predates the field so it reads 0 - Frappe does not
+  // backfill a new field's default. Give that deal a contingency and this
+  // number moves, and it moves looking like a wrong figure rather than like a
+  // premise that expired. Written here, at the literal, because the feature
+  // that created the hazard is the thing that owes the warning.
   await expect(page.locator("body")).toContainText("8.000.000");
   const figures = await page
     .locator("tbody tr")
