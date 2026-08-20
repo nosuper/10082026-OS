@@ -2562,6 +2562,67 @@ def no_invoice_exposure():
 
 
 @frappe.whitelist()
+def backup_status():
+    """When a backup last proved itself, and whether that was lately.
+
+    Founder-only: it says how exposed the company is, which is the same
+    class of question as the tax position beside it.
+
+    **Answers absence, not failure** (#152). `scripts/backup.sh` already
+    logs and exits non-zero when a run goes wrong; the failure nobody
+    catches is the one that writes nothing at all - a cron never
+    installed, a container renamed, a host rebooted into a state where
+    the job quietly stopped. **A quiet month and a healthy month read
+    the same in a log nobody opens.** So a successful run writes a
+    marker into the site's own private directory and this reads its age.
+    Missing and stale get the same verdict because they mean the same
+    thing to whoever has to act.
+
+    **`recorded: false` is not "the backup failed".** It is "nothing has
+    said otherwise here", which is also what an older `backup.sh` that
+    does not yet write the marker looks like. The screen says that in
+    those words rather than raising an alarm it cannot support - a
+    monitor that cries wolf about a backup that is running is a monitor
+    the founder turns off.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may see the backup status"), frappe.PermissionError
+        )
+
+    path = frappe.get_site_path("private", "last-backup")
+    try:
+        with open(path, encoding="utf8") as marker:
+            recorded = marker.read().strip()
+    except OSError:
+        recorded = ""
+
+    if not recorded:
+        return {"recorded": False, "at": None, "age_hours": None, "stale": True}
+
+    # `<iso8601> <archive> <size>` - written by mark_success in one printf,
+    # so the shape is fixed at the only place that writes it.
+    parts = recorded.split()
+    at = parts[0] if parts else ""
+    when = frappe.utils.get_datetime(at) if at else None
+    if when is None:
+        return {"recorded": False, "at": None, "age_hours": None, "stale": True}
+
+    age = frappe.utils.now_datetime() - when
+    hours = int(age.total_seconds() // 3600)
+    return {
+        "recorded": True,
+        "at": reporting.iso(when),
+        "age_hours": hours,
+        # The same 26 hours the check script uses, and for the same
+        # reason: a nightly plus drift plus a slow run is still healthy.
+        "stale": hours > 26,
+        "archive": parts[1] if len(parts) > 1 else None,
+        "size": parts[2] if len(parts) > 2 else None,
+    }
+
+
+@frappe.whitelist()
 def period_tax_position(date_from, date_to):
     """What the company owes for a period, and what it cannot yet know.
 

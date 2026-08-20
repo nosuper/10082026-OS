@@ -131,6 +131,14 @@ type ExpenseResult = { name: string; amount: number; category: string | null };
  * income so that no screen can print it as money the studio has. The label here
  * is a courtesy; `weighted_projection` is the guarantee.
  */
+type BackupStatus = {
+  recorded: boolean;
+  at: string | null;
+  age_hours: number | null;
+  stale: boolean;
+  archive?: string | null;
+};
+
 type ForecastTile = {
   basis: string;
   weighted_projection: number;
@@ -208,6 +216,13 @@ function HomePage() {
   // hidden by the browser: the projection is the founder's own probability
   // dials multiplied by deal values a producer already knows, so handing it
   // over would hand the dials back by division.
+  // Founder-only for the same reason as the two above, and asked only of a
+  // founder so a producer's dashboard does not fire a guaranteed 403.
+  const backup = useMethod<BackupStatus>("auraos.api.backup_status", undefined, {
+    enabled: session.isFounder,
+    retry: false,
+  });
+
   const forecast = useMethod<ForecastTile>(
     "auraos.api.weighted_pipeline_forecast",
     { months: 6 },
@@ -424,6 +439,35 @@ function HomePage() {
           {/* Founder only, same reason as the card above: the server refuses
               the read. A producer records that the replacement invoice
               arrived; what it costs the company in tax is not theirs. */}
+          {/* One line, not a monitoring product (#152). The dashboard is the
+              only surface the founder already looks at, so it is where an
+              absence has a chance of being noticed - but a backup that is
+              running and simply not reporting looks identical to one that
+              is not running, so the copy says which of those it can and
+              cannot tell apart. A monitor that cries wolf about a healthy
+              backup is a monitor that gets turned off. */}
+          {session.isFounder ? (
+            <div className="rounded-xl border border-border bg-card px-4 py-2.5 text-xs text-muted-foreground">
+              {backup.data?.recorded ? (
+                <span className={backup.data.stale ? "text-ember" : undefined}>
+                  <strong className="font-medium text-foreground">Backup</strong>{" "}
+                  {backup.data.stale ? "last proved itself" : "proved itself"}{" "}
+                  {countLabel(backup.data.age_hours ?? 0, "hour")} ago
+                  {backup.data.stale ? " - nothing since" : ""}.
+                </span>
+              ) : (
+                <span>
+                  <strong className="font-medium text-foreground">
+                    No backup has reported in.
+                  </strong>{" "}
+                  Either none has run, or the copy of scripts/backup.sh on the server predates the
+                  one that records them - this cannot tell those apart, and says so rather than
+                  raising an alarm it could not support.
+                </span>
+              )}
+            </div>
+          ) : null}
+
           {session.isFounder ? (
             <Card title="No-invoice exposure" subtitle="Founder only">
               <div className="space-y-3 p-4">
