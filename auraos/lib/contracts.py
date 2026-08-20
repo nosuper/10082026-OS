@@ -106,6 +106,46 @@ def normalise_short_code(value: str) -> str:
     return re.sub(r"[^0-9A-Za-z]+", "", fold(value or "")).upper()
 
 
+# The kind that owns a job's contract number. BBNT and DNTT are written
+# about a contract rather than being one, so they carry the HDDV's
+# number instead of minting their own.
+CONTRACT_KIND = "HDDV"
+CHILD_KINDS = ("BBNT", "DNTT")
+
+
+def number_for(
+    kind: str,
+    signed_on: date,
+    short_code: str,
+    taken: Iterable[str] = (),
+    parent_number: str | None = None,
+) -> str | None:
+    """The number a paper of this kind carries, or None if it carries none.
+
+    Three answers, and the middle one is the reason this is a function
+    rather than a call to `contract_number`:
+
+    - **A contract mints its own.** HDDV, from date and partner.
+    - **A child paper inherits.** BBNT and DNTT are written *about* a
+      contract, so they repeat its number rather than deriving one that
+      would agree today and drift the moment either side changed. If the
+      parent has not been generated yet, this returns None rather than
+      minting one, because a delivery note quoting a contract number
+      that no contract carries is worse than one quoting none.
+    - **Everything else carries nothing.** Blank kind is a real state,
+      not an omission: the phụ lục is an attachment, and a number on it
+      would imply an agreement it does not contain.
+    """
+    kind = (kind or "").upper()
+    if not kind:
+        return None
+    if kind in CHILD_KINDS:
+        return parent_number or None
+    if kind != CONTRACT_KIND:
+        return None
+    return contract_number(kind, signed_on, short_code, taken)
+
+
 def contract_number(
     kind: str,
     signed_on: date,

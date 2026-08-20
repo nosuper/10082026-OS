@@ -11,6 +11,7 @@
   "column_break_head",
   "vendor",
   "freelancer",
+  "contract_number",
   "file_section",
   "file_name",
   "file_url",
@@ -65,6 +66,13 @@
    "fieldtype": "Link",
    "label": "Freelancer",
    "options": "Party Contact",
+   "read_only": 1
+  },
+  {
+   "description": "The number this paper was issued under. Written once at generation and never re-derived.",
+   "fieldname": "contract_number",
+   "fieldtype": "Data",
+   "label": "Contract Number",
    "read_only": 1
   },
   {

@@ -329,6 +329,7 @@ def document_values(
     vendor: Mapping[str, Any] | None = None,
     freelancer: Mapping[str, Any] | None = None,
     today: date | None = None,
+    contract_number: str | None = None,
 ) -> dict[str, str | None]:
     """Every placeholder a template may use, filled from plain records.
 
@@ -351,6 +352,12 @@ def document_values(
     """
     values: dict[str, str | None] = {}
     job = job or {}
+
+    # The number this paper is issued under (#139). Passed in rather
+    # than derived here: it is frozen on the Generated Paper at
+    # generation, and a template must print the number the record
+    # carries rather than the number the rule would produce now.
+    values["contract.number"] = _text(contract_number)
 
     for name, fieldname in JOB_FIELDS.items():
         values[f"job.{name}"] = _text(job.get(fieldname))

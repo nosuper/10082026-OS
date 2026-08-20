@@ -9,6 +9,7 @@ from auraos.lib.contracts import (
     contract_number,
     fold,
     normalise_short_code,
+    number_for,
     suggest_short_code,
 )
 
@@ -137,3 +138,45 @@ class TestContractNumber:
         except ValueError:
             return
         raise AssertionError("a missing short code must raise, not produce a stem")
+
+
+class TestNumberFor:
+    """Which papers mint a number, which inherit one, which carry none."""
+
+    def test_a_contract_mints_its_own(self):
+        assert (
+            number_for("HDDV", date(2026, 8, 20), "SUMO")
+            == "HDDV200826/AURA-SUMO"
+        )
+
+    def test_a_child_repeats_the_parent_rather_than_deriving(self):
+        # Same date and partner, so a re-derivation would agree today.
+        # It inherits anyway, because agreeing today is what two
+        # derivations always do until one of them changes.
+        parent = "HDDV200826/AURA-SUMO"
+        for kind in ("BBNT", "DNTT"):
+            assert (
+                number_for(kind, date(2026, 8, 20), "SUMO", parent_number=parent)
+                == parent
+            )
+
+    def test_a_child_inherits_the_parents_suffix_too(self):
+        parent = "HDDV200826/AURA-SUMO-2"
+        assert (
+            number_for("BBNT", date(2026, 8, 20), "SUMO", parent_number=parent)
+            == parent
+        )
+
+    def test_a_child_with_no_parent_carries_nothing_rather_than_minting(self):
+        # A delivery note quoting a contract number that no contract
+        # carries is worse than one quoting none.
+        assert number_for("BBNT", date(2026, 8, 20), "SUMO") is None
+
+    def test_a_blank_kind_carries_no_number(self):
+        # The phu luc is an attachment. A number on it would imply an
+        # agreement it does not contain.
+        assert number_for("", date(2026, 8, 20), "SUMO") is None
+        assert number_for(None, date(2026, 8, 20), "SUMO") is None
+
+    def test_an_unknown_kind_carries_nothing_rather_than_inventing(self):
+        assert number_for("XXXX", date(2026, 8, 20), "SUMO") is None

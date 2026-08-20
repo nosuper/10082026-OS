@@ -121,7 +121,7 @@ def party(doctype, name):
     return frappe.db.get_value(doctype, name, "*", as_dict=True)
 
 
-def values_for(job, vendor=None, freelancer=None):
+def values_for(job, vendor=None, freelancer=None, contract_number=None):
     """Everything a paper about this job may say - one builder, shared
     by the generated .docx and the on-screen preview so the two can
     never disagree about a value."""
@@ -132,6 +132,7 @@ def values_for(job, vendor=None, freelancer=None):
         vendor=party("Party Company", vendor),
         freelancer=party("Party Contact", freelancer),
         today=frappe.utils.getdate(),
+        contract_number=contract_number,
     )
 
 
@@ -236,7 +237,7 @@ def attach_draft(template_name, job_name, html):
     ).insert()
 
 
-def generate(template_name, job_name, vendor=None, freelancer=None):
+def generate(template_name, job_name, vendor=None, freelancer=None, contract_number=None):
     """Fill a template for a job and attach the result to that job.
 
     Returns the attached File alongside the report of what could not be
@@ -248,7 +249,10 @@ def generate(template_name, job_name, vendor=None, freelancer=None):
 
     filled = paperwork.fill_docx(
         content(template),
-        values_for(job, vendor=vendor, freelancer=freelancer),
+        values_for(
+            job, vendor=vendor, freelancer=freelancer,
+            contract_number=contract_number,
+        ),
     )
 
     document = frappe.get_doc(

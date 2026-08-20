@@ -64,6 +64,88 @@ DEAL_TABLE_FIELDS = [
 ]
 
 
+def _parent_contract_number(job):
+    """The number of this job's contract, for a paper written about it.
+
+    The most recent HDDV generated for the job. "Most recent" rather
+    than "the one", because a contract can be regenerated - a typo
+    fixed, a clause corrected - and the number the later paper should
+    quote is the one on the copy that was actually signed.
+    """
+    rows = frappe.get_all(
+        "Generated Paper",
+        filters={"job": job, "contract_number": ["is", "set"]},
+        fields=["contract_number", "creation"],
+        order_by="creation desc",
+    )
+    for row in rows:
+        if row.contract_number:
+            return row.contract_number
+    return None
+
+
+@frappe.whitelist()
+def propose_contract_number(job, template, signed_on):
+    """What this paper would be numbered, before anyone commits to it.
+
+    Offered to the generation dialog so the founder sees the number and
+    can correct it before it is printed. Nothing is written here - the
+    number is only fixed when the paper is generated.
+
+    Two absences are reported rather than papered over, because both
+    have a person as the fix and neither has a sensible default:
+    a client with no short code, and a child paper whose contract has
+    not been generated yet.
+    """
+    _check_job_permission(job, "read")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+
+    kind = frappe.db.get_value("Paperwork Template", template, "kind") or ""
+    if not kind:
+        return {"kind": "", "number": None, "needs": None}
+
+    company = frappe.db.get_value("Job", job, "company")
+    short_code = frappe.db.get_value("Party Company", company, "short_code") or ""
+
+    if kind in contracts.CHILD_KINDS:
+        parent = _parent_contract_number(job)
+        return {
+            "kind": kind,
+            "number": parent,
+            "needs": None if parent else "contract",
+        }
+
+    if not short_code:
+        return {"kind": kind, "number": None, "needs": "short_code"}
+
+    return {
+        "kind": kind,
+        "number": contracts.number_for(
+            kind,
+            frappe.utils.getdate(signed_on),
+            short_code,
+            taken=_numbers_taken(kind, frappe.utils.getdate(signed_on), short_code),
+        ),
+        "needs": None,
+    }
+
+
+def _numbers_taken(kind, signed_on, short_code):
+    """Numbers already issued that this one could collide with.
+
+    Read across every job rather than this one: two contracts with the
+    same partner on the same day collide whatever job they belong to,
+    and the number is the company's, not the job's.
+    """
+    stem = f"{kind.upper()}{signed_on.strftime('%d%m%y')}/AURA-"
+    rows = frappe.get_all(
+        "Generated Paper",
+        filters={"contract_number": ["like", f"{stem}%"]},
+        pluck="contract_number",
+    )
+    return [row for row in rows if row]
+
+
 @frappe.whitelist()
 def suggest_short_code(company_name):
     """The partner abbreviation proposed for a company name (#139).
@@ -1562,8 +1644,16 @@ def paperwork_library():
 
 
 @frappe.whitelist()
-def generate_job_paperwork(job, template, vendor=None, freelancer=None):
+def generate_job_paperwork(
+    job, template, vendor=None, freelancer=None, contract_number=None
+):
     """Fill a template for this job and attach the result to it.
+
+    `contract_number` is what the dialog showed and the founder
+    accepted or corrected, passed back rather than re-derived here.
+    Deriving it twice - once to show and once to store - is two
+    derivations of one fact, and they would agree until the moment
+    another paper took the suffix between the two calls.
 
     Write permission on the job, not read: generating leaves a document
     hanging off the job, and whoever may not change a job may not add
@@ -1577,13 +1667,17 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     _check_job_permission(job, "write")
     frappe.has_permission("Paperwork Template", "read", throw=True)
     document, filled = paperwork_template.generate(
-        template, job, vendor=vendor, freelancer=freelancer
+        template, job, vendor=vendor, freelancer=freelancer,
+        contract_number=contract_number,
     )
-    _register_paper(job, template, vendor, freelancer, document)
+    _register_paper(
+        job, template, vendor, freelancer, document, contract_number=contract_number
+    )
     return {
         "name": document.name,
         "file_name": document.file_name,
         "file_url": document.file_url,
+        "contract_number": contract_number or None,
         "missing": list(filled.missing),
         "unknown": list(filled.unknown),
     }
@@ -1667,10 +1761,20 @@ def job_paperwork(job):
     return rows
 
 
-def _register_paper(job, template, vendor, freelancer, document):
+def _register_paper(job, template, vendor, freelancer, document, contract_number=None):
     """The registry row (A5 round 2): every paper ever generated, in
     one place, with who it was for - the file alone hangs off its job
-    and is invisible from anywhere else."""
+    and is invisible from anywhere else.
+
+    **The contract number is frozen here and never re-derived** (#139).
+    What is written is what the caller confirmed in the dialog, not what
+    the rule would produce now: a number is an identity, and the inputs
+    behind it can all move afterwards. The client's short code can be
+    corrected, the template's `kind` can be changed, another contract
+    can take the next suffix. None of that may rename a paper that has
+    already been printed and signed. The field is read-only on the
+    doctype for the same reason.
+    """
     frappe.get_doc(
         {
             "doctype": "Generated Paper",
@@ -1681,6 +1785,7 @@ def _register_paper(job, template, vendor, freelancer, document):
             ),
             "vendor": vendor or None,
             "freelancer": freelancer or None,
+            "contract_number": contract_number or None,
             "file_name": document.file_name,
             "file_url": document.file_url,
         }
