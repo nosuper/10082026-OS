@@ -52,6 +52,7 @@ from auraos.lib.ledger import (
     balance,
     client_payment,
     collected,
+    company_expense,
     crew_advance,
     direction_of,
     entry_name,
@@ -133,13 +134,26 @@ def _origin(source_name):
 # -- the origin is a pair, and it names the entry --
 
 
-def test_every_flow_the_ledger_will_ever_carry_is_named_now():
-    """#100 posts the other three; widening a Select later is a migration."""
+def test_the_flows_the_ledger_carries_are_named_here():
+    """The vocabulary, pinned - and it has been widened once.
+
+    #99 named four before three of them posted, on the reasoning that
+    widening a Select afterwards is a migration. That reasoning held for
+    #100 and it was right; it did not hold forever. #14/#109 needed a
+    fifth, because the company pays for things that belong to no job and
+    the ledger had no way to say so.
+
+    This test is not here to freeze the list. It is here so that
+    widening it is a deliberate act with a failing test in front of it,
+    rather than something a later ticket does in passing - which is
+    exactly what happened here, and what should happen next time.
+    """
     assert FLOWS == (
         "Client payment",
         "Job expense",
         "Crew advance",
         "Float settlement",
+        "Company expense",
     )
     assert set(SOURCES) == set(FLOWS)
 
@@ -518,7 +532,7 @@ def test_a_settlement_reversed_takes_its_entry_back():
     assert posting(wanted=None, existing=closed(), moved=False) == UNPOST
 
 
-# -- the four flows in one account --
+# -- the flows in one account --
 
 
 def test_every_flow_writes_its_own_entry_for_the_same_record_name():
@@ -705,3 +719,53 @@ def test_the_direction_a_movement_reads_as_comes_off_its_own_sign():
     view = entry_view({**asdict(paid()), "name": "EXP-e1", "direction": IN})
 
     assert view["direction"] == OUT
+
+
+# -- the flow that has no job (#14/#109) --
+
+
+def test_an_overhead_posts_without_a_job():
+    """Rent belongs to the company, not to any shoot.
+
+    `Entry.job` was optional from the day it was written and nothing
+    used that until now. A company expense is the case it was left open
+    for - and a screen reading this entry must be able to show a
+    movement with no job rather than inventing one.
+    """
+    entry = company_expense(
+        {
+            "name": "CE-2026-00001",
+            "amount": 2_200_000,
+            "spent_on": date(2026, 8, 10),
+            "description": "Cơm khách",
+        },
+        "Bank",
+    )
+    assert entry.job is None
+    assert entry.flow == "Company expense"
+    assert entry.source_doctype == "Company Expense"
+
+
+def test_an_overhead_is_money_leaving():
+    """Signed, like every other payment out - the direction is not a
+    second opinion about the amount."""
+    entry = company_expense(
+        {"name": "CE-1", "amount": 2_200_000, "spent_on": date(2026, 8, 10)}, "Bank"
+    )
+    assert entry.amount == -2_200_000
+
+
+def test_an_overhead_always_posts_where_a_job_expense_sometimes_does_not():
+    """A job expense asks `paid_by_company` first, because a producer
+    spending their float moves no company money that day. An overhead has
+    no float to come out of, so there is no case here that posts nothing
+    - only the case where nobody has named an account."""
+    paid = {"name": "CE-1", "amount": 500_000, "spent_on": date(2026, 8, 10)}
+    assert company_expense(paid, "Bank") is not None
+    assert company_expense(paid, None) is None
+
+
+def test_an_overhead_and_a_job_expense_with_one_name_do_not_collide():
+    """Two doctypes number their own rows, so the flow code is what keeps
+    their entries apart on a primary key."""
+    assert entry_name("Company expense", "0001") != entry_name("Job expense", "0001")

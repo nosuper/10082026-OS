@@ -14,7 +14,7 @@ from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement
+from auraos.lib import breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax
 from auraos.lib import reporting
 # Imported by name: `milestones` is a parameter of save_job_milestones.
 from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
@@ -2539,6 +2539,113 @@ def no_invoice_exposure():
             )
         }
     return exposure.exposure_report(exposure.exposure_rows(expenses, lines, jobs=jobs))
+
+
+@frappe.whitelist()
+def period_tax_position(date_from, date_to):
+    """What the company owes for a period, and what it cannot yet know.
+
+    Founder-only and refused outright, behind the same boundary as the
+    profit chain and the exposure tile - `reporting.py` names VAT
+    payable and TNDN as the founder's, and `finance.reports.tsx` is
+    documented as producer-safe by construction, which is a promise in
+    the walkthrough guidebook rather than a preference.
+
+    **This returns half a tax position on purpose.** VAT is here; TNDN
+    for the period is not, and `auraos.lib.tax` carries the reason:
+    every expense in AuraOS belongs to a job, so a TNDN figure computed
+    from these tables omits every overhead and overstates the tax. The
+    gap travels in the payload as `not_computed`, because a screen that
+    has to invent the words for an absence is the one most likely to
+    get them wrong.
+
+    **Dated by the invoice, not by the money.** Output VAT falls due
+    when the invoice is issued, so this is the one figure in Finance
+    that is not on the cash basis the rest of these screens announce -
+    and `basis` says so in the payload so the tile can say so on its
+    face. A reader who tries to reconcile this against Income should be
+    told why it will not match before they try.
+
+    **Every job, because tax is not scoped to what a session may list.**
+    The founder is the only caller, and a return covers the company.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may see the period tax position"),
+            frappe.PermissionError,
+        )
+    start, end = _finance_range(date_from, date_to)
+
+    jobs = dict(
+        frappe.get_all("Job", fields=["name", "title"], as_list=True, limit_page_length=0)
+    )
+    rows = []
+    if jobs:
+        rows = frappe.get_all(
+            "Job Payment Milestone",
+            filters={
+                "parenttype": "Job",
+                "parent": ["in", list(jobs)],
+                # Filtered here for the query's sake and applied again in
+                # the module, which owns the boundary. Two statements of
+                # one rule is the drift shape - but the module's is the
+                # one that decides, and this only avoids reading every
+                # milestone the company has ever had.
+                "invoiced_on": ["between", [start, end]],
+            },
+            fields=[
+                "name", "parent", "title", "amount",
+                "invoiced_on", "invoice_no", "invoice_vat_pct",
+            ],
+            order_by="invoiced_on asc",
+            limit_page_length=0,
+        )
+        for row in rows:
+            row["job_title"] = jobs.get(row.parent)
+
+    vat = tax.output_vat(tax.invoiced_rows(rows, start, end))
+
+    # The company's own upkeep. **Two blocks come out of these rows and
+    # they are decided by different dates** - what was paid is dated by
+    # the day the money left, the VAT on it by the day the invoice was
+    # issued - so the query asks for either date in the window and the
+    # module applies its own boundary to each. A single SQL filter would
+    # have to pick one and would silently shorten the other block.
+    overhead_rows = frappe.get_all(
+        "Company Expense",
+        or_filters={
+            "spent_on": ["between", [start, end]],
+            "invoice_date": ["between", [start, end]],
+        },
+        fields=[
+            "name", "spent_on", "amount", "category", "description",
+            "for_depreciation", "invoice_no", "invoice_date",
+            "invoice_vat_amount", "supplier",
+        ],
+        order_by="spent_on asc",
+        limit_page_length=0,
+    )
+
+    # The standing exposure, through the endpoint that owns it rather
+    # than by repeating its query here - one place computes it, and #123
+    # is what happens when a second place computes it differently. The
+    # headline only: the full payload carries a line per uncovered
+    # expense, which belongs on the exposure tile and not in a tax
+    # summary.
+    standing = no_invoice_exposure()
+    component = {
+        key: standing[key]
+        for key in (
+            "basis", "rate_pct", "uncovered_total", "tndn_exposure",
+            "uncovered_count", "stated_total", "unattributed_total",
+        )
+    }
+    return tax.position(
+        vat,
+        component,
+        overhead=tax.overheads(overhead_rows, start, end),
+        inputs=tax.input_vat(overhead_rows, start, end),
+    )
 
 
 # -- what the pipeline is worth in the months ahead (#102) --
