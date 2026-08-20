@@ -105,63 +105,53 @@ def _parent_contract_number(job):
     return None
 
 
-def _settlement_table(job_doc, adjustments=None, extras=None):
+def _acceptance_table(job_doc, settled=None):
     """The acceptance document's figures for this job (#153).
 
-    **quote_price, never cost_basis.** A Deal Cost Line carries both:
-    what the client is charged and what the work costs us. This document
-    states what the client owes, and the cost column is the one the
-    permlevel system keeps off client-facing screens. Reading the wrong
-    field would demand the wrong amount and print our margin.
-    """
-    lines = [
-        {
-            "name": row.name,
-            "description": row.description,
-            "amount": row.get("quote_price"),
-        }
-        for row in job_doc.get("cost_lines") or []
-    ]
-    rows = acceptance.settled_lines(lines, adjustments)
-    rows += acceptance.added_lines(extras)
+    `settled` is what the founder typed at generation - the band totals
+    as agreed at acceptance. Not derived: they told us "cứ để tôi chỉnh
+    sửa ... rồi nhập lại số là xong", so the numbers are theirs and the
+    arithmetic between them is ours.
 
+    Contracted comes from the job's own quote. Collected comes from the
+    milestones actually paid, split at the rate each was invoiced at.
+    """
+    settled = settled or {}
     paid = [
         {"amount": m.get("amount"), "vat_pct": m.get("invoice_vat_pct")}
         for m in job_doc.get("payment_milestones") or []
         if m.get("status") == "Paid" and m.get("paid_on")
     ]
     collected = acceptance.collected_bands(paid)
-
-    vat_pct = job_doc.get("vat_pct")
-    band_totals = acceptance.band_from_lines(rows, collected.get("pre_vat"))
-    table = {
-        "pre_vat": band_totals,
-        "vat": acceptance.band(
-            job_doc.get("quote_vat_amount"),
-            _vat_on(band_totals["settled"], vat_pct),
-            collected.get("vat"),
-        ),
-        "total": acceptance.band(
-            job_doc.get("quote_total"),
-            _with_vat(band_totals["settled"], vat_pct),
-            collected.get("total"),
-        ),
+    contracted = {
+        "pre_vat": job_doc.get("quote_subtotal"),
+        "vat": job_doc.get("quote_vat_amount"),
+        "total": job_doc.get("quote_total"),
     }
-    return {"lines": rows, "table": table}
+    return acceptance.summary(contracted, settled, collected)
 
 
-def _vat_on(amount, pct):
-    """VAT on a settled figure, or nothing if either is unknown."""
-    if amount is None or pct is None:
-        return None
-    from decimal import Decimal
+@frappe.whitelist()
+def job_acceptance_figures(job):
+    """What the acceptance dialog pre-fills its inputs with.
 
-    return amount * Decimal(str(pct)) / 100
+    Settled is offered as the contracted figure, which is the founder's
+    normal case - "giá trị thanh lý thông thường sẽ là giá trị hợp
+    đồng". They overwrite whichever differ.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    table = _acceptance_table(doc, settled=None)
+    return {
+        "contracted": {k: _plain(v["contracted"]) for k, v in table.items()},
+        "collected": {k: _plain(v["collected"]) for k, v in table.items()},
+        "refusals": list(acceptance.refusals(table)),
+    }
 
 
-def _with_vat(amount, pct):
-    vat = _vat_on(amount, pct)
-    return None if vat is None else amount + vat
+def _plain(value):
+    """A Decimal as a number the browser can hold, or None."""
+    return None if value is None else float(value)
 
 
 @frappe.whitelist()
@@ -1757,7 +1747,7 @@ def paperwork_library():
 @frappe.whitelist()
 def generate_job_paperwork(
     job, template, vendor=None, freelancer=None, contract_number=None, terms=None,
-    parent_number=None,
+    parent_number=None, settled=None,
 ):
     """Fill a template for this job and attach the result to it.
 
@@ -1782,6 +1772,11 @@ def generate_job_paperwork(
         template, job, vendor=vendor, freelancer=freelancer,
         contract_number=contract_number, terms=_terms(terms),
         parent_number=parent_number,
+        acceptance_table=(
+            _acceptance_table(frappe.get_doc("Job", job), _terms(settled))
+            if settled
+            else None
+        ),
     )
     _register_paper(
         job, template, vendor, freelancer, document, contract_number=contract_number

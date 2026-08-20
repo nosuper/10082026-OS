@@ -7,15 +7,7 @@ demand for money on a document somebody signs.
 
 from decimal import Decimal
 
-from auraos.lib.acceptance import (
-    BANDS,
-    added_lines,
-    band,
-    band_from_lines,
-    refusals,
-    settled_lines,
-    summary,
-)
+from auraos.lib.acceptance import BANDS, band, collected_bands, refusals, summary
 
 
 class TestOneBand:
@@ -144,66 +136,39 @@ def self_complete():
     )
 
 
-LINES = [
-    {"name": "L1", "description": "Quay", "amount": 6_000_000},
-    {"name": "L2", "description": "Dựng", "amount": 4_000_000},
-]
+class TestCollectedBands:
+    """What the client has paid, split at the rate each payment carried."""
 
+    def test_a_payment_splits_at_its_own_recorded_rate(self):
+        out = collected_bands([{"amount": 5_400_000, "vat_pct": 8}])
+        assert out["pre_vat"] == 5_000_000
+        assert out["vat"] == 400_000
+        assert out["total"] == 5_400_000
 
-class TestSettledPerLine:
-    """The founder's rule: settled defaults to contracted, per line."""
-
-    def test_the_normal_case_touches_nothing_and_says_no_change(self):
-        rows = settled_lines(LINES)
-        assert [r["settled"] for r in rows] == [6_000_000, 4_000_000]
-        assert [r["difference"] for r in rows] == [0, 0]
-
-    def test_tru_bot_a_line_not_performed_settles_at_zero(self):
-        # Zero here is a statement - "this was not delivered" - and must
-        # be given as one rather than left absent.
-        rows = settled_lines(LINES, {"L2": 0})
-        assert rows[1]["settled"] == 0
-        assert rows[1]["difference"] == -4_000_000
-
-    def test_a_reduced_line_carries_its_own_delta(self):
-        rows = settled_lines(LINES, {"L1": 5_000_000})
-        assert rows[0]["difference"] == -1_000_000
-        assert rows[1]["difference"] == 0
-
-    def test_an_untouched_line_is_not_affected_by_a_neighbour(self):
-        rows = settled_lines(LINES, {"L1": 0})
-        assert rows[1]["settled"] == 4_000_000
-
-
-class TestPhatSinh:
-    def test_an_added_line_has_no_contracted_value(self):
-        # None, not zero: a zero would say "agreed at no charge", and
-        # the difference column would read identically for both.
-        rows = added_lines([{"description": "MC overrun", "amount": 1_500_000}])
-        assert rows[0]["contracted"] is None
-        assert rows[0]["difference"] == 1_500_000
-        assert rows[0]["added"] is True
-
-
-class TestBandFromLines:
-    def test_it_totals_the_lines(self):
-        rows = settled_lines(LINES)
-        assert band_from_lines(rows, collected=0)["settled"] == 10_000_000
-
-    def test_added_lines_raise_the_settled_total_only(self):
-        rows = settled_lines(LINES) + added_lines(
-            [{"description": "MC", "amount": 1_500_000}]
+    def test_payments_at_different_rates_are_not_re_split_at_one(self):
+        # A milestone billed at 8% before a rate change was collected at
+        # 8%. Re-splitting it at today's rate moves money between the
+        # bands of a document about the past.
+        out = collected_bands(
+            [{"amount": 5_400_000, "vat_pct": 8}, {"amount": 5_500_000, "vat_pct": 10}]
         )
-        out = band_from_lines(rows, collected=0)
-        assert out["contracted"] == 10_000_000
-        assert out["settled"] == 11_500_000
-        assert out["difference"] == 1_500_000
+        assert out["total"] == 10_900_000
+        assert out["pre_vat"] == 10_000_000
 
-    def test_a_band_with_one_unreadable_line_states_nothing(self):
-        # Summing the readable ones and printing it as a total is a
-        # figure short by exactly what is missing, and it looks complete.
-        rows = settled_lines(LINES, {"L2": "abc"})
-        assert band_from_lines(rows, collected=0)["settled"] is None
+    def test_a_payment_with_no_recorded_rate_refuses_the_split_only(self):
+        # We know what arrived; we do not know how it divides. The total
+        # stays true and the bands say nothing.
+        out = collected_bands([{"amount": 5_400_000}])
+        assert out["total"] == 5_400_000
+        assert out["pre_vat"] is None
+        assert out["vat"] is None
 
-    def test_no_lines_at_all_states_nothing(self):
-        assert band_from_lines([], collected=0)["settled"] is None
+    def test_one_unreadable_payment_makes_the_whole_total_unknown(self):
+        # A total missing one of its parts is not a total.
+        out = collected_bands([{"amount": 5_400_000, "vat_pct": 8}, {"amount": "abc"}])
+        assert out["total"] is None
+
+    def test_nothing_collected_is_zero_not_unknown(self):
+        out = collected_bands([])
+        assert out["total"] == 0
+        assert out["pre_vat"] == 0

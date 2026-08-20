@@ -132,93 +132,15 @@ def refusals(table: Mapping[str, Mapping[str, Any]]) -> tuple[str, ...]:
     return tuple(missing)
 
 
-# -- per line, which is where a settlement actually happens (#153) -----------
-
-def settled_lines(lines, adjustments=None):
-    """The contract's lines with their settled values, one row each.
-
-    The founder's rule: "giá trị thanh lý thông thường sẽ là giá trị
-    hợp đồng" - normally the settled value IS the contract value, and
-    the exceptions are *phát sinh* (work added during the job) and
-    *trừ bớt* (items reduced or not performed).
-
-    So settled defaults to contracted per line, and only the rows that
-    actually moved are stated. An added row has no contracted value and
-    is all difference; a dropped row settles at zero, which is a
-    statement rather than an absence and must be given as one.
-
-    **The default is a claim, not an absence, and that is the one
-    dangerous thing here.** Everywhere else in this module an unstated
-    figure refuses. Here an unstated line asserts "this was delivered as
-    agreed" - which is usually true and is what makes the normal case
-    free, but it means a reduction nobody recorded prints as a full
-    charge rather than as a gap. The protection is not in this function:
-    it is that a person sees every line before the document is made.
-    """
-    rows = []
-    moved = {str(k): v for k, v in (adjustments or {}).items()}
-    for line in lines or []:
-        key = str(line.get("name") or line.get("description") or "")
-        contracted = _amount(line.get("amount"))
-        settled = _amount(moved[key]) if key in moved else contracted
-        rows.append(
-            {
-                "description": line.get("description"),
-                "contracted": contracted,
-                "settled": settled,
-                "difference": (
-                    settled - contracted
-                    if settled is not None and contracted is not None
-                    else None
-                ),
-                "added": False,
-            }
-        )
-    return rows
-
-
-def added_lines(extras):
-    """Phát sinh - work that was not in the contract at all.
-
-    Contracted is None rather than zero, deliberately: a zero would say
-    "this was agreed at no charge", and the difference column would read
-    the same for both. None says nobody agreed it in advance, which is
-    what phát sinh means and what the client is being asked to accept.
-    """
-    rows = []
-    for extra in extras or []:
-        settled = _amount(extra.get("amount"))
-        rows.append(
-            {
-                "description": extra.get("description"),
-                "contracted": None,
-                "settled": settled,
-                "difference": settled,
-                "added": True,
-            }
-        )
-    return rows
-
-
-def band_from_lines(rows, collected=None):
-    """One band totalled from its lines - and only if every line speaks.
-
-    A band whose lines are partly unknown is not the sum of the ones
-    that are. Summing what is available and printing it as a total is
-    the same defect as deriving the total row from pre-VAT and VAT: a
-    figure short by exactly what is missing, indistinguishable from a
-    complete one.
-    """
-    rows = list(rows or [])
-    if not rows:
-        return band(None, None, collected)
-    settled = [r["settled"] for r in rows]
-    contracted = [r["contracted"] for r in rows if not r["added"]]
-    return band(
-        sum(contracted) if all(v is not None for v in contracted) else None,
-        sum(settled) if all(v is not None for v in settled) else None,
-        collected,
-    )
+# Per-line settlement - settled_lines, added_lines, band_from_lines -
+# lived here until the founder simplified #153: "cứ để tôi chỉnh sửa
+# phần nghiệm thu này ... rồi nhập lại số là xong - không cần automation
+# những phần này". They type the band figures by hand, so nothing calls
+# per-line arithmetic and keeping it would advertise a feature that was
+# declined rather than one that is coming.
+#
+# The implementation and its 9 tests are complete and correct at
+# fc834cb, one `git show` away, if per-line adjustment is ever wanted.
 
 
 def collected_bands(payments):
