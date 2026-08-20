@@ -73,6 +73,23 @@ FLOAT_SETTLEMENT = "Float settlement"  # a float closed, either way
 # other flow carries a job; this is the one that does not, which is why
 # `Entry.job` was optional from the day it was written.
 COMPANY_EXPENSE = "Company expense"  # the company paid for its own upkeep
+# The sixth and seventh, and they are **one concept deliberately spelled
+# as two words** (#151). Money moved from the bank into the company's own
+# cash box is one act, and every other flow in this list is one entry -
+# but a movement between two of our accounts has to touch both, and
+# `entry_name` is `{code}-{source}`: two entries from one record would
+# collide on the ledger's primary key, which is the guarantee that
+# posting the same movement twice is a duplicate key rather than a second
+# row. Widening that key's shape for every flow to serve one would put
+# the race guarantee on a component only this flow ever varies.
+#
+# **So do not tidy these into one.** Two flows cost nothing structural -
+# `sync`, `posting` and `entry_name` are untouched, each side being an
+# ordinary movement - and they read honestly per account, which is the
+# point: the bank's list says money left, the cash box's says money
+# arrived, and that is what each account saw.
+TRANSFER_OUT = "Transfer out"  # left one of our accounts for another
+TRANSFER_IN = "Transfer in"  # arrived in another of ours
 
 FLOWS = (
     CLIENT_PAYMENT,
@@ -80,6 +97,8 @@ FLOWS = (
     CREW_ADVANCE,
     FLOAT_SETTLEMENT,
     COMPANY_EXPENSE,
+    TRANSFER_OUT,
+    TRANSFER_IN,
 )
 
 # Where each flow comes from. One doctype per flow today; the pair on the
@@ -90,6 +109,9 @@ SOURCES = {
     CREW_ADVANCE: "Job Advance",
     FLOAT_SETTLEMENT: "Job Settlement",
     COMPANY_EXPENSE: "Company Expense",
+    # One record, both sides - which is the whole of the pairing rule.
+    TRANSFER_OUT: "Cash Transfer",
+    TRANSFER_IN: "Cash Transfer",
 }
 
 # The prefix that opens an entry's name. The name of an entry is its
@@ -103,6 +125,10 @@ FLOW_CODES = {
     # sharing a code would let a Job Expense and a Company Expense with
     # the same record name collide on the ledger's primary key.
     COMPANY_EXPENSE: "OVH",
+    # Distinct codes are what let one Cash Transfer own two entries
+    # without colliding on the ledger's primary key.
+    TRANSFER_OUT: "TFO",
+    TRANSFER_IN: "TFI",
 }
 
 # What reconciling one movement asks the caller to do.
@@ -293,6 +319,78 @@ def paid_by_company(expense: Mapping[str, Any]) -> bool:
         expense.get("paid_from") == FROM_COMPANY
         and as_date(expense.get("spent_on"))
         and round_vnd(expense.get("amount") or 0)
+    )
+
+
+def moved_between_accounts(record: Mapping[str, Any]) -> bool:
+    """Whether this record describes money that actually moved.
+
+    Not `transferred`: that name is taken, by the predicate that says
+    whether a *crew advance* has been handed over. Two money movements in
+    one module can both be "transferred" in English and must not be in
+    Python - I wrote this as `transferred` first and Python quietly kept
+    the older one, so every transfer refused to post and every clause of
+    this function was true when tested on its own.
+
+    Two named accounts, a day, and an amount. Unlike every other flow
+    there is no default to fall back on: a transfer says where the money
+    came from and where it went, and a transfer missing either end is not
+    a transfer with an unknown account - it is an unfinished record.
+    """
+    return bool(
+        record.get("from_account")
+        and record.get("to_account")
+        and record.get("from_account") != record.get("to_account")
+        and as_date(record.get("moved_on"))
+        and round_vnd(record.get("amount") or 0) > 0
+    )
+
+
+def transfer(record: Mapping[str, Any]) -> tuple[Entry, Entry] | None:
+    """The pair of entries one movement between our own accounts earns.
+
+    **Both or neither, and they are exact negatives.** That is the whole
+    invariant: a transfer moves money inside the company, so the company
+    holds exactly what it held before and only the split between two
+    accounts changed. A pair that comes apart is the failure this design
+    has to make impossible - one side posted alone either invents money
+    or loses it in transit, and the arithmetic would look sound from
+    every screen that reads one account at a time.
+
+    Returned as a tuple rather than posted here, because posting is the
+    caller's transaction and this module knows nothing about saves. The
+    two entries carry the same day and the same source record, and differ
+    in account, sign and flow.
+
+    No job: money moving between our own pockets belongs to no shoot,
+    which is why `Entry.job` was optional from the day it was written.
+    """
+    if not moved_between_accounts(record):
+        return None
+    amount = round_vnd(record.get("amount") or 0)
+    day = as_date(record.get("moved_on"))
+    said = record.get("note")
+    return (
+        Entry(
+            account=record.get("from_account"),
+            amount=-amount,
+            entry_date=day,
+            flow=TRANSFER_OUT,
+            source_doctype=SOURCES[TRANSFER_OUT],
+            source_name=record.get("name"),
+            job=None,
+            description=said or f"To {record.get('to_account')}",
+        ),
+        Entry(
+            account=record.get("to_account"),
+            amount=amount,
+            entry_date=day,
+            flow=TRANSFER_IN,
+            source_doctype=SOURCES[TRANSFER_IN],
+            source_name=record.get("name"),
+            job=None,
+            description=said or f"From {record.get('from_account')}",
+        ),
     )
 
 
