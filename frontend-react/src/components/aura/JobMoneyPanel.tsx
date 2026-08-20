@@ -488,9 +488,18 @@ export function JobMoneyPanel({ job }: { job: string }) {
                     draft?.name === row.name ? (
                       <tr key={`${row.name}-edit`} className="bg-secondary/40">
                         <Td colSpan={6}>
+                          {/* Every control here is labelled "Corrected ..." so
+                              that no label in this tab is ambiguous. The Money
+                              tab holds the milestone plan as well, whose own
+                              invoice field is labelled "Invoice number", and it
+                              holds the log-expense form, whose fields are
+                              "Expense amount" and "Expense category". A spec
+                              asking this panel for a label has to get one
+                              element, and the tabs are hidden rather than
+                              unmounted, so everything is in the DOM at once. */}
                           <div className="flex flex-wrap items-center gap-2">
                             <input
-                              aria-label="Expense amount"
+                              aria-label="Corrected amount"
                               inputMode="numeric"
                               // Grouped as it is typed, the way the log form
                               // does it, so one field does not read as digits
@@ -502,7 +511,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
                               className="num w-28 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong"
                             />
                             <select
-                              aria-label="Expense category"
+                              aria-label="Corrected category"
                               value={draft.category}
                               onChange={(event) =>
                                 setDraft({ ...draft, category: event.target.value })
@@ -517,7 +526,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
                               ))}
                             </select>
                             <input
-                              aria-label="Expense description"
+                              aria-label="Corrected description"
                               value={draft.description}
                               onChange={(event) =>
                                 setDraft({ ...draft, description: event.target.value })
@@ -531,7 +540,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
                                 the other way. Neither was reachable before
                                 #125, which is why the tile could only rise. */}
                             <select
-                              aria-label="Quoted line"
+                              aria-label="Corrected quoted line"
                               value={draft.cost_line}
                               onChange={(event) =>
                                 setDraft({ ...draft, cost_line: event.target.value })
@@ -547,7 +556,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
                               ))}
                             </select>
                             <input
-                              aria-label="Invoice number"
+                              aria-label="Corrected invoice number"
                               placeholder="Invoice number"
                               value={draft.invoice_no}
                               onChange={(event) =>
