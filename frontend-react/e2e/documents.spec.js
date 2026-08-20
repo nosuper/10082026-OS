@@ -379,3 +379,148 @@ producerTest("a producer reads both tabs and is offered no way to write", async 
 
   expect(failures).toEqual([]);
 });
+
+// -- a document has an address of its own (#124) --
+//
+// The founder's complaint was that sending someone a link landed them on the
+// tab rather than on the document. So the subject of every test below is the
+// **URL**, and the trap they are written against is that a screen driven by
+// local state passes almost all of them: opening a document from the list
+// looks identical whether or not the address bar learned anything.
+//
+// Which is why the fourth one is the load-bearing test. The builder said so
+// themselves, and they are right - it is the only one that fails if the
+// navigation is wired to the wrong place while every other assertion still
+// passes on local state.
+//
+// **Not asserted here, deliberately: that a deep link discriminates per
+// record.** `library_document_detail` opens with a doctype-level
+// `has_permission`, which answers "may this person read Library Documents"
+// and not "may they read this one" - correct today, because any reader may
+// read any of them, and the route file says so where the exposure is. A spec
+// that asserted per-record refusal would be describing a product we do not
+// have, which is #143's lesson one ticket over.
+
+/** The stored name behind a title. The URL carries the name, and only the
+ *  server knows it - Frappe mints it, and no fixture may hardcode it. */
+async function libraryName(page, title) {
+  const answer = await callAs(page, LIBRARY);
+  expect(answer.status, `the library was refused: ${JSON.stringify(answer.body)}`).toBe(200);
+  const row = (answer.body.message?.documents ?? []).find((one) => one.title === title);
+  expect(row, `no library document titled ${JSON.stringify(title)}`).toBeTruthy();
+  return row.name;
+}
+
+const documentWindow = (page, name) => page.getByRole("dialog", { name });
+
+test("a link to a document opens that document, not the list it lives in", async ({ page }) => {
+  await openTab(page, LIBRARY_URL, "Library");
+  const name = await libraryName(page, SOP);
+
+  // A cold load at the address, the way a recipient of the link arrives -
+  // rather than navigating there from a page that already had the document in
+  // hand. The distinction is the whole ticket.
+  await page.goto(`${LIBRARY_URL}/${name}`);
+
+  await expect(documentWindow(page, SOP)).toBeVisible();
+  await expect(documentWindow(page, SOP).locator(".aura-rich table")).toHaveCount(1);
+});
+
+test("refreshing a document's address reopens the same document", async ({ page }) => {
+  await openTab(page, LIBRARY_URL, "Library");
+  const name = await libraryName(page, SOP);
+  await page.goto(`${LIBRARY_URL}/${name}`);
+  await expect(documentWindow(page, SOP)).toBeVisible();
+
+  await page.reload();
+
+  // The same document, and the address unchanged - a reload that dropped the
+  // param would still show *a* library and would fail here rather than
+  // quietly landing on the list.
+  await expect(documentWindow(page, SOP)).toBeVisible();
+  expect(page.url()).toContain(`/documents/library/${name}`);
+});
+
+// The load-bearing one. Everything else in this section could pass against a
+// screen that opens documents from local state and never touches the address.
+test("opening a document from the list moves the address bar", async ({ page }) => {
+  await openTab(page, LIBRARY_URL, "Library");
+  const name = await libraryName(page, SOP);
+  expect(page.url()).not.toContain(name);
+
+  await page.getByRole("button", { name: SOP }).first().click();
+
+  await expect(documentWindow(page, SOP)).toBeVisible();
+  // Polled rather than read once: the window is drawn from the same navigation
+  // that writes the address, and asserting the URL the instant the dialog
+  // appears would be a race rather than a claim.
+  await expect
+    .poll(() => new URL(page.url()).pathname)
+    .toBe(`/aura-next/documents/library/${name}`);
+});
+
+test("going back closes the document and leaves the list as it was", async ({ page }) => {
+  await openTab(page, LIBRARY_URL, "Library");
+  const name = await libraryName(page, SOP);
+
+  // A search first, because "returns to the list" is a weak claim if the list
+  // it returns to has forgotten what the reader had done to it. The term is a
+  // fragment of the seeded SOP's own title, so it matches on any site that has
+  // the patch and needs no fixture of its own.
+  const search = page.getByLabel("Search the library");
+  await search.fill("phân loại");
+  const shown = await page.getByRole("button", { name: SOP }).count();
+  expect(shown, "the search matched nothing, so this test asserts nothing").toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: SOP }).first().click();
+  await expect(documentWindow(page, SOP)).toBeVisible();
+
+  await page.goBack();
+
+  await expect(documentWindow(page, SOP)).toHaveCount(0);
+  expect(new URL(page.url()).pathname).toBe("/aura-next/documents/library");
+  // The state the list route holds, still held: the child route renders
+  // nothing and the list never unmounted, which is what makes back cheap.
+  await expect(search).toHaveValue("phân loại");
+  expect(await page.getByRole("button", { name: SOP }).count()).toBe(shown);
+});
+
+test("an address that names no document says so inside the window", async ({ page }) => {
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+
+  // The shape a stale or mistyped link arrives in. It must not be a blank
+  // dialog and must not be a crash: the window opens on the fallback title and
+  // the query's failure renders where the document would have been.
+  await page.goto(`${LIBRARY_URL}/NOT-A-DOCUMENT-0000`);
+
+  const window = documentWindow(page, "Document");
+  await expect(window).toBeVisible();
+  await expect(window.getByRole("alert")).toBeVisible();
+  // An empty dialog would satisfy "no document is shown" just as well, so the
+  // assertion is that something was said.
+  expect(
+    String((await window.getByRole("alert").textContent()) ?? "").trim().length,
+  ).toBeGreaterThan(0);
+  expect(failures).toEqual([]);
+});
+
+producerTest(
+  "a producer reads a linked document and is offered no way to edit it",
+  async ({ page }) => {
+    await openTab(page, LIBRARY_URL, "Library");
+    const name = await libraryName(page, SOP);
+
+    await page.goto(`${LIBRARY_URL}/${name}`);
+    const window = documentWindow(page, SOP);
+    await expect(window).toBeVisible();
+
+    // The link is not a bypass: the same server check answers whatever route
+    // reached it. Read is allowed - a producer may read the SOP - and writing is
+    // the founder's, decided by the server rather than by the screen.
+    await expect(window.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+    const index = await callAs(page, LIBRARY);
+    expect(index.status).toBe(200);
+    expect(index.body.message.can_manage).toBe(false);
+  },
+);
