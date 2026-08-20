@@ -7,7 +7,15 @@ demand for money on a document somebody signs.
 
 from decimal import Decimal
 
-from auraos.lib.settlement import BANDS, band, refusals, summary
+from auraos.lib.settlement import (
+    BANDS,
+    added_lines,
+    band,
+    band_from_lines,
+    refusals,
+    settled_lines,
+    summary,
+)
 
 
 class TestOneBand:
@@ -134,3 +142,68 @@ def self_complete():
         settled={name: 1 for name in BANDS},
         collected={name: 0 for name in BANDS},
     )
+
+
+LINES = [
+    {"name": "L1", "description": "Quay", "amount": 6_000_000},
+    {"name": "L2", "description": "Dựng", "amount": 4_000_000},
+]
+
+
+class TestSettledPerLine:
+    """The founder's rule: settled defaults to contracted, per line."""
+
+    def test_the_normal_case_touches_nothing_and_says_no_change(self):
+        rows = settled_lines(LINES)
+        assert [r["settled"] for r in rows] == [6_000_000, 4_000_000]
+        assert [r["difference"] for r in rows] == [0, 0]
+
+    def test_tru_bot_a_line_not_performed_settles_at_zero(self):
+        # Zero here is a statement - "this was not delivered" - and must
+        # be given as one rather than left absent.
+        rows = settled_lines(LINES, {"L2": 0})
+        assert rows[1]["settled"] == 0
+        assert rows[1]["difference"] == -4_000_000
+
+    def test_a_reduced_line_carries_its_own_delta(self):
+        rows = settled_lines(LINES, {"L1": 5_000_000})
+        assert rows[0]["difference"] == -1_000_000
+        assert rows[1]["difference"] == 0
+
+    def test_an_untouched_line_is_not_affected_by_a_neighbour(self):
+        rows = settled_lines(LINES, {"L1": 0})
+        assert rows[1]["settled"] == 4_000_000
+
+
+class TestPhatSinh:
+    def test_an_added_line_has_no_contracted_value(self):
+        # None, not zero: a zero would say "agreed at no charge", and
+        # the difference column would read identically for both.
+        rows = added_lines([{"description": "MC overrun", "amount": 1_500_000}])
+        assert rows[0]["contracted"] is None
+        assert rows[0]["difference"] == 1_500_000
+        assert rows[0]["added"] is True
+
+
+class TestBandFromLines:
+    def test_it_totals_the_lines(self):
+        rows = settled_lines(LINES)
+        assert band_from_lines(rows, collected=0)["settled"] == 10_000_000
+
+    def test_added_lines_raise_the_settled_total_only(self):
+        rows = settled_lines(LINES) + added_lines(
+            [{"description": "MC", "amount": 1_500_000}]
+        )
+        out = band_from_lines(rows, collected=0)
+        assert out["contracted"] == 10_000_000
+        assert out["settled"] == 11_500_000
+        assert out["difference"] == 1_500_000
+
+    def test_a_band_with_one_unreadable_line_states_nothing(self):
+        # Summing the readable ones and printing it as a total is a
+        # figure short by exactly what is missing, and it looks complete.
+        rows = settled_lines(LINES, {"L2": "abc"})
+        assert band_from_lines(rows, collected=0)["settled"] is None
+
+    def test_no_lines_at_all_states_nothing(self):
+        assert band_from_lines([], collected=0)["settled"] is None
