@@ -166,6 +166,12 @@ export type ExpenseRow = {
   paid_from: string | null;
   photo: string | null;
   creation: string | null;
+  /** The quoted line this spend answers to, and whether paper was obtained
+   *  for it. Both are editable while the job is open (#125) and both move the
+   *  founder's tax exposure: an unattributed payment counts as exposed, one
+   *  against a no-invoice line is exposed until its invoice number arrives. */
+  cost_line: string | null;
+  invoice_no: string | null;
 };
 
 export type FloatRow = {
@@ -191,6 +197,10 @@ export type MoneyPayload = {
   /** What this session may do with money, asked of the permissions themselves. */
   may_advance: boolean;
   may_settle: boolean;
+  /** Whether the job has reached its closing stage, at which its spending
+   *  stops being a draft and becomes a record. The server refuses a change
+   *  either way (#123); this is so the screen does not offer one. */
+  closed: boolean;
 };
 
 export type OperatingUser = { name: string; full_name: string | null };

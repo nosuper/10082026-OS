@@ -10,6 +10,7 @@ import { Paperclip } from "lucide-react";
 import { Card, Money, Pill, Td, Th } from "@/components/aura/primitives";
 import { ErrorState, QueryState } from "@/components/aura/states";
 import {
+  type ExpenseRow,
   EVEN,
   FROM_ADVANCE,
   FROM_COMPANY,
@@ -38,6 +39,30 @@ type CostLineOption = {
   tax_type: string | null;
   quoted: number;
 };
+
+/** One expense being corrected. Every field the endpoint states, because it
+ *  states them all - an omitted value clears rather than keeps. */
+type ExpenseDraft = {
+  name: string;
+  amount: string;
+  category: string;
+  description: string;
+  cost_line: string;
+  invoice_no: string;
+};
+
+/** A stored expense, opened for correction. The amount goes in as digits the
+ *  way the log form takes them, so one parser reads both. */
+function draftFrom(row: ExpenseRow): ExpenseDraft {
+  return {
+    name: row.name,
+    amount: row.amount ? String(row.amount) : "",
+    category: row.category ?? "",
+    description: row.description ?? "",
+    cost_line: row.cost_line ?? "",
+    invoice_no: row.invoice_no ?? "",
+  };
+}
 
 /**
  * The tax type that carries exposure, spelled as the pricing engine spells it.
@@ -76,6 +101,16 @@ export function JobMoneyPanel({ job }: { job: string }) {
   // else's default would open a float in his own name.
   const [expenseFrom, setExpenseFrom] = useState("");
 
+  // The row being corrected, held as a draft rather than edited in place: a
+  // refetch lands on this panel every time anything else on the job saves, and
+  // a half-typed correction living in the rendered rows would be thrown away by
+  // it (#137, next door in the milestones panel, was exactly that).
+  const [draft, setDraft] = useState<ExpenseDraft | null>(null);
+  // Deleting asks twice. Everything else here is a correction; this is the one
+  // control that takes a payment out of the record and walks its ledger entry
+  // back with it.
+  const [removing, setRemoving] = useState<string | null>(null);
+
   const invalidate = [
     resultOf("auraos.api.job_money"),
     listsOf("Job Expense"),
@@ -109,6 +144,25 @@ export function JobMoneyPanel({ job }: { job: string }) {
     },
   );
 
+  // Correcting one that is already logged. The endpoint states the row rather
+  // than patching it, so the draft carries every editable field and sends all
+  // of them - see auraos.api.update_job_expense.
+  const correct = useMethodMutation<unknown, Record<string, unknown>>(
+    "auraos.api.update_job_expense",
+    { invalidate, onSuccess: () => setDraft(null) },
+  );
+
+  const remove = useMethodMutation<unknown, Record<string, unknown>>(
+    "auraos.api.delete_job_expense",
+    {
+      invalidate,
+      onSuccess: () => {
+        setRemoving(null);
+        setDraft(null);
+      },
+    },
+  );
+
   const settle = useMethodMutation<SettlementResult, Record<string, unknown>>(
     "auraos.api.settle_job",
     {
@@ -131,6 +185,10 @@ export function JobMoneyPanel({ job }: { job: string }) {
   );
   const expenses = rows?.expenses ?? [];
   const floats = rows?.floats ?? [];
+  // A closed job's spending is a record, not a draft (#123). The server refuses
+  // the change either way; this is so the screen does not offer a control that
+  // would be refused.
+  const closed = rows?.closed ?? false;
 
   function settleWording(held: FloatRow): string {
     const who = personName(users.data, held.holder);
@@ -141,7 +199,7 @@ export function JobMoneyPanel({ job }: { job: string }) {
 
   const advanceValue = parseVnd(advanceAmount);
   const expenseValue = parseVnd(expenseAmount);
-  const failure = advance.error ?? expense.error ?? settle.error;
+  const failure = advance.error ?? expense.error ?? correct.error ?? remove.error ?? settle.error;
 
   return (
     <div className="space-y-4">
@@ -371,10 +429,14 @@ export function JobMoneyPanel({ job }: { job: string }) {
                     <Th>What</Th>
                     <Th>Paid by</Th>
                     <Th className="text-right">Amount</Th>
+                    {closed ? null : <Th className="w-px" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {expenses.map((row) => (
+                  {/* Two rows per expense while one is being corrected: the
+                      record above, the correction beneath it. An array rather
+                      than a fragment because a <tbody> may not hold one. */}
+                  {expenses.flatMap((row) => [
                     <tr key={row.name}>
                       <Td className="num text-xs whitespace-nowrap text-muted-foreground">
                         {formatDate(row.spent_on)}
@@ -408,8 +470,131 @@ export function JobMoneyPanel({ job }: { job: string }) {
                       <Td className="text-right">
                         <Money value={row.amount ?? 0} />
                       </Td>
-                    </tr>
-                  ))}
+                      {closed ? null : (
+                        <Td className="text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            aria-label={`Correct ${row.description || "this expense"}`}
+                            onClick={() =>
+                              setDraft(draft?.name === row.name ? null : draftFrom(row))
+                            }
+                            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          >
+                            {draft?.name === row.name ? "Close" : "Correct"}
+                          </button>
+                        </Td>
+                      )}
+                    </tr>,
+                    draft?.name === row.name ? (
+                      <tr key={`${row.name}-edit`} className="bg-secondary/40">
+                        <Td colSpan={6}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              aria-label="Expense amount"
+                              inputMode="numeric"
+                              // Grouped as it is typed, the way the log form
+                              // does it, so one field does not read as digits
+                              // while the one above it reads as money.
+                              value={parseVnd(draft.amount) ? vnd(parseVnd(draft.amount)) : ""}
+                              onChange={(event) =>
+                                setDraft({ ...draft, amount: event.target.value })
+                              }
+                              className="num w-28 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong"
+                            />
+                            <select
+                              aria-label="Expense category"
+                              value={draft.category}
+                              onChange={(event) =>
+                                setDraft({ ...draft, category: event.target.value })
+                              }
+                              className="rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong"
+                            >
+                              <option value="">Uncategorised</option>
+                              {(categories.data ?? []).map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              aria-label="Expense description"
+                              value={draft.description}
+                              onChange={(event) =>
+                                setDraft({ ...draft, description: event.target.value })
+                              }
+                              className="min-w-40 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong"
+                            />
+                            {/* The two fields that move the founder's tax
+                                exposure. Attributing a payment to a line that
+                                came with paper takes it out of the figure;
+                                recording the replacement invoice takes it out
+                                the other way. Neither was reachable before
+                                #125, which is why the tile could only rise. */}
+                            <select
+                              aria-label="Quoted line"
+                              value={draft.cost_line}
+                              onChange={(event) =>
+                                setDraft({ ...draft, cost_line: event.target.value })
+                              }
+                              className="max-w-56 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong"
+                            >
+                              <option value="">Not attributed</option>
+                              {(costLines.data ?? []).map((line) => (
+                                <option key={line.name} value={line.name}>
+                                  {line.description}
+                                  {line.tax_type === NO_INVOICE_TAX ? " · no invoice" : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              aria-label="Invoice number"
+                              placeholder="Invoice number"
+                              value={draft.invoice_no}
+                              onChange={(event) =>
+                                setDraft({ ...draft, invoice_no: event.target.value })
+                              }
+                              className="num w-36 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus:border-border-strong"
+                            />
+                            <button
+                              type="button"
+                              disabled={!parseVnd(draft.amount) || correct.isPending}
+                              onClick={() =>
+                                correct.mutate({
+                                  name: draft.name,
+                                  amount: parseVnd(draft.amount),
+                                  category: draft.category || null,
+                                  description: draft.description || null,
+                                  cost_line: draft.cost_line || null,
+                                  invoice_no: draft.invoice_no || null,
+                                })
+                              }
+                              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                            >
+                              {correct.isPending ? "Saving..." : "Save"}
+                            </button>
+                            {removing === draft.name ? (
+                              <button
+                                type="button"
+                                disabled={remove.isPending}
+                                onClick={() => remove.mutate({ name: draft.name })}
+                                className="rounded-lg bg-ember px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                              >
+                                {remove.isPending ? "Deleting..." : "Delete for good"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setRemoving(draft.name)}
+                                className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-ember"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </Td>
+                      </tr>
+                    ) : null,
+                  ])}
                 </tbody>
               </table>
             </div>
