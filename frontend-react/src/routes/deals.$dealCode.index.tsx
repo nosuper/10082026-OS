@@ -34,6 +34,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { DIALOG_BUTTON, Modal } from "@/components/aura/Modal";
 import { RichText } from "@/components/aura/RichText";
 import { Card, Money, Pill } from "@/components/aura/primitives";
 import { STAGE_TONE, StageSelect, useDealStageChange } from "@/components/aura/DealStage";
@@ -312,6 +313,15 @@ function Readout({
   );
 }
 
+/** The company select's "create one" row (#118).
+ *
+ * Safe as a sentinel because Party Company is `autoname: format:COM-{####}`,
+ * so every real name is COM-0001 and up and nothing can ever be called this.
+ * A sentinel that a record could hold would silently mean "open the dialog"
+ * for whoever happened to be named it.
+ */
+const NEW_COMPANY = "__new_company__";
+
 // -- the screen --------------------------------------------------------------
 
 function DealPage() {
@@ -333,6 +343,45 @@ function DealPage() {
     fields: ["name", "full_name", "company"],
     orderBy: "full_name asc",
   });
+
+  // -- creating a client without leaving the deal (#118) ---------------------
+
+  const [newCompanyOpen, setNewCompanyOpen] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  // What was just created, kept only to label the select until the refetched
+  // list carries it. Frappe answers an insert with the generated name, and
+  // COM-0142 is not what the person typed - showing it, even for a moment,
+  // reads as the wrong company having been chosen.
+  const [createdCompany, setCreatedCompany] = useState<CompanyRow | null>(null);
+
+  // The same call the Contacts screen makes, deliberately literally: one
+  // doctype written two ways is drift waiting to happen, and the ticket asks
+  // for one record whichever door it came through.
+  //
+  // `company_name` is the only reqd field on Party Company today - checked
+  // against the doctype, not assumed. If a required field is ever added, this
+  // path skips it silently and this comment is the thing that says so.
+  const createCompany = useMethodMutation<{ name?: string }, { doc: Record<string, unknown> }>(
+    "frappe.client.insert",
+    {
+      invalidate: [listsOf("Party Company")],
+      onSuccess: (result) => {
+        // Selected by name, and the list refetches from the invalidate above.
+        // Not appended to a local option array: that is the #117 shape, where
+        // a refetch lands afterwards and throws the addition away.
+        //
+        // The contact is left alone, which is what choosing any other company
+        // already does here - the picker filters and the saved one stays
+        // reachable. Clearing it would be a second rule for the same act.
+        if (result?.name) {
+          setCreatedCompany({ name: result.name, company_name: newCompanyName.trim() });
+          edit({ company: result.name });
+        }
+        setNewCompanyOpen(false);
+        setNewCompanyName("");
+      },
+    },
+  );
 
   const owners = useMethod<OwnerRow[]>("auraos.api.operating_users");
 
@@ -637,6 +686,17 @@ function DealPage() {
     contactOptions.unshift(savedContact);
   }
 
+  // Same reachability rule the contact and owner pickers use below. It earns
+  // its place here for a new reason: a company created inline is selected the
+  // moment the insert answers, which can be before the invalidated list has
+  // refetched. Without this the select would sit blank for that gap and read
+  // as "the create did nothing".
+  const companyOptions = (companies.data ?? []).slice();
+  if (draft?.company && !companyOptions.some((row) => row.name === draft.company)) {
+    const label = createdCompany?.name === draft.company ? createdCompany.company_name : null;
+    companyOptions.unshift({ name: draft.company, company_name: label ?? draft.company });
+  }
+
   const ownerOptions = (owners.data ?? []).slice();
   if (draft?.deal_owner && !ownerOptions.some((row) => row.name === draft.deal_owner)) {
     ownerOptions.unshift({ name: draft.deal_owner, full_name: draft.deal_owner });
@@ -746,15 +806,26 @@ function DealPage() {
                 <Field label="Client company" required>
                   <select
                     value={draft.company}
-                    onChange={(event) => edit({ company: event.target.value })}
+                    onChange={(event) => {
+                      // The sentinel is an action, not a value. Writing it to
+                      // the draft would put a company nobody owns into the
+                      // deal, and Save would carry it to the server.
+                      if (event.target.value === NEW_COMPANY) {
+                        setNewCompanyName("");
+                        setNewCompanyOpen(true);
+                        return;
+                      }
+                      edit({ company: event.target.value });
+                    }}
                     className={inputClass}
                   >
                     <option value="">Which company...</option>
-                    {(companies.data ?? []).map((row) => (
+                    {companyOptions.map((row) => (
                       <option key={row.name} value={row.name}>
                         {row.company_name ?? row.name}
                       </option>
                     ))}
+                    <option value={NEW_COMPANY}>+ New client...</option>
                   </select>
                 </Field>
 
@@ -1248,6 +1319,62 @@ function DealPage() {
         </div>
       )}
       {stageChange.dialogs}
+      {newCompanyOpen ? (
+        <Modal
+          title="New client"
+          onClose={() => {
+            // Cancel writes nothing and touches nothing (#118, rule 68). The
+            // deal draft is not read or reset here on purpose: whatever was
+            // typed before the dialog opened is still typed after it closes.
+            setNewCompanyOpen(false);
+            setNewCompanyName("");
+            createCompany.reset();
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className={DIALOG_BUTTON}
+                onClick={() => {
+                  setNewCompanyOpen(false);
+                  setNewCompanyName("");
+                  createCompany.reset();
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={DIALOG_BUTTON}
+                disabled={!newCompanyName.trim() || createCompany.isPending}
+                onClick={() =>
+                  createCompany.mutate({
+                    doc: { doctype: "Party Company", company_name: newCompanyName.trim() },
+                  })
+                }
+              >
+                {createCompany.isPending ? "Creating..." : "Create and select"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2">
+            <div className="label-caps">Company name</div>
+            <input
+              autoFocus
+              value={newCompanyName}
+              onChange={(event) => setNewCompanyName(event.target.value)}
+              className={inputClass}
+              placeholder="Company name"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              The name is all that is needed now. Tax code, address and the rest live in Contacts
+              and can be filled in later.
+            </p>
+            <ErrorState error={createCompany.error} />
+          </div>
+        </Modal>
+      ) : null}
     </AppShell>
   );
 }
