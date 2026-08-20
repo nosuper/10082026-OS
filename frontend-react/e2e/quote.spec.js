@@ -43,13 +43,19 @@ test("the breakdown shows the seeded line and prices it on the server", async ({
   // copy of it. Whether the engine's number is *correct* is lib/pricing's
   // question and it is answered by its own tests, not by a browser.
   //
-  // **This literal is safe only while the seeded deal carries no
-  // contingency.** #69 put a reserve inside the cost, before the markup, and
-  // the seeded deal predates the field so it reads 0 - Frappe does not
-  // backfill a new field's default. Give that deal a contingency and this
-  // number moves, and it moves looking like a wrong figure rather than like a
-  // premise that expired. Written here, at the literal, because the feature
-  // that created the hazard is the thing that owes the warning.
+  // **#69's contingency does not reach this number, and that is a property of
+  // the engine rather than of the fixture.** The reserve multiplies the cost
+  // basis and the markup base; `subtotal_int_net` - qty1 x qty2 x unit price -
+  // is deliberately left alone, so this literal holds at any contingency rate.
+  //
+  // Said this way on purpose. The first version of this note claimed the
+  // literal was safe "only while the seeded deal carries no contingency",
+  // which rests on what a fixture happens to hold - and the seeded deal is
+  // inserted after the field exists, so Frappe applies the doctype default and
+  // it may well carry 10. A warning whose premise is wrong is worse than none:
+  // the next reader trusts it. What is actually true is checkable in
+  // lib/pricing.compute_line, which is where a change would have to happen for
+  // this number to move.
   await expect(page.locator("body")).toContainText("8.000.000");
   const figures = await page
     .locator("tbody tr")
