@@ -26,6 +26,37 @@ năm, not "một trăm năm", which would say five hundred.
 
 **An empty hundreds place inside a larger number is spoken too.** một
 nghìn không trăm linh năm. Dropping it turns 1005 into 1050 to the ear.
+
+**Checked against published rules, not against our ear** (#145). The
+accounting convention for invoices, which is what these contracts
+follow, states the three contested digits as thresholds rather than as
+habits, and this module implements them as written:
+
+  một when the tens digit is <= 1, mốt when it is >= 2;
+  bốn when the tens digit is <= 1, tư when it is >= 2;
+  năm when the tens digit is 0, lăm when it is > 0.
+
+That is why fourteen is mười bốn and twenty-four is hai mươi tư - the
+same rule, either side of its threshold, which is exactly the founder's
+"tuỳ thuộc vào số tiền".
+
+  - Quy tắc viết số tiền bằng chữ trên hóa đơn, citing Thông tư
+    26/2015/TT-BTC:
+    https://luatvietnam.vn/tin-phap-luat/quy-tac-moi-nhat-ve-viet-so-tien-bang-chu-tren-hoa-don-230-17634-article.html
+  - Cách viết số tiền bằng chữ trên hóa đơn:
+    https://luatminhkhue.vn/cach-viet-so-tien-bang-chu-tren-hoa-don-ke-toan-doanh-nghiep-can-luu-y.aspx
+
+**Two variants those sources do not settle, named rather than hidden:**
+
+`linh` versus `lẻ` for the empty tens place. Both are current - linh is
+the northern and more formal form, lẻ the southern. This module writes
+linh, and a test pins it, so switching is one line and a visible diff
+rather than a silent drift.
+
+`đồng` versus `đồng chẵn`. Invoices sometimes close a whole amount with
+chẵn to mark that nothing follows the unit. Not implemented, because VND
+here is always whole and the suffix would be decoration on every line;
+if the founder wants it, it is one constant.
 """
 
 from __future__ import annotations
