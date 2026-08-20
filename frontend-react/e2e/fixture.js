@@ -49,6 +49,24 @@ export const CLOSED_DEAL = "Playwright Closed Deal";
 export const TEMPLATE = "Playwright Contract";
 export const HANDOVER_TEMPLATE = "Playwright Biên bản nghiệm thu";
 
+/** The two quoted lines the Company-paid spends attach to. The first carries
+ *  tax_type "Không hoá đơn", so anything against it is uncovered until an
+ *  invoice number arrives; the second came with paper, so attributing a spend
+ *  to it takes that spend out of the exposure. #125's editor is the only way
+ *  to move a spend between them. */
+export const NO_INVOICE_LINE = "Playwright location fees";
+export const INVOICED_LINE = "Playwright director";
+
+/** The four Company-paid spends behind the exposure tile, each seeded for one
+ *  of the four states #125's editor has to be able to reach. Named here rather
+ *  than in the spec that reads them so fixture.spec.js guards them too: a
+ *  description that drifts in the seed should fail by name, not as four
+ *  unexplained assertion failures on a screen. */
+export const EXPOSED_SPEND = "Playwright location cash";
+export const INVOICED_SPEND = "Playwright location cash, invoiced later";
+export const UNATTRIBUTED_SPEND = "Playwright uncategorised cash";
+export const COVERED_SPEND = "Playwright director fee";
+
 /** Every name above, for the guard in fixture.spec.js. */
 export const FIXTURE_NAMES = {
   COMPANY,
@@ -58,4 +76,10 @@ export const FIXTURE_NAMES = {
   CLOSED_DEAL,
   TEMPLATE,
   HANDOVER_TEMPLATE,
+  NO_INVOICE_LINE,
+  INVOICED_LINE,
+  EXPOSED_SPEND,
+  INVOICED_SPEND,
+  UNATTRIBUTED_SPEND,
+  COVERED_SPEND,
 };
