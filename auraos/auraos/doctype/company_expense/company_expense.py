@@ -48,6 +48,21 @@ class CompanyExpense(Document):
         # not a reason to post nothing.
         if not self.paid_from:
             self.paid_from = default_account()
+        # The invoice's own date, which decides the period its VAT belongs
+        # to - input VAT falls in the period the invoice was issued, the
+        # same rule output VAT follows, and dating one by payment while the
+        # other goes by issue would put two bases inside one figure.
+        #
+        # Defaulted rather than demanded. On an ordinary receipt the two
+        # days are the same, and a mandatory blank on every coffee bill
+        # ends with expenses going unrecorded - which is worse for
+        # reconciliation than a defaulted date, because an unrecorded
+        # expense mismatches the accountant's return invisibly while a
+        # mis-dated one mismatches it in a section the founder is reading.
+        # The exceptional case is precisely when somebody is holding paper
+        # with a different date on it, which is its own correction prompt.
+        if self.invoice_no and not self.invoice_date:
+            self.invoice_date = self.spent_on
 
     def validate(self):
         self.validate_amount()

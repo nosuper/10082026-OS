@@ -21,7 +21,15 @@ looking entirely reasonable:
 
 from datetime import date
 
-from auraos.lib.tax import NOT_COMPUTED, VAT_BASIS, invoiced_rows, output_vat, position
+from auraos.lib.tax import (
+    NOT_COMPUTED,
+    VAT_BASIS,
+    input_vat,
+    invoiced_rows,
+    output_vat,
+    overheads,
+    position,
+)
 
 JULY = (date(2026, 7, 1), date(2026, 7, 31))
 
@@ -175,6 +183,120 @@ def test_no_exposure_asked_for_is_none_rather_than_zero():
     assert position(output_vat([]))["tndn_component"] is None
 
 
+# -- the company's own upkeep (#14/#109 step 2) --
+
+
+def overhead(**overrides):
+    """One company expense, paid and invoiced on the same day - which is
+    what an ordinary receipt looks like and what the record defaults to."""
+    row = {
+        "name": "CE-2026-00001",
+        "spent_on": date(2026, 7, 10),
+        "amount": 2_200_000,
+        "category": "Chi phí tiếp khách",
+        "description": "Cơm khách",
+        "for_depreciation": 0,
+        "invoice_no": "INV-A",
+        "invoice_date": date(2026, 7, 10),
+        "invoice_vat_amount": 200_000,
+        "supplier": "Nhà hàng",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_overheads_are_dated_by_the_day_the_money_left():
+    """A different basis from the VAT blocks, on purpose and on its face.
+
+    A cost paid in July belongs to July's spending whatever month its
+    invoice bears - the app records when money left, and the accountant
+    recognises the cost on their own basis.
+    """
+    paid_in_august = overhead(spent_on=date(2026, 8, 2), invoice_date=date(2026, 7, 30))
+    assert overheads([paid_in_august], *JULY)["paid_total"] == 0
+
+    paid_in_july = overhead(spent_on=date(2026, 7, 30), invoice_date=date(2026, 8, 2))
+    assert overheads([paid_in_july], *JULY)["paid_total"] == 2_200_000
+
+
+def test_input_vat_is_dated_by_the_invoice_like_output_vat():
+    """The inconsistency this exists to prevent.
+
+    Rent invoiced in June and paid in July is the ordinary case: its VAT
+    belongs to June's return even though the money moved in July. Dating
+    it by payment would put two bases inside one figure - the thing the
+    output side already refuses.
+    """
+    invoiced_in_june = overhead(invoice_date=date(2026, 6, 28), spent_on=date(2026, 7, 3))
+    assert input_vat([invoiced_in_june], *JULY)["vat_total"] == 0
+    # And it is that month's spending all the same, on the other basis.
+    assert overheads([invoiced_in_june], *JULY)["paid_total"] == 2_200_000
+
+
+def test_a_flagged_purchase_is_listed_and_left_out_of_the_total():
+    """The founder's reconciliation criterion, in one assertion.
+
+    Excluded from the deductible total *and* visible as its own line -
+    an invisible subtraction cannot be checked against a return.
+    """
+    report = overheads(
+        [
+            overhead(name="a", amount=2_000_000),
+            overhead(name="b", amount=30_000_000, for_depreciation=1, description="Máy in"),
+        ],
+        *JULY,
+    )
+    assert report["paid_total"] == 2_000_000
+    assert report["flagged"]["total"] == 30_000_000
+    assert [line["description"] for line in report["flagged"]["lines"]] == ["Máy in"]
+
+
+def test_a_flagged_purchase_still_carries_its_input_vat():
+    """Two different questions with two different answers.
+
+    How a cost is treated for TNDN and whether its VAT is deductible are
+    unrelated, and excluding a depreciated purchase's VAT because it is
+    excluded from the cost block would be tidiness overriding the tax.
+    """
+    report = input_vat([overhead(for_depreciation=1)], *JULY)
+    assert report["vat_total"] == 200_000
+
+
+def test_an_uncategorised_payment_gets_its_own_bucket():
+    """Dropped, it would make the tile disagree with the bank by exactly
+    the money nobody has classified yet."""
+    report = overheads([overhead(category=None, amount=500_000)], *JULY)
+    assert report["paid_total"] == 500_000
+    assert [bucket["category"] for bucket in report["by_category"]] == [None]
+
+
+def test_categories_are_biggest_first():
+    """A founder checking a return reads down from the line most likely
+    to be wrong about real money."""
+    report = overheads(
+        [
+            overhead(name="a", category="Nhỏ", amount=1_000_000),
+            overhead(name="b", category="Lớn", amount=9_000_000),
+        ],
+        *JULY,
+    )
+    assert [bucket["category"] for bucket in report["by_category"]] == ["Lớn", "Nhỏ"]
+
+
+def test_the_blocks_stay_in_their_own_branches():
+    """Nothing can total two figures measured over different things."""
+    whole = position(
+        output_vat([]),
+        {"tndn_exposure": 1},
+        overhead=overheads([overhead()], *JULY),
+        inputs=input_vat([overhead()], *JULY),
+    )
+    assert whole["overheads"]["paid_total"] == 2_200_000
+    assert whole["input_vat"]["vat_total"] == 200_000
+    assert "paid_total" not in whole["vat"]
+    assert "vat_total" not in whole["overheads"]
+
+
 def test_the_payload_says_what_it_does_not_compute():
     """#123's lesson, pinned.
 
@@ -187,11 +309,16 @@ def test_the_payload_says_what_it_does_not_compute():
     """
     figures = {row["figure"] for row in position(output_vat([]))["not_computed"]}
     assert "TNDN for the period" in figures
-    assert "input VAT" in figures
+    assert "input VAT on job spending" in figures
     assert "VAT payable" in figures
 
-    reasons = " ".join(row["why"] for row in NOT_COMPUTED).lower()
-    # The reason TNDN is absent is the one a reader will ask about, and
-    # it is a fact about the data rather than a disclaimer.
-    assert "job" in reasons and "overhead" in reasons
-    assert "input vat is not recorded" in reasons
+    reasons = {row["figure"]: row["why"].lower() for row in NOT_COMPUTED}
+    # TNDN's reason changed when overheads became recordable, and the new
+    # one is better: it is a judgement that is not ours rather than data
+    # we were missing. If it ever reverts to "overheads are not
+    # recordable", something has been un-built.
+    assert "accountant" in reasons["TNDN for the period"]
+    assert "depreciated" in reasons["TNDN for the period"]
+    # And the input-VAT gap is now about the job side specifically, not
+    # about input VAT existing at all.
+    assert "job expense" in reasons["input VAT on job spending"]

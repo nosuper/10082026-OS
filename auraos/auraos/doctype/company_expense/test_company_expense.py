@@ -147,6 +147,33 @@ class CompanyExpenseTestCase(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             self.log(invoice_no="INV-9", invoice_vat_amount=9_900_000)
 
+    def test_an_invoice_date_defaults_to_the_day_it_was_paid(self):
+        """The ordinary receipt has both dates the same.
+
+        Demanded rather than defaulted, this field would put a blank on
+        every coffee bill - and an expense left unrecorded because the
+        form asked one question too many mismatches the accountant's
+        return invisibly, where a mis-dated one mismatches it in a
+        section the founder is reading.
+        """
+        doc = self.log(invoice_no="INV-9", invoice_vat_amount=200_000)
+        self.assertEqual(str(frappe.get_doc("Company Expense", doc.name).invoice_date), "2026-08-10")
+
+    def test_an_invoice_dated_differently_keeps_its_own_date(self):
+        """Rent invoiced last month and paid this one - the case the
+        default exists to be corrected in, and the reason input VAT can
+        be dated by the invoice at all."""
+        doc = self.log(
+            invoice_no="INV-RENT", invoice_vat_amount=500_000, invoice_date="2026-07-28"
+        )
+        self.assertEqual(str(frappe.get_doc("Company Expense", doc.name).invoice_date), "2026-07-28")
+
+    def test_no_invoice_means_no_invoice_date(self):
+        """Nothing to date. A default here would invent an invoice that
+        does not exist and put its VAT-less self in a VAT period."""
+        doc = self.log()
+        self.assertIsNone(frappe.get_doc("Company Expense", doc.name).invoice_date)
+
     def test_an_invoice_and_its_vat_are_kept_as_recorded(self):
         """Recorded, not derived - the supplier wrote this invoice, so
         the number on their paper is the fact, and reconstructing it by

@@ -13,6 +13,7 @@
   "description",
   "invoice_section",
   "invoice_no",
+  "invoice_date",
   "invoice_vat_amount",
   "column_break_invoice",
   "supplier",
@@ -97,6 +98,12 @@
    "fieldname": "for_depreciation",
    "fieldtype": "Check",
    "label": "For depreciation, not this period's costs"
+  },
+  {
+   "description": "The day the invoice was issued, which decides the period its VAT belongs to. Defaults to the day it was paid, because on an ordinary receipt they are the same day - correct it when they are not, as rent invoiced last month and paid this one.",
+   "fieldname": "invoice_date",
+   "fieldtype": "Date",
+   "label": "Invoice Date"
   }
  ],
  "index_web_pages_for_search": 0,

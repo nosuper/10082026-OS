@@ -2605,6 +2605,27 @@ def period_tax_position(date_from, date_to):
 
     vat = tax.output_vat(tax.invoiced_rows(rows, start, end))
 
+    # The company's own upkeep. **Two blocks come out of these rows and
+    # they are decided by different dates** - what was paid is dated by
+    # the day the money left, the VAT on it by the day the invoice was
+    # issued - so the query asks for either date in the window and the
+    # module applies its own boundary to each. A single SQL filter would
+    # have to pick one and would silently shorten the other block.
+    overhead_rows = frappe.get_all(
+        "Company Expense",
+        or_filters={
+            "spent_on": ["between", [start, end]],
+            "invoice_date": ["between", [start, end]],
+        },
+        fields=[
+            "name", "spent_on", "amount", "category", "description",
+            "for_depreciation", "invoice_no", "invoice_date",
+            "invoice_vat_amount", "supplier",
+        ],
+        order_by="spent_on asc",
+        limit_page_length=0,
+    )
+
     # The standing exposure, through the endpoint that owns it rather
     # than by repeating its query here - one place computes it, and #123
     # is what happens when a second place computes it differently. The
@@ -2619,7 +2640,12 @@ def period_tax_position(date_from, date_to):
             "uncovered_count", "stated_total", "unattributed_total",
         )
     }
-    return tax.position(vat, component)
+    return tax.position(
+        vat,
+        component,
+        overhead=tax.overheads(overhead_rows, start, end),
+        inputs=tax.input_vat(overhead_rows, start, end),
+    )
 
 
 # -- what the pipeline is worth in the months ahead (#102) --

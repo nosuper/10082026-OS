@@ -33,11 +33,27 @@
 // and the one that would get filed. What was a whole empty tile is now a
 // smaller one that finally says why it is empty.
 //
-// **The VAT figure is not on this screen's basis and says so.** Everything
-// else here is cash basis; output VAT falls due when the invoice is issued.
-// That is statute, not a preference, so the card carries its own basis line -
-// a reader who tries to reconcile it against Income is told why it will not
-// match before they try.
+// **The card carries three bases and writes all three down.** Output VAT and
+// input VAT are dated by their invoices, because that is the rule for VAT and
+// not a preference. Overheads are dated by the day the money left, because
+// that is what the record knows and the accountant recognises costs on their
+// own basis. Everything else on this screen is cash basis. **Uniformity was
+// never the requirement; silence about it was the danger** - a reader
+// reconciling any block against Income is told why it will not match before
+// they try.
+//
+// **The decomposition mirrors a tax return's sections on purpose.** The
+// founder's reason for wanting the depreciation flag was that they mean to
+// hold the accountant's return beside this screen and check it - so flagged
+// purchases are a list with a total rather than an invisible subtraction, and
+// the blocks are ordered the way the sections are read.
+//
+// **One derivation, N renderings.** The overhead block comes from
+// `auraos.lib.tax.overheads` and nothing here recomputes it. #14's break-even
+// screen shows the same money against booked margin and must render this
+// endpoint's block rather than sum the table again - two functions over one
+// set of rows is how two screens come to disagree, and the disagreement
+// always surfaces in front of whoever is reconciling.
 //
 // Producer-safe by construction, and the tax card does not break that. The two
 // original endpoints scope to the jobs the session may list and neither
@@ -62,12 +78,22 @@ import { Bar, FinanceTabs } from "@/components/aura/FinanceTabs";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
 import { useSession } from "@/components/aura/SessionProvider";
 import { Figure, QueryState } from "@/components/aura/states";
-import { countLabel, percent } from "@/lib/format";
+import { countLabel, formatDate, percent } from "@/lib/format";
 import { useMethod } from "@/lib/queries";
 
 // -- what the server sends --
 
 type VatRate = { vat_pct: number; gross: number; net: number; vat: number; count: number };
+
+type OverheadCategory = { category: string | null; total: number; count: number };
+
+type FlaggedLine = {
+  expense: string;
+  spent_on: string;
+  category: string | null;
+  description: string | null;
+  amount: number;
+};
 
 type TaxPositionPayload = {
   vat: {
@@ -78,6 +104,14 @@ type TaxPositionPayload = {
     count: number;
     by_rate: VatRate[];
   };
+  input_vat: { basis: string; vat_total: number; count: number } | null;
+  overheads: {
+    basis: string;
+    paid_total: number;
+    count: number;
+    by_category: OverheadCategory[];
+    flagged: { total: number; count: number; lines: FlaggedLine[] };
+  } | null;
   tndn_component: {
     standing: boolean;
     of: string;
@@ -517,6 +551,117 @@ function TaxPosition({ range }: { range: { from: string; to: string } }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            ) : null}
+
+            {/* The other side of the same return: VAT the company was
+                charged. Invoice-dated like the block above, and labelled
+                as overheads only - job spending carries no VAT fields, so
+                this is not everything the company could deduct. */}
+            {data.input_vat ? (
+              <div className="border-t border-border pt-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="label-caps">Input VAT on overheads</span>
+                  <span className="text-xs text-muted-foreground">
+                    {countLabel(data.input_vat.count, "invoice")}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  <Money value={data.input_vat.vat_total} />
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {data.input_vat.basis}.
+                </p>
+              </div>
+            ) : null}
+
+            {/* What the company spent on itself. **A third basis, and the
+                card says so** - this one is dated by the day the money
+                left, because that is what the record knows; the two VAT
+                blocks are dated by their invoices because that is the
+                rule for VAT. One basis per figure, every basis written. */}
+            {data.overheads ? (
+              <div className="border-t border-border pt-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="label-caps">Overheads paid</span>
+                  <span className="text-xs text-muted-foreground">
+                    {countLabel(data.overheads.count, "payment")}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  <Money value={data.overheads.paid_total} />
+                </div>
+                <p className="mt-1 mb-2 text-xs leading-relaxed text-muted-foreground">
+                  {data.overheads.basis}.
+                </p>
+
+                {data.overheads.by_category.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="border-b border-border">
+                        <tr>
+                          <Th className="w-full">Category</Th>
+                          <Th className="text-right">Payments</Th>
+                          <Th className="text-right">Paid</Th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {data.overheads.by_category.map((row) => (
+                          <tr key={row.category ?? "uncategorised"}>
+                            {/* A payment nobody has classified is shown as
+                                that, not dropped - dropping it would make
+                                this disagree with the bank by exactly the
+                                money nobody has got to yet. */}
+                            <Td>{row.category ?? "Uncategorised"}</Td>
+                            <Td className="num text-right text-xs text-muted-foreground">
+                              {row.count}
+                            </Td>
+                            <Td className="text-right">
+                              <Money value={row.total} />
+                            </Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+
+                {/* Listed, never merely subtracted. The founder means to
+                    hold the accountant's return beside this and check it
+                    line by line, and an invisible subtraction cannot be
+                    checked against anything. */}
+                {data.overheads.flagged.count > 0 ? (
+                  <div className="mt-3 rounded-xl border border-border bg-secondary/40 px-4 py-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="label-caps">Flagged for depreciation</span>
+                      <span className="text-xs text-muted-foreground">
+                        left out of the total above
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      <Money value={data.overheads.flagged.total} />
+                    </div>
+                    <ul className="mt-2 space-y-1">
+                      {data.overheads.flagged.lines.map((line) => (
+                        <li
+                          key={line.expense}
+                          className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted-foreground"
+                        >
+                          <span>
+                            <span className="num">{formatDate(line.spent_on)}</span>{" "}
+                            {line.description || line.category || line.expense}
+                          </span>
+                          <Money value={line.amount} />
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Marked to be depreciated rather than expensed now. The accountant may treat
+                      them differently - these are listed so the two can be compared, not to decide
+                      the answer.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

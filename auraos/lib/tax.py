@@ -56,6 +56,17 @@ from auraos.lib.money import round_vnd
 
 Row = Mapping[str, Any]
 
+OVERHEAD_BASIS = (
+    "what the company paid for its own upkeep, dated by the day the money "
+    "left the account"
+)
+
+INPUT_VAT_BASIS = (
+    "VAT on invoices the company was given, dated by the day each invoice "
+    "was issued - the same rule as output VAT, and not all the input VAT "
+    "there is"
+)
+
 VAT_BASIS = (
     "output VAT on invoices issued in the period, dated by the day the "
     "invoice was issued rather than the day the money arrived"
@@ -67,23 +78,28 @@ VAT_BASIS = (
 # a fact about the data that belongs beside the data.
 NOT_COMPUTED = [
     {
-        "figure": "input VAT",
+        "figure": "input VAT on job spending",
         "why": (
-            "an expense records an amount and, at most, an invoice number - "
-            "no VAT amount and no rate - so there is nothing to deduct from "
-            "output VAT"
+            "an overhead records the VAT on its invoice, but a job expense "
+            "has no VAT fields at all - so the input VAT here is the "
+            "company's own upkeep and not everything the company could "
+            "deduct"
         ),
     },
     {
         "figure": "VAT payable",
-        "why": "output VAT less input VAT, and input VAT is not recorded",
+        "why": (
+            "output VAT less all input VAT, and half the input VAT - the "
+            "job side - is still unrecorded"
+        ),
     },
     {
         "figure": "TNDN for the period",
         "why": (
-            "TNDN is charged on profit, and every expense in AuraOS belongs "
-            "to a job - overheads are not recordable, so any figure here "
-            "would omit them and overstate the tax"
+            "whether a purchase is expensed now or depreciated over years "
+            "is the accountant's judgement, and they may reclassify what is "
+            "flagged here - so the deductible total below is what this app "
+            "can see, not a taxable base"
         ),
     },
 ]
@@ -166,7 +182,132 @@ def output_vat(rows: Iterable[Row]) -> dict:
     }
 
 
-def position(vat: Mapping[str, Any], exposure: Mapping[str, Any] | None = None) -> dict:
+def overheads(expenses: Iterable[Row], date_from: Any, date_to: Any) -> dict:
+    """What the company paid for its own upkeep in a window.
+
+    **One derivation, N renderings.** This is the single place overheads
+    are totalled and grouped. #14's break-even screen shows the same
+    numbers against booked margin, and when it is built it must render
+    *this block* rather than recompute it from the same table - two
+    functions summing one set of rows is how two screens come to
+    disagree, and the disagreement always surfaces in front of whoever
+    is reconciling.
+
+    **Payment-dated, and that is a different basis from the VAT blocks
+    beside it.** AuraOS records the day money left the account; an
+    accountant recognises a cost on their own basis. One basis per
+    figure and every basis written on its face is the rule - uniformity
+    was never the requirement, silence about it was the danger.
+
+    **Grouped by category because a return is**, and an uncategorised
+    payment gets its own bucket rather than being dropped: `category` is
+    optional on the record for the same reason it is optional on a job
+    expense - money gets spent on things nobody has classified yet, and
+    a row called Uncategorised is far better than pretending it was not
+    spent.
+
+    **Flagged purchases are listed, not merely subtracted.** The founder
+    wants to hold the accountant's return beside this and check it line
+    by line; an invisible subtraction cannot be checked against
+    anything.
+    """
+    start, end = as_date(date_from), as_date(date_to)
+    deductible: dict[Any, dict] = {}
+    flagged = []
+    paid_total = 0
+    for row in expenses:
+        paid = as_date(row.get("spent_on"))
+        if not paid or start is None or end is None:
+            continue
+        if paid < start or paid > end:
+            continue
+        amount = round_vnd(row.get("amount") or 0)
+        line = {
+            "expense": row.get("name"),
+            "spent_on": paid,
+            "month": month_key(paid),
+            "category": row.get("category") or None,
+            "description": row.get("description") or None,
+            "amount": amount,
+        }
+        if row.get("for_depreciation"):
+            flagged.append(line)
+            continue
+        paid_total += amount
+        bucket = deductible.setdefault(
+            line["category"], {"category": line["category"], "total": 0, "count": 0}
+        )
+        bucket["total"] += amount
+        bucket["count"] += 1
+
+    flagged.sort(key=lambda one: (one["spent_on"], one["expense"] or ""))
+    return {
+        "basis": OVERHEAD_BASIS,
+        "paid_total": paid_total,
+        "count": sum(bucket["count"] for bucket in deductible.values()),
+        # Biggest first: a founder checking a return reads down from the
+        # line most likely to be wrong about real money.
+        "by_category": sorted(
+            deductible.values(), key=lambda one: (-one["total"], str(one["category"] or ""))
+        ),
+        "flagged": {
+            "total": sum(line["amount"] for line in flagged),
+            "count": len(flagged),
+            "lines": flagged,
+        },
+    }
+
+
+def input_vat(expenses: Iterable[Row], date_from: Any, date_to: Any) -> dict:
+    """The VAT on invoices the company was given in a window.
+
+    **Dated by the invoice, like output VAT**, because that is the rule
+    for both and dating one by payment would put two bases inside one
+    figure.
+
+    **Flagged purchases count here.** How a cost is treated for TNDN and
+    whether its VAT is deductible are different questions with different
+    answers, and excluding a depreciated purchase's VAT because it is
+    excluded from the cost block would be tidiness overriding the tax.
+
+    **The amount is the supplier's, never derived.** They wrote the
+    invoice; reconstructing their VAT line by division can land a đồng
+    from the paper the accountant is holding, and this figure exists to
+    be checked against exactly that paper.
+    """
+    start, end = as_date(date_from), as_date(date_to)
+    lines = []
+    for row in expenses:
+        vat = round_vnd(row.get("invoice_vat_amount") or 0)
+        issued = as_date(row.get("invoice_date"))
+        if not vat or not issued or start is None or end is None:
+            continue
+        if issued < start or issued > end:
+            continue
+        lines.append(
+            {
+                "expense": row.get("name"),
+                "invoice_no": row.get("invoice_no") or None,
+                "invoice_date": issued,
+                "supplier": row.get("supplier") or None,
+                "vat": vat,
+            }
+        )
+    lines.sort(key=lambda one: (one["invoice_date"], one["expense"] or ""))
+    return {
+        "basis": INPUT_VAT_BASIS,
+        "vat_total": sum(line["vat"] for line in lines),
+        "count": len(lines),
+        "lines": lines,
+    }
+
+
+def position(
+    vat: Mapping[str, Any],
+    exposure: Mapping[str, Any] | None = None,
+    overhead: Mapping[str, Any] | None = None,
+    inputs: Mapping[str, Any] | None = None,
+) -> dict:
     """The period's tax position, as much of it as exists.
 
     **The two halves are not measured over the same thing and the payload
@@ -183,6 +324,10 @@ def position(vat: Mapping[str, Any], exposure: Mapping[str, Any] | None = None) 
     """
     return {
         "vat": dict(vat),
+        # Kept in named branches rather than flattened, so nothing can
+        # total two figures that were measured over different things.
+        "input_vat": dict(inputs) if inputs is not None else None,
+        "overheads": dict(overhead) if overhead is not None else None,
         # A component, labelled, or omitted entirely rather than sent as
         # a zero - "no exposure" and "not asked for" are different, and a
         # zero would read as the first.
