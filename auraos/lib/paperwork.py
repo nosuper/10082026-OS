@@ -40,6 +40,7 @@ from io import BytesIO
 from typing import Any, Iterable, Mapping, Sequence
 from xml.sax.saxutils import escape, unescape
 
+from auraos.lib.contracts import freelancer_fee
 from auraos.lib.money import format_vnd
 from auraos.lib.vietnamese import in_words
 
@@ -333,6 +334,9 @@ PLAN_MONEY_FIELDS = ("deposit_amount", "final_amount")
 # The day counts, which read as bare numbers rather than as money.
 TERM_DAY_FIELDS = ("deposit_days", "final_days")
 
+# The freelancer fee is typed at generation like the other terms: it is
+# what we agreed to pay this person for this job, and no record holds it.
+
 # Entered at generation, held by no record. See document_values.
 TERM_FIELDS = (
     "signed_on",
@@ -405,6 +409,15 @@ def document_values(
     values["quote.total_in_words"] = in_words(job.get("quote_total")) or None
     for name in TERM_DAY_FIELDS:
         values[f"terms.{name}_in_words"] = in_words(terms.get(name), currency=False) or None
+
+    # A freelancer contract states three figures for one fee (#148):
+    # the gross it is written as, the PIT withheld from it, and what
+    # actually reaches the freelancer. Derived from the net through the
+    # company's own pricing convention rather than restated here.
+    fee = freelancer_fee(terms.get("freelancer_fee"))
+    for name in ("gross", "tax", "net"):
+        values[f"fee.{name}"] = _money(fee[name]) if fee else None
+        values[f"fee.{name}_in_words"] = in_words(fee[name]) if fee else None
 
     plan = plan or {}
     for name in PLAN_PCT_FIELDS:

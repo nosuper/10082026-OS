@@ -106,10 +106,17 @@ def normalise_short_code(value: str) -> str:
     return re.sub(r"[^0-9A-Za-z]+", "", fold(value or "")).upper()
 
 
-# The kind that owns a job's contract number. BBNT and DNTT are written
-# about a contract rather than being one, so they carry the HDDV's
-# number instead of minting their own.
-CONTRACT_KIND = "HDDV"
+# The kinds that own a contract number. BBNT and DNTT are written
+# *about* a contract rather than being one, so they carry their
+# parent's number instead of minting their own.
+#
+# Two contract kinds, not one: HDDV is the client contract and HDCC the
+# vendor one, and both are agreements this company signs. Written as a
+# tuple rather than a constant because the single-kind form encoded
+# "HDDV is the only thing that can be a parent", which was true by
+# accident and would have been wrong the first time anything was
+# written about a vendor contract.
+CONTRACT_KINDS = ("HDDV", "HDCC")
 CHILD_KINDS = ("BBNT", "DNTT")
 
 
@@ -141,7 +148,7 @@ def number_for(
         return None
     if kind in CHILD_KINDS:
         return parent_number or None
-    if kind != CONTRACT_KIND:
+    if kind not in CONTRACT_KINDS:
         return None
     return contract_number(kind, signed_on, short_code, taken)
 
@@ -218,3 +225,46 @@ def payment_split(milestones):
     values["final_pct"] = rows[1].get("pct")
     values["final_amount"] = rows[1].get("amount")
     return values, None
+
+
+# -- what a freelancer contract says about the fee (#148) -------------------
+
+def freelancer_fee(net):
+    """The three figures a freelancer contract states, from the net fee.
+
+    The company's pricing convention, which this must not restate in its
+    own terms: **a freelancer quotes a net figure and the company bears
+    10% PIT on the gross**, so gross = net / 0.9 and the tax = net / 9.
+    That is `lib/pricing.py`'s TaxType.CA_NHAN arithmetic, and there is a
+    test here comparing the two so a rate changed in one cannot survive
+    in the other.
+
+    The template's own wording is what decides which figure goes on
+    which line, and it was read rather than assumed: "phí dịch vụ là
+    [TỔNG PHÍ] VNĐ (bao gồm 10% thuế TNCN - Bên A khấu trừ và đóng thay
+    cho Bên B tương ứng [SỐ TIỀN TNCN] VNĐ)". So TỔNG PHÍ is the GROSS,
+    stated as tax-inclusive, and the withholding is named beside it.
+
+    A contract stating gross-with-withholding and one stating
+    net-plus-employer-burden carry the same three numbers into different
+    lines, which is why this is not obvious from the numbers alone.
+
+    Returns None for anything unreadable, so a fee nobody entered leaves
+    a visible gap rather than a plausible zero.
+    """
+    from decimal import Decimal
+
+    if net is None or net == "":
+        return None
+    try:
+        amount = Decimal(str(net))
+    except Exception:
+        return None
+    if amount < 0:
+        return None
+    gross = amount / Decimal("0.9")
+    return {
+        "gross": gross,
+        "tax": amount / 9,
+        "net": amount,
+    }

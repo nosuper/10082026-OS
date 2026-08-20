@@ -182,6 +182,25 @@ class TestNumberFor:
     def test_an_unknown_kind_carries_nothing_rather_than_inventing(self):
         assert number_for("XXXX", date(2026, 8, 20), "SUMO") is None
 
+    def test_the_vendor_contract_mints_its_own_too(self):
+        # HDCC joined HDDV when vendor contracts became numbered. The
+        # single-kind form encoded "HDDV is the only thing that can be a
+        # parent", which was true by accident.
+        assert (
+            number_for("HDCC", date(2026, 8, 20), "SUMO")
+            == "HDCC200826/AURA-SUMO"
+        )
+
+    def test_a_child_can_inherit_from_a_vendor_contract(self):
+        # Nothing is written about a vendor contract today. The code
+        # must not assume that, or the first one will silently carry no
+        # number at all.
+        parent = "HDCC200826/AURA-SUMO"
+        assert (
+            number_for("BBNT", date(2026, 8, 20), "SUMO", parent_number=parent)
+            == parent
+        )
+
 
 class TestPaymentSplit:
     """cọc and cuối, and the plans that cannot say them (#146)."""
@@ -239,3 +258,43 @@ class TestPaymentSplit:
         # message can say what it found.
         _, refusal = payment_split([{"pct": 100, "amount": 10_000_000}])
         assert refusal == "plan_has_1"
+
+
+class TestFreelancerFee:
+    """The fee triple, pinned against pricing.py's own arithmetic (#148)."""
+
+    def test_the_template_states_the_gross_as_tax_inclusive(self):
+        from auraos.lib.contracts import freelancer_fee
+
+        # net 9,000,000 -> gross 10,000,000, tax 1,000,000.
+        out = freelancer_fee(9_000_000)
+        assert int(out["gross"]) == 10_000_000
+        assert int(out["tax"]) == 1_000_000
+        assert int(out["net"]) == 9_000_000
+
+    def test_it_agrees_with_pricing_rather_than_restating_the_rate(self):
+        # The rate lives in pricing.py. If somebody changes it there and
+        # not here, this fails rather than the two quietly disagreeing on
+        # a signed contract.
+        from decimal import Decimal
+
+        from auraos.lib.contracts import freelancer_fee
+
+        net = Decimal("7_500_000".replace("_", ""))
+        out = freelancer_fee(net)
+        assert out["gross"] == net / Decimal("0.9")
+        assert out["tax"] == net / 9
+
+    def test_the_three_figures_reconcile(self):
+        from auraos.lib.contracts import freelancer_fee
+
+        out = freelancer_fee(9_000_000)
+        assert out["net"] + out["tax"] == out["gross"]
+
+    def test_no_fee_is_a_gap_not_a_zero(self):
+        from auraos.lib.contracts import freelancer_fee
+
+        assert freelancer_fee(None) is None
+        assert freelancer_fee("") is None
+        assert freelancer_fee("abc") is None
+        assert freelancer_fee(-1) is None
