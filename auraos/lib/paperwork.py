@@ -41,6 +41,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from xml.sax.saxutils import escape, unescape
 
 from auraos.lib.money import format_vnd
+from auraos.lib.vietnamese import in_words
 
 # What a placeholder looks like in the founder's template. Narrow on
 # purpose - a brace around prose, an unclosed pair or anything with a
@@ -294,6 +295,8 @@ COMPANY_FIELDS = (
 )
 PERSON_FIELDS = (
     "full_name",
+    # Chức vụ, for the signature block (#147).
+    "title",
     "company",
     "phone",
     "email",
@@ -323,6 +326,9 @@ MONEY_FIELDS = {
 # and amounts are formatted differently, so they are listed apart.
 PLAN_PCT_FIELDS = ("deposit_pct", "final_pct")
 PLAN_MONEY_FIELDS = ("deposit_amount", "final_amount")
+
+# The day counts, which read as bare numbers rather than as money.
+TERM_DAY_FIELDS = ("deposit_days", "final_days")
 
 # Entered at generation, held by no record. See document_values.
 TERM_FIELDS = (
@@ -389,11 +395,22 @@ def document_values(
     # zero when the plan cannot say them: a contract whose final
     # instalment reads 0% is worse than one with a visible gap, because
     # only one of the two stops somebody signing it.
+    # Every money value a contract states also has to be readable in
+    # words, because on a Vietnamese contract the words are the
+    # authoritative figure (#145). Derived here rather than asked for,
+    # so the two can never disagree.
+    values["quote.total_in_words"] = in_words(job.get("quote_total")) or None
+    for name in TERM_DAY_FIELDS:
+        values[f"terms.{name}_in_words"] = in_words(terms.get(name), currency=False) or None
+
     plan = plan or {}
     for name in PLAN_PCT_FIELDS:
         values[f"plan.{name}"] = _pct(plan.get(name)) if plan.get(name) is not None else None
     for name in PLAN_MONEY_FIELDS:
         values[f"plan.{name}"] = _money(plan.get(name)) if plan.get(name) is not None else None
+        values[f"plan.{name}_in_words"] = (
+            in_words(plan.get(name)) if plan.get(name) is not None else None
+        )
 
     for name, fieldname in JOB_FIELDS.items():
         values[f"job.{name}"] = _text(job.get(fieldname))

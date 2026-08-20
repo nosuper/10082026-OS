@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "full_name",
+  "title",
   "company",
   "role_tags",
   "contact_section",
@@ -37,6 +38,12 @@
    "in_standard_filter": 1,
    "label": "Full Name",
    "reqd": 1
+  },
+  {
+   "description": "Chức vụ - the title a contract's signature block prints under their name. Optional: most contacts are not signatories.",
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title"
   },
   {
    "fieldname": "company",

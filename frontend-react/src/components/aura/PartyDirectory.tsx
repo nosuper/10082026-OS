@@ -250,6 +250,9 @@ const COMPANY_FIELDS: FieldDef[] = [
 
 const CONTACT_FIELDS: FieldDef[] = [
   { name: "full_name", label: "Full name", required: true },
+  // Chức vụ - what a contract prints under the signature. Optional,
+  // because most contacts never sign one.
+  { name: "title", label: "Title" },
   { name: "phone", label: "Phone / Zalo", required: true, numeric: true },
   { name: "email", label: "Email", type: "email" },
 ];
