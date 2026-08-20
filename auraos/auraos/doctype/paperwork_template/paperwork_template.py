@@ -121,7 +121,10 @@ def party(doctype, name):
     return frappe.db.get_value(doctype, name, "*", as_dict=True)
 
 
-def values_for(job, vendor=None, freelancer=None, contract_number=None, terms=None, parent_number=None):
+def values_for(
+    job, vendor=None, freelancer=None, contract_number=None, terms=None,
+    parent_number=None, acceptance_table=None,
+):
     """Everything a paper about this job may say - one builder, shared
     by the generated .docx and the on-screen preview so the two can
     never disagree about a value."""
@@ -135,6 +138,7 @@ def values_for(job, vendor=None, freelancer=None, contract_number=None, terms=No
         contract_number=contract_number,
         parent_number=parent_number,
         terms=terms,
+        acceptance_table=acceptance_table,
         # The plan the job actually carries, split by the rule rather
         # than by this function - see contracts.payment_split.
         plan=contracts.payment_split(
@@ -247,6 +251,7 @@ def attach_draft(template_name, job_name, html):
 def generate(
     template_name, job_name, vendor=None, freelancer=None,
     contract_number=None, terms=None, parent_number=None,
+    acceptance_table=None,
 ):
     """Fill a template for a job and attach the result to that job.
 
@@ -262,7 +267,7 @@ def generate(
         values_for(
             job, vendor=vendor, freelancer=freelancer,
             contract_number=contract_number, terms=terms,
-            parent_number=parent_number,
+            parent_number=parent_number, acceptance_table=acceptance_table,
         ),
     )
 

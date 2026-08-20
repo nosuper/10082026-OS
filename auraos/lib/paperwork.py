@@ -331,6 +331,11 @@ MONEY_FIELDS = {
 PLAN_PCT_FIELDS = ("deposit_pct", "final_pct")
 PLAN_MONEY_FIELDS = ("deposit_amount", "final_amount")
 
+# The acceptance table's shape, mirrored from lib/acceptance.py so a
+# template can name any cell of it: acceptance.total_remaining and so on.
+ACCEPTANCE_BANDS = ("pre_vat", "vat", "total")
+ACCEPTANCE_COLUMNS = ("contracted", "settled", "difference", "collected", "remaining")
+
 # The day counts, which read as bare numbers rather than as money.
 TERM_DAY_FIELDS = ("deposit_days", "final_days")
 
@@ -359,6 +364,7 @@ def document_values(
     parent_number: str | None = None,
     terms: Mapping[str, Any] | None = None,
     plan: Mapping[str, Any] | None = None,
+    acceptance_table: Mapping[str, Any] | None = None,
 ) -> dict[str, str | None]:
     """Every placeholder a template may use, filled from plain records.
 
@@ -424,6 +430,22 @@ def document_values(
     for name in ("gross", "tax", "net"):
         values[f"fee.{name}"] = _money(fee[name]) if fee else None
         values[f"fee.{name}_in_words"] = in_words(fee[name]) if fee else None
+
+    # The acceptance document's summary table (#153). Namespaced
+    # `acceptance` rather than `settlement`, because lib/settlement.py
+    # is this codebase's producer-float module and the collision is the
+    # kind that reads fine until somebody wires the wrong one.
+    for band_name in ACCEPTANCE_BANDS:
+        row = (acceptance_table or {}).get(band_name) or {}
+        for column in ACCEPTANCE_COLUMNS:
+            values[f"acceptance.{band_name}_{column}"] = (
+                _money(row.get(column)) if row.get(column) is not None else None
+            )
+    values["acceptance.total_remaining_in_words"] = (
+        in_words((acceptance_table or {}).get("total", {}).get("remaining"))
+        if ((acceptance_table or {}).get("total") or {}).get("remaining") is not None
+        else None
+    )
 
     plan = plan or {}
     for name in PLAN_PCT_FIELDS:

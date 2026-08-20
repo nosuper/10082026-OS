@@ -15,7 +15,7 @@ from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
 from auraos import statements
-from auraos.lib import breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax
+from auraos.lib import acceptance, breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax
 from auraos.lib import reporting
 from auraos.lib import statement
 # Imported by name: `milestones` is a parameter of save_job_milestones.
@@ -103,6 +103,55 @@ def _parent_contract_number(job):
         if row.contract_number:
             return row.contract_number
     return None
+
+
+def _acceptance_table(job_doc, settled=None):
+    """The acceptance document's figures for this job (#153).
+
+    `settled` is what the founder typed at generation - the band totals
+    as agreed at acceptance. Not derived: they told us "cứ để tôi chỉnh
+    sửa ... rồi nhập lại số là xong", so the numbers are theirs and the
+    arithmetic between them is ours.
+
+    Contracted comes from the job's own quote. Collected comes from the
+    milestones actually paid, split at the rate each was invoiced at.
+    """
+    settled = settled or {}
+    paid = [
+        {"amount": m.get("amount"), "vat_pct": m.get("invoice_vat_pct")}
+        for m in job_doc.get("payment_milestones") or []
+        if m.get("status") == "Paid" and m.get("paid_on")
+    ]
+    collected = acceptance.collected_bands(paid)
+    contracted = {
+        "pre_vat": job_doc.get("quote_subtotal"),
+        "vat": job_doc.get("quote_vat_amount"),
+        "total": job_doc.get("quote_total"),
+    }
+    return acceptance.summary(contracted, settled, collected)
+
+
+@frappe.whitelist()
+def job_acceptance_figures(job):
+    """What the acceptance dialog pre-fills its inputs with.
+
+    Settled is offered as the contracted figure, which is the founder's
+    normal case - "giá trị thanh lý thông thường sẽ là giá trị hợp
+    đồng". They overwrite whichever differ.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    table = _acceptance_table(doc, settled=None)
+    return {
+        "contracted": {k: _plain(v["contracted"]) for k, v in table.items()},
+        "collected": {k: _plain(v["collected"]) for k, v in table.items()},
+        "refusals": list(acceptance.refusals(table)),
+    }
+
+
+def _plain(value):
+    """A Decimal as a number the browser can hold, or None."""
+    return None if value is None else float(value)
 
 
 @frappe.whitelist()
@@ -1698,7 +1747,7 @@ def paperwork_library():
 @frappe.whitelist()
 def generate_job_paperwork(
     job, template, vendor=None, freelancer=None, contract_number=None, terms=None,
-    parent_number=None,
+    parent_number=None, settled=None,
 ):
     """Fill a template for this job and attach the result to it.
 
@@ -1723,6 +1772,11 @@ def generate_job_paperwork(
         template, job, vendor=vendor, freelancer=freelancer,
         contract_number=contract_number, terms=_terms(terms),
         parent_number=parent_number,
+        acceptance_table=(
+            _acceptance_table(frappe.get_doc("Job", job), _terms(settled))
+            if settled
+            else None
+        ),
     )
     _register_paper(
         job, template, vendor, freelancer, document, contract_number=contract_number
