@@ -63,6 +63,19 @@ function NavLink({ item }: { item: NavItem }) {
   return (
     <Link
       to={item.to}
+      // The open section, said rather than only drawn (#136). Until this
+      // existed the current section was carried by background colour alone:
+      // visible to anyone looking at the screen and to nobody using it by
+      // ear. The condition is the one above - `match` already knows which
+      // section owns the page, so this exposes information the component had
+      // rather than computing any.
+      //
+      // A spec asserting it is the second beneficiary and not the reason.
+      // The class it replaced could not be asserted honestly: the inactive
+      // branch below carries `hover:bg-secondary/70`, which contains the
+      // substring `bg-secondary`, so a regex for the lit class matched a dark
+      // item and the one test written for #66's regression could not fail.
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
         active

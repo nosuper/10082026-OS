@@ -149,21 +149,22 @@ test("the two halves are two lists, on the screen and in the payloads", async ({
 // app's tokens only: split on whitespace, drop what the router owns, compare
 // as sets. Whole tokens rather than a substring, which is what the first
 // version got wrong in the other direction.
+//
+// **All of that is now history rather than mechanism.** Three drafts spent
+// working out which classes mean "current" is what argued for #136: the
+// information existed and the DOM did not say it. The test below asserts
+// `aria-current` and none of the above applies to it - kept because it is the
+// case for the attribute, and because the next person to reach for a class as
+// a state signal should see how that went.
 
-/** Tokens the router writes, which say nothing about how the app styles state.
- *  `active` is TanStack's default `activeProps.className`; nothing in
- *  styles.css defines a rule for it. */
-const ROUTER_TOKENS = new Set(["active"]);
-
-/** A link's classes as the app set them, order-independent. */
-async function appTokens(link) {
-  const raw = (await link.getAttribute("class")) ?? "";
-  return raw
-    .split(/\s+/)
-    .filter((token) => token && !ROUTER_TOKENS.has(token))
-    .sort();
-}
 test("the Documents nav item stays lit on both tabs", async ({ page }) => {
+  // Now asserted on `aria-current`, which #136 added for this reason and for
+  // the better one: the open section used to be carried by background colour
+  // alone. The class comparison this replaces was sound but was reasoning
+  // about Tailwind - and the version before *that* matched `bg-secondary` as
+  // a substring, which the inactive branch also contains via
+  // `hover:bg-secondary/70`, so it passed on a nav item that was dark.
+  //
   // Not scoped through getByRole("navigation"): the sidebar is a <nav> and so
   // is the tab strip, so that locator matches two landmarks and a strict mode
   // violation is a crash, not a failure. The nav item is the only link on the
@@ -171,12 +172,21 @@ test("the Documents nav item stays lit on both tabs", async ({ page }) => {
   const navItem = () => page.getByRole("link", { name: "Documents", exact: true });
 
   await openTab(page, PAPERWORK_URL, "Paperwork");
-  const lit = await appTokens(navItem());
-  const dark = await appTokens(page.getByRole("link", { name: "Deals", exact: true }));
-  expect(lit, "the current section looks the same as one nobody is in").not.toEqual(dark);
+  await expect(navItem()).toHaveAttribute("aria-current", "page");
+
+  // The half that keeps this from being a tautology, kept from the class
+  // version: a nav that marked *every* item current would satisfy the two
+  // assertions around this one.
+  await expect(
+    page.getByRole("link", { name: "Deals", exact: true }),
+    "a section nobody is in is also marked current",
+  ).not.toHaveAttribute("aria-current", "page");
 
   await openTab(page, LIBRARY_URL, "Library");
-  expect(await appTokens(navItem()), "the section light went out on the Library tab").toEqual(lit);
+  await expect(navItem(), "the section light went out on the Library tab").toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 });
 
 // -- the document that used to be a page --
