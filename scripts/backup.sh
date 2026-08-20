@@ -66,8 +66,53 @@ MARKER="sites/$SITE/private/last-backup"
 
 mark_success() {
   docker exec "$CONTAINER" bash -lc \
-    "cd $BENCH_DIR && printf '%s %s %s\\n' '$(date -Is)' '$(basename "$ARCHIVE")' '$1' > $MARKER"
+    "cd $BENCH_DIR && printf '%s %s %s %s\\n' '$(date -Is)' '$(basename "$ARCHIVE")' '$1' '$COUNTS' > $MARKER"
 }
+
+# What the site held, counted **before** the dump (#73).
+#
+# This is what makes scripts/restore-test.sh able to judge rather than
+# only report. Comparing a restored archive against the *live* site is
+# the obvious rule and the wrong one: the archive is last night's and the
+# site has lived since, so a healthy studio fails it the first day
+# somebody creates a deal. What a restore must be measured against is
+# what the site held **when the archive was taken**, and this is the only
+# moment that number exists.
+#
+# **Counted before `bench backup`, on purpose.** The dump is a snapshot;
+# anything written between the snapshot and a count taken afterwards
+# would differ for a reason that is not data loss, and Frappe's own
+# scheduler runs at night. Counting first makes the asymmetry safe:
+# writes during the window can only make the restored count *higher*, so
+# `restored >= recorded` passes and a lower count is a real finding.
+# Deletes in that window would break it - rarely, and loudly, which beats
+# regularly and vaguely.
+#
+# **Best-effort, and it must stay that way.** A count is a database call
+# with its own ways to fail, and this marker's whole purpose is that its
+# absence means "no backup proved itself". A transient hiccup after a
+# perfectly good dump must not exit before the write and make the alarm
+# cry about a backup sitting on disk: the guard must not be able to kill
+# the thing it guards. So the failure is swallowed, the line is written
+# either way, and the pairs are simply absent - which restore-test.sh
+# reports in its own words rather than borrowing this alarm's.
+# Pipe-separated because doctype names have spaces in them, and the
+# marker's pairs must not: every reader of this line splits on spaces.
+# So a name travels as `Job_Payment_Milestone=4` and restore-test.sh
+# turns the underscores back into spaces - safe because no Frappe doctype
+# name contains an underscore.
+COUNTED="Deal|Job|Deal Quote|Job Payment Milestone|Company Expense"
+
+count_rows() {
+  docker exec -i "$CONTAINER" bash -lc \
+    "cd $BENCH_DIR && bench --site $SITE console" <<EOF 2>/dev/null | grep -o 'COUNTS.*' || true
+names = "$COUNTED".split("|")
+print("COUNTS " + " ".join("%s=%s" % (n.replace(" ", "_"), frappe.db.count(n)) for n in names))
+EOF
+}
+
+COUNTS=$(count_rows | sed 's/^COUNTS //')
+[ -n "$COUNTS" ] || log "note: $SITE - counts unavailable, the marker will carry none"
 
 docker exec "$CONTAINER" bash -lc \
   "cd $BENCH_DIR && bench --site $SITE backup --with-files" > /dev/null
