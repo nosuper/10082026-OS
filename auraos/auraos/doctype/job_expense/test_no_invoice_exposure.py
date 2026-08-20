@@ -176,14 +176,25 @@ class TestUnattributedSpending(ExposureTestCase):
 class TestCoveredIsRecordedNotASecondExpense(ExposureTestCase):
     def test_an_invoice_number_takes_the_exposure_off(self):
         expense = self.pay(850_000, self.line_named(NO_INVOICE_DESCRIPTION))
-        self.assertEqual(len(self.mine(self.report())), 1)
+        before = self.report()
+        self.assertEqual(len(self.mine(before)), 1)
 
         expense.invoice_no = "0001234"
         expense.save()
 
         out = self.report()
         self.assertEqual(self.mine(out), [])
-        self.assertEqual(out["covered_count"], 1)
+        # A difference, not a figure (#144). `covered_count` is the whole
+        # site's, and unlike the uncovered rows there is no per-job list to
+        # scope it through - `lines` carries only the uncovered ones. So this
+        # asserted "the site has exactly one covered payment" and read it as
+        # "mine is covered", which was true only while nothing else on the
+        # site had ever carried an invoice number. The e2e seed now does, and
+        # the assertion failed there while passing in CI - a test that was
+        # wrong the day it was written and could not say so until a populated
+        # site ran it.
+        self.assertEqual(out["covered_count"], before["covered_count"] + 1)
+        self.assertEqual(out["covered_total"], before["covered_total"] + 850_000)
 
     def test_recording_the_invoice_adds_no_money_to_the_job(self):
         """#11 recorded the replacement invoice as a second Job Expense,
