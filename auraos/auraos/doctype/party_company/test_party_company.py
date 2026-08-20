@@ -59,7 +59,13 @@ class TestPartyCompanyInlineCreate(FrappeTestCase):
         self.assertEqual(
             required,
             ["company_name"],
-            "Party Company now requires more than a name, so the deal form's "
-            "inline '+ New client...' dialog can no longer fill it. Either add "
-            "the field to that dialog or stop offering the inline path.",
+            "Party Company has grown a required field beyond its name, and the "
+            "deal form's inline '+ New client...' dialog sends only the name - "
+            "so that dialog's save now fails, after the person has already "
+            "moved on. Three repairs, in the order they are usually right: "
+            "give the field a server-side default so the inline path can keep "
+            "sending one field; or add the field to the dialog, accepting that "
+            "'one field' becomes two; or stop offering the inline path and send "
+            "people back to Contacts. Deleting this assertion is not one of "
+            "them - it is the thing that told you.",
         )
