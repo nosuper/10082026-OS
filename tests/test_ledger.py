@@ -30,9 +30,18 @@ this module.
 """
 
 from dataclasses import asdict
+import json
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
+
+# The doctype whose Select has to agree with FLOWS, read as a file
+# because that is all it takes to know.
+FLOW_FIELD = (
+    Path(__file__).resolve().parents[1]
+    / "auraos/auraos/doctype/cash_ledger_entry/cash_ledger_entry.json"
+)
 
 from auraos.lib.ledger import (
     CLIENT_PAYMENT,
@@ -170,6 +179,29 @@ def test_the_flows_the_ledger_carries_are_named_here():
         "Transfer in",
     )
     assert set(SOURCES) == set(FLOWS)
+
+
+def test_the_doctype_offers_exactly_the_flows_this_module_names():
+    """The Select and FLOWS are one vocabulary in two files.
+
+    **This test exists because they came apart.** #151 added Transfer out
+    and Transfer in here, and not to `Cash Ledger Entry.flow`'s options -
+    so all 100 tests in this file passed over transfer logic that the
+    database refused on every write: *Flow cannot be "Transfer out"*.
+
+    A pure test rather than a seam test, deliberately. The gap is
+    readable in a JSON file, so catching it should not need a site, a
+    boot or eleven minutes - it should fail in CI the moment somebody
+    widens one side and not the other, which is the only moment the fix
+    is free.
+    """
+    field = next(
+        one
+        for one in json.loads(FLOW_FIELD.read_text(encoding="utf-8"))["fields"]
+        if one["fieldname"] == "flow"
+    )
+
+    assert tuple(field["options"].split("\n")) == FLOWS
 
 
 def test_both_halves_of_a_transfer_come_from_one_record():
