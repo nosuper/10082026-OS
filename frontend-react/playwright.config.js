@@ -1,12 +1,12 @@
-import { defineConfig, devices } from "@playwright/test"
+import { defineConfig, devices } from "@playwright/test";
 
-import { administratorState } from "./e2e/auth-state.js"
+import { administratorState } from "./e2e/auth-state.js";
 
 // Points at the disposable E2E stack, not dev.localhost. A suite that mutates
 // shared dev data breaks whatever another session is verifying, and a suite
 // that only passes against whatever happens to be in dev today is not a
 // regression net.
-const baseURL = process.env.E2E_BASE_URL || "http://127.0.0.1:18000"
+const baseURL = process.env.E2E_BASE_URL || "http://127.0.0.1:18000";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -29,4 +29,4 @@ export default defineConfig({
     video: "off",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-})
+});
