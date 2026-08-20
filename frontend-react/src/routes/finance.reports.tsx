@@ -25,20 +25,30 @@
 // that is final, and a ranking without them would rank the studio on its
 // unfinished work. They are grouped apart for exactly that reason.
 //
-// **There is no tax position card**, and its absence is the point. Nothing in
-// AuraOS computes a period tax estimate yet - the profit chain that exists is
-// per deal and measured against a quote, not per period - so a card here would
-// have to be filled with a plausible-looking number nobody computed. Issue
-// #109 builds the endpoint; until it lands this screen says what it does not
-// know instead of guessing.
+// **The tax position card is half a card on purpose** (#109). Output VAT for
+// the range is a fact and is here. TNDN for the range is not computed at all,
+// and the card prints the reason rather than a figure: every expense in AuraOS
+// belongs to a job, so a TNDN number from this data would omit every overhead
+// and overstate the tax - the plausible-looking number the guidebook refuses,
+// and the one that would get filed. What was a whole empty tile is now a
+// smaller one that finally says why it is empty.
 //
-// Producer-safe by construction. Both endpoints scope to the jobs the session
-// may list, and neither payload carries commission, CM, profit before tax,
-// TNDN or net profit - the founder's chain lives behind auraos.api.deal_profit
-// and no code path here reaches for it.
+// **The VAT figure is not on this screen's basis and says so.** Everything
+// else here is cash basis; output VAT falls due when the invoice is issued.
+// That is statute, not a preference, so the card carries its own basis line -
+// a reader who tries to reconcile it against Income is told why it will not
+// match before they try.
+//
+// Producer-safe by construction, and the tax card does not break that. The two
+// original endpoints scope to the jobs the session may list and neither
+// payload carries commission, CM, profit before tax, TNDN or net profit. The
+// third is founder-only at the server (auraos.api.period_tax_position throws
+// for anyone else) and is not even asked for otherwise - the same shape as the
+// dashboard's exposure tile, where a producer's missing tile is a fact about
+// them rather than an error.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { CalendarRange, Receipt, Scale } from "lucide-react";
+import { CalendarRange, Scale } from "lucide-react";
 
 import { AppShell } from "@/components/aura/AppShell";
 import {
@@ -50,11 +60,33 @@ import {
 } from "@/components/aura/FinanceRange";
 import { Bar, FinanceTabs } from "@/components/aura/FinanceTabs";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
+import { useSession } from "@/components/aura/SessionProvider";
 import { Figure, QueryState } from "@/components/aura/states";
 import { countLabel, percent } from "@/lib/format";
 import { useMethod } from "@/lib/queries";
 
 // -- what the server sends --
+
+type VatRate = { vat_pct: number; gross: number; net: number; vat: number; count: number };
+
+type TaxPositionPayload = {
+  vat: {
+    basis: string;
+    gross_total: number;
+    net_total: number;
+    vat_total: number;
+    count: number;
+    by_rate: VatRate[];
+  };
+  tndn_component: {
+    standing: boolean;
+    of: string;
+    uncovered_total: number;
+    tndn_exposure: number;
+    rate_pct: number;
+  } | null;
+  not_computed: { figure: string; why: string }[];
+};
 //
 // Pinned by the pure tests in tests/test_finance.py and by the contract test
 // in auraos/auraos/doctype/job/test_job_profitability.py. Money is whole
@@ -203,6 +235,7 @@ function MarginGroup({
 
 function ReportsPage() {
   const [range, setRange] = useFinanceRange();
+  const session = useSession();
 
   const pnl = useMethod<ProfitAndLossReport>("auraos.api.finance_profit_and_loss", {
     date_from: range.from,
@@ -411,18 +444,124 @@ function ReportsPage() {
           </QueryState>
         </Card>
 
-        <p className="flex items-start gap-2 rounded-xl border border-border bg-secondary/40 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-          <Receipt className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
-          <span>
-            <strong className="font-medium text-foreground">
-              The tax position is not on this screen yet.
-            </strong>{" "}
-            Nothing in AuraOS works out a TNDN or VAT figure for a period, and a number nobody
-            computed is worse than no number at all - it would get filed. When the estimate exists
-            it will appear here with the basis it was measured on written next to it.
-          </span>
-        </p>
+        {session.isFounder ? <TaxPosition range={range} /> : null}
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * The period's tax position: the half that is a fact, and the half that is
+ * named rather than guessed.
+ *
+ * Founder-only, and the caller decides whether to render it at all - the
+ * server refuses anyone else outright, so asking on a producer's behalf would
+ * be a guaranteed 403 on every visit to this screen.
+ */
+function TaxPosition({ range }: { range: { from: string; to: string } }) {
+  const position = useMethod<TaxPositionPayload>("auraos.api.period_tax_position", {
+    date_from: range.from,
+    date_to: range.to,
+  });
+
+  return (
+    <Card
+      title="Tax position"
+      subtitle="Output VAT for the range, and what is still not worked out"
+    >
+      <QueryState query={position} isEmpty={() => false} loadingRows={2}>
+        {(data) => (
+          <div className="space-y-4 p-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Stat label="Output VAT" value={<Money value={data.vat.vat_total} />} />
+              <Stat label="Invoiced before VAT" value={<Money value={data.vat.net_total} />} />
+              <Stat label="Invoices issued" value={countLabel(data.vat.count, "invoice")} />
+            </div>
+
+            {/* The basis, on the card's face rather than in a tooltip. Every
+                other figure on this screen is cash basis; this one cannot be,
+                and a reader comparing it against Income needs to know that
+                before they start rather than after. */}
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <strong className="font-medium text-foreground">Not the cash basis</strong> the rest
+              of this screen uses: {data.vat.basis}.
+            </p>
+
+            {/* Broken out by rate because a return is filed per rate, and one
+                summed figure cannot be checked against one. */}
+            {data.vat.by_rate.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b border-border">
+                    <tr>
+                      <Th>VAT rate</Th>
+                      <Th className="text-right">Invoices</Th>
+                      <Th className="text-right">Before VAT</Th>
+                      <Th className="text-right">VAT</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {data.vat.by_rate.map((row) => (
+                      <tr key={row.vat_pct}>
+                        <Td className="num">{percent(row.vat_pct)}</Td>
+                        <Td className="num text-right text-xs text-muted-foreground">
+                          {row.count}
+                        </Td>
+                        <Td className="text-right">
+                          <Money value={row.net} />
+                        </Td>
+                        <Td className="text-right">
+                          <Money value={row.vat} />
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {/* Standing, not for the range - and drawn apart from the figures
+                above rather than beside them, because an uncovered payment is
+                carried from the day it was made until an invoice turns up. Put
+                on one axis with a period figure it would read as comparable
+                and is not. */}
+            {data.tndn_component ? (
+              <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="label-caps">TNDN exposure carried now</span>
+                  <Pill tone="outline">Not for this range</Pill>
+                </div>
+                <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                  <Money value={data.tndn_component.tndn_exposure} className="text-ember" />
+                  <span className="text-xs text-muted-foreground">
+                    on <Money value={data.tndn_component.uncovered_total} /> of{" "}
+                    {data.tndn_component.of}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A component of a TNDN position, not a position: it is the tax on spending that
+                  cannot be deducted, which is one input to a figure this screen does not compute.
+                </p>
+              </div>
+            ) : null}
+
+            {/* The gap, in the server's words rather than this file's - the
+                list shrinks as tickets land, and a screen that kept its own
+                copy would go on describing a hole somebody had filled. */}
+            <div className="border-t border-border pt-3">
+              <p className="label-caps mb-2">Not worked out here</p>
+              <ul className="space-y-1.5">
+                {data.not_computed.map((row) => (
+                  <li key={row.figure} className="text-xs leading-relaxed text-muted-foreground">
+                    <strong className="font-medium text-foreground">{row.figure}</strong> -{" "}
+                    {row.why}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </QueryState>
+    </Card>
   );
 }
