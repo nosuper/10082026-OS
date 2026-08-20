@@ -29,6 +29,15 @@ The arithmetic of exposure itself is pinned framework-free in
 tests/test_exposure.py, and the posting rules in tests/test_ledger.py.
 Nothing here re-tests either.
 
+**These are also the first tests of #123's freeze.** `reject_change_after_close`
+argues in its own docstring that all three ways of changing a closed job's
+spending have to be gated - edit, add and delete - because `on_trash` walks a
+ledger entry back, and a freeze with a hole in it reads like a guarantee.
+Nothing asserted any of it: there is no test in `auraos` that closes a job and
+then touches its spending. Until #125 the rule was reachable only from the
+Desk, which is presumably why. It is reachable from the app now, so the three
+cases below are the first coverage that rule has ever had.
+
 **On who may correct.** There is no per-job boundary in this app to
 assert: `Job` grants read and write to the Founder, Producer and System
 Manager roles outright, and there is no `permission_query_conditions`
@@ -141,8 +150,13 @@ class CorrectionTestCase(FrappeTestCase):
         return frappe.get_doc("Cash Ledger Entry", name)
 
     def close_the_job(self):
-        self.job.stage = CLOSED_STAGE
-        self.job.save()
+        """Re-read before saving, the way test_cash_ledger does it: the
+        doc this case has been holding since setUp is not what a save
+        should be built on once other things have written to the site."""
+        job = frappe.get_doc("Job", self.job.name)
+        job.stage = CLOSED_STAGE
+        job.save()
+        self.job = job
 
 
 class TestTheFigureCanNowComeDown(CorrectionTestCase):
@@ -289,8 +303,9 @@ class TestAClosedJobRefusesBoth(CorrectionTestCase):
         impossible one."""
         expense = self.spend(3_000_000)
         self.close_the_job()
-        self.job.stage = "Delivery"
-        self.job.save()
+        job = frappe.get_doc("Job", self.job.name)
+        job.stage = "Delivery"
+        job.save()
 
         self.correct(expense, amount=1_000_000)
 
