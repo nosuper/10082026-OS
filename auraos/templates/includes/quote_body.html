@@ -340,10 +340,14 @@
     {% if included_revision_rounds %}
     <div class="aura-term aura-rounds">
       <h2>Revisions</h2>
-      <p>
-        {{ included_revision_rounds }} round{% if included_revision_rounds != 1 %}s{% endif %}
-        included. Further rounds are quoted as a change order.
-      </p>
+      {#
+        One line on purpose. Wrapped across two, Jinja leaves a newline
+        inside the sentence, and the DOM text becomes "3 rounds\n included"
+        - which reads correctly on screen and in an accessibility snapshot
+        while defeating any selector looking for the sentence. Run 28 died
+        exactly there.
+      #}
+      <p>{{ included_revision_rounds }} round{% if included_revision_rounds != 1 %}s{% endif %} included. Further rounds are quoted as a change order.</p>
     </div>
     {% endif %}
   </div>

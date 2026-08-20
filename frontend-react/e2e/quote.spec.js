@@ -188,7 +188,10 @@ test("a published version keeps the assumptions it shipped with", async ({ page 
   await page.goto(newest.url);
   await expect(page.getByText("E2E shoot days: 2")).toBeVisible();
   await expect(page.getByText("E2E extra shoot day")).toBeVisible();
-  await expect(page.getByText(/3 rounds included/)).toBeVisible();
+  // \s+ rather than a literal space: the template is free to re-wrap, and a
+  // sentence split across two source lines carries a newline in the DOM text
+  // even though it renders - and reads in a snapshot - as one line.
+  await expect(page.getByText(/3\s+rounds\s+included/)).toBeVisible();
 
   // Now move the deal underneath it. This is the half that matters.
   await openQuote(page);
