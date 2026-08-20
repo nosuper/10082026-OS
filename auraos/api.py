@@ -652,9 +652,13 @@ def log_job_revision(job, note):
 # -- money out on a job (T8, issue #10) --
 
 ADVANCE_FIELDS = ["name", "recipient", "amount", "transferred_on", "note"]
+# cost_line and invoice_no travel because the money screen can now
+# correct them (#125), and a field an editor cannot read is a field it
+# cannot open with the value the record actually holds.
 EXPENSE_FIELDS = [
     "name", "spent_on", "amount", "category", "description",
     "paid_by", "paid_from", "photo", "creation",
+    "cost_line", "invoice_no",
 ]
 SETTLEMENT_FIELDS = [
     "name", "recipient", "amount", "direction", "advanced", "spent",
@@ -741,6 +745,12 @@ def job_money(job):
         # server would refuse anyway.
         "may_advance": bool(frappe.has_permission("Job Advance", "create")),
         "may_settle": bool(frappe.has_permission("Job Settlement", "create")),
+        # Whether this job's spending is still a draft or already a
+        # record (#123). Carried here rather than fetched separately, so
+        # the screen and the lock read the same source: the doctype
+        # refuses a change after the closing stage, and a screen offering
+        # a control the server would refuse is a lie about the record.
+        "closed": doc.stage == CLOSED_JOB_STAGE,
     }
 
 
@@ -853,6 +863,106 @@ def log_job_expense(
         "photo": expense.photo,
         "float": _holder_float(job, expense.paid_by),
     }
+
+
+@frappe.whitelist()
+def update_job_expense(
+    name,
+    amount,
+    category=None,
+    description=None,
+    cost_line=None,
+    invoice_no=None,
+):
+    """Correct one payment that has already been logged (#125).
+
+    **The reason this endpoint exists is the invoice number**, not the
+    typo. `auraos.lib.exposure` calls a payment covered when paper was
+    obtained for it, and covered spending leaves the founder's tax
+    figure - so recording the replacement invoice is the only way that
+    number ever comes down. Until now nothing in the app could write it:
+    `log_job_expense` accepts one and no screen ever passed one, so the
+    tile could rise and could not fall. The other fields ride along
+    because the founder asked for spending to be correctable while a job
+    is open, and an invoice number is a correction like any other.
+
+    **`cost_line` is the second lever on the same figure.** An expense
+    against a line marked Không hoá đơn is exposed, one against a line
+    that comes with paper is not, and one attributed to nothing counts
+    as exposed until somebody says otherwise. So a mis-picked line
+    overstates or understates the company's position exactly as a
+    missing invoice number does, and a screen that could fix one and not
+    the other would close half the hole.
+
+    **This states the row; it does not patch it.** Every editable field
+    is written from what the caller sent, so an omitted `category`
+    clears the category rather than keeping it. The caller is a row
+    editor that holds all five values and sends all five; a patch
+    endpoint that quietly kept what it was not told about would make
+    "clear this field" unexpressible, which is the worse of the two
+    surprises.
+
+    Not editable here: who paid and out of whose float. The reconciler
+    would cope - `paid_by_company` is re-read on every save - but moving
+    a payment between a float and the company changes who is owed what,
+    and that conversation belongs on the settlement screen.
+
+    **No posting call, deliberately.** `Job Expense.on_update` already
+    hangs `post_payment` off the save, and `auraos.lib.ledger.posting`
+    answers a changed amount with REPOST while `restated` carries the
+    original account forward. Correcting an amount reconciles itself;
+    adding a second posting call here would double it.
+
+    A closed job refuses all of this, in the doctype rather than here:
+    `reject_change_after_close` runs in `validate`, so this endpoint
+    inherits the freeze that #123 put on the record rather than
+    restating it and risking the two drifting apart.
+    """
+    expense = frappe.get_doc("Job Expense", name)
+    _check_job_permission(expense.job, "write")
+    expense.amount = amount
+    expense.category = category or None
+    expense.description = description or None
+    expense.cost_line = cost_line or None
+    expense.invoice_no = (invoice_no or "").strip() or None
+    expense.save()
+    return {
+        "name": expense.name,
+        "amount": round_vnd(expense.amount),
+        "category": expense.category,
+        "photo": expense.photo,
+        "float": _holder_float(expense.job, expense.paid_by),
+    }
+
+
+@frappe.whitelist()
+def delete_job_expense(name):
+    """Remove a payment that was never made (#125).
+
+    The mistaken entry, not the corrected one: an amount typed wrong is
+    `update_job_expense`'s job, and this is for spending that did not
+    happen at all. Deleting was reachable from the Desk and from nowhere
+    a person using the app could get to, which left the money screen
+    able to add a payment and unable to take one back.
+
+    The ledger comes back with it. `Job Expense.on_trash` posts the
+    movement again with `moved=False`, which `auraos.lib.ledger.posting`
+    answers by taking the entry out - so a deleted expense leaves no
+    trace of money that never left the company.
+
+    Closed jobs refuse this too, and for a sharper reason than they
+    refuse an edit: `on_trash` walks a ledger entry back, so a freeze
+    with a hole here would be the one direction that moves money and
+    leaves nothing saying it was adjusted. The gate is in the doctype.
+
+    Returns the payer's float, because taking a payment out of a shoot's
+    spending is exactly when somebody wants to know what is left.
+    """
+    expense = frappe.get_doc("Job Expense", name)
+    _check_job_permission(expense.job, "write")
+    job, payer = expense.job, expense.paid_by
+    expense.delete()
+    return {"name": name, "float": _holder_float(job, payer)}
 
 
 def _attach_photo(expense, file_url):
