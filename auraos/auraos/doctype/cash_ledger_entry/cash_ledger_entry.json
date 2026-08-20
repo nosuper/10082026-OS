@@ -65,7 +65,7 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Flow",
-   "options": "Client payment\nJob expense\nCrew advance\nFloat settlement",
+   "options": "Client payment\nJob expense\nCrew advance\nFloat settlement\nCompany expense",
    "read_only": 1,
    "reqd": 1
   },

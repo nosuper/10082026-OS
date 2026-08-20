@@ -66,8 +66,21 @@ CLIENT_PAYMENT = "Client payment"  # a milestone the client paid
 JOB_EXPENSE = "Job expense"  # the company paid a vendor itself
 CREW_ADVANCE = "Crew advance"  # cash handed to whoever is spending it
 FLOAT_SETTLEMENT = "Float settlement"  # a float closed, either way
+# The fifth, and the widening the comment above warned would cost a
+# migration (#14/#109). It is deliberate rather than incidental: the
+# company pays for things that belong to no job - rent, salaries, a
+# client lunch - and until now the ledger had no way to say so. Every
+# other flow carries a job; this is the one that does not, which is why
+# `Entry.job` was optional from the day it was written.
+COMPANY_EXPENSE = "Company expense"  # the company paid for its own upkeep
 
-FLOWS = (CLIENT_PAYMENT, JOB_EXPENSE, CREW_ADVANCE, FLOAT_SETTLEMENT)
+FLOWS = (
+    CLIENT_PAYMENT,
+    JOB_EXPENSE,
+    CREW_ADVANCE,
+    FLOAT_SETTLEMENT,
+    COMPANY_EXPENSE,
+)
 
 # Where each flow comes from. One doctype per flow today; the pair on the
 # entry is what keeps that from being an assumption anything relies on.
@@ -76,6 +89,7 @@ SOURCES = {
     JOB_EXPENSE: "Job Expense",
     CREW_ADVANCE: "Job Advance",
     FLOAT_SETTLEMENT: "Job Settlement",
+    COMPANY_EXPENSE: "Company Expense",
 }
 
 # The prefix that opens an entry's name. The name of an entry is its
@@ -85,6 +99,10 @@ FLOW_CODES = {
     JOB_EXPENSE: "EXP",
     CREW_ADVANCE: "ADV",
     FLOAT_SETTLEMENT: "STL",
+    # Not EXP: an entry's name is its origin spelled out, and two flows
+    # sharing a code would let a Job Expense and a Company Expense with
+    # the same record name collide on the ledger's primary key.
+    COMPANY_EXPENSE: "OVH",
 }
 
 # What reconciling one movement asks the caller to do.
@@ -296,6 +314,37 @@ def job_expense(expense: Mapping[str, Any], account: str | None) -> Entry | None
         source_doctype=SOURCES[JOB_EXPENSE],
         source_name=expense.get("name"),
         job=expense.get("job"),
+        description=expense.get("description") or expense.get("category"),
+    )
+
+
+def company_expense(expense: Mapping[str, Any], account: str | None) -> Entry | None:
+    """The ledger entry an overhead payment earns, or None.
+
+    Negative, like a vendor payment: money leaving. **No job, and that is
+    the whole point of the flow** - rent belongs to the company rather
+    than to any shoot, so `Entry.job` stays None and the cash screens
+    show the movement without inventing a job for it.
+
+    **Always posted, where a job expense sometimes is not.** A job
+    expense asks `paid_by_company` first, because a producer spending
+    their float moves no company money on that day. An overhead has no
+    float to come out of: the company account is the only thing it can
+    be paid from, so there is no case here that posts nothing.
+
+    The account is the caller's, not the default's, because the founder
+    records which account paid - a company card and the bank are
+    different places the money can leave from.
+    """
+    if not account:
+        return None
+    return Entry(
+        account=account,
+        amount=-round_vnd(expense.get("amount") or 0),
+        entry_date=as_date(expense.get("spent_on")),
+        flow=COMPANY_EXPENSE,
+        source_doctype=SOURCES[COMPANY_EXPENSE],
+        source_name=expense.get("name"),
         description=expense.get("description") or expense.get("category"),
     )
 

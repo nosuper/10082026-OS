@@ -1,0 +1,135 @@
+{
+ "actions": [],
+ "autoname": "format:CE-{YYYY}-{#####}",
+ "creation": "2026-08-20 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "spent_on",
+  "amount",
+  "category",
+  "column_break_head",
+  "paid_from",
+  "description",
+  "invoice_section",
+  "invoice_no",
+  "invoice_vat_amount",
+  "column_break_invoice",
+  "supplier",
+  "photo",
+  "treatment_section",
+  "for_depreciation"
+ ],
+ "fields": [
+  {
+   "fieldname": "spent_on",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Spent On",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Category",
+   "options": "Company Expense Category"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "label": "Paid From",
+   "options": "Cash Account"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "invoice_section",
+   "fieldtype": "Section Break",
+   "label": "VAT invoice"
+  },
+  {
+   "fieldname": "invoice_no",
+   "fieldtype": "Data",
+   "label": "Invoice No"
+  },
+  {
+   "fieldname": "invoice_vat_amount",
+   "fieldtype": "Currency",
+   "label": "VAT On The Invoice"
+  },
+  {
+   "fieldname": "column_break_invoice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Data",
+   "label": "Supplier"
+  },
+  {
+   "fieldname": "photo",
+   "fieldtype": "Attach Image",
+   "label": "Photo"
+  },
+  {
+   "fieldname": "treatment_section",
+   "fieldtype": "Section Break",
+   "label": "How the accountant will treat it"
+  },
+  {
+   "default": "0",
+   "description": "Leaves this out of the period estimate on Finance - Reports and lists it separately, so it can be checked against the accountant's return. It does not decide how the cost is treated: the accountant may expense it in full after all. The money still left the account either way and still shows on the cash screens.",
+   "fieldname": "for_depreciation",
+   "fieldtype": "Check",
+   "label": "For depreciation, not this period's costs"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Company Expense",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Founder",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "spent_on",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
