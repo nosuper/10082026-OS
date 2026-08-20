@@ -319,6 +319,14 @@ MONEY_FIELDS = {
     "vat_amount": "quote_vat_amount",
     "total": "quote_total",
 }
+# Entered at generation, held by no record. See document_values.
+TERM_FIELDS = (
+    "signed_on",
+    "deposit_days",
+    "final_days",
+    "service_start",
+    "service_end",
+)
 PCT_FIELDS = {"mf_pct": "quote_mf_pct", "vat_pct": "vat_pct"}
 
 
@@ -330,6 +338,7 @@ def document_values(
     freelancer: Mapping[str, Any] | None = None,
     today: date | None = None,
     contract_number: str | None = None,
+    terms: Mapping[str, Any] | None = None,
 ) -> dict[str, str | None]:
     """Every placeholder a template may use, filled from plain records.
 
@@ -358,6 +367,17 @@ def document_values(
     # generation, and a template must print the number the record
     # carries rather than the number the rule would produce now.
     values["contract.number"] = _text(contract_number)
+
+    # What the founder types at generation because no record holds it
+    # (#139): when the contract was signed, the payment terms in days,
+    # and the service window. Offered as its own namespace rather than
+    # folded into `job` - `job.*` is what the record says, and a reader
+    # who cannot tell the two apart will eventually look for these on
+    # the Job and not find them. Absent stays absent: a term nobody
+    # entered reports as missing data rather than as a plausible zero.
+    terms = terms or {}
+    for name in TERM_FIELDS:
+        values[f"terms.{name}"] = _text(terms.get(name))
 
     for name, fieldname in JOB_FIELDS.items():
         values[f"job.{name}"] = _text(job.get(fieldname))

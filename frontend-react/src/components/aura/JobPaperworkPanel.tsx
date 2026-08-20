@@ -20,6 +20,7 @@ import {
 import { Card } from "@/components/aura/primitives";
 import { ErrorState, Loading, QueryState } from "@/components/aura/states";
 import { formatDateTime } from "@/lib/format";
+import { ContractDetails, type ContractTerms } from "@/components/aura/ContractDetails";
 import { resultOf, useList, useMethod, useMethodMutation } from "@/lib/queries";
 
 // -- what the server sends --
@@ -27,6 +28,8 @@ import { resultOf, useList, useMethod, useMethodMutation } from "@/lib/queries";
 type TemplateRow = {
   name: string;
   template_name: string | null;
+  /** HDDV, BBNT, DNTT, or blank for a paper that carries no number. */
+  kind: string | null;
   needs_vendor: boolean;
   needs_freelancer: boolean;
   unknown_placeholders: string[];
@@ -106,6 +109,15 @@ export function JobPaperworkPanel({ job }: { job: string }) {
   const onJob = new Set(crew.map((row) => row.name));
   const offJob = (contacts.data ?? []).filter((row) => !onJob.has(row.name));
 
+  // Set once the founder has confirmed the number and terms for this
+  // paper, and cleared when the paper is generated. Held here rather
+  // than inside the dialog so a draft previewed before confirming is
+  // still generated with what was confirmed.
+  const [contract, setContract] = useState<{ number: string | null; terms: ContractTerms } | null>(
+    null,
+  );
+  const [asking, setAsking] = useState(false);
+
   const previewer = useMethodMutation<Preview, Record<string, unknown>>(
     "auraos.api.preview_job_paperwork",
     { onSuccess: (result) => setDraft(result) },
@@ -118,6 +130,9 @@ export function JobPaperworkPanel({ job }: { job: string }) {
       onSuccess: (result) => {
         setDraft(null);
         setGenerated(result);
+        // The next paper asks again. Terms belong to the document that
+        // was just made, not to the panel.
+        setContract(null);
       },
     },
   );
@@ -246,7 +261,16 @@ export function JobPaperworkPanel({ job }: { job: string }) {
               <button
                 type="button"
                 disabled={!chosen || previewer.isPending}
-                onClick={() => previewer.mutate({ job, template: chosen, ...forParties })}
+                onClick={() => {
+                  // A numbered paper asks for its date and number before
+                  // anything is filled, because the number is one of the
+                  // things the preview is supposed to show.
+                  if (template?.kind && !contract) {
+                    setAsking(true);
+                    return;
+                  }
+                  previewer.mutate({ job, template: chosen, ...forParties });
+                }}
                 className="rounded-lg bg-ember px-3 py-2 text-xs font-medium text-ember-foreground hover:opacity-90 disabled:opacity-40"
               >
                 {previewer.isPending ? "Filling..." : "Preview"}
@@ -382,6 +406,20 @@ export function JobPaperworkPanel({ job }: { job: string }) {
       {paperReader.isPending ? <Loading rows={1} label="Opening the paper" /> : null}
       {failure ? <ErrorState error={failure} className="border-t border-border py-4" /> : null}
 
+      {asking && template?.kind ? (
+        <ContractDetails
+          job={job}
+          template={chosen}
+          kind={template.kind}
+          onCancel={() => setAsking(false)}
+          onConfirm={(number, terms) => {
+            setContract({ number, terms });
+            setAsking(false);
+            previewer.mutate({ job, template: chosen, ...forParties });
+          }}
+        />
+      ) : null}
+
       {draft ? (
         <PaperWindow
           title={`Draft - ${template?.template_name || "paper"}`}
@@ -390,7 +428,13 @@ export function JobPaperworkPanel({ job }: { job: string }) {
           saving={generator.isPending || draftSaver.isPending}
           onSave={(html, edited) => {
             if (edited) draftSaver.mutate({ job, template: chosen, html, ...forParties });
-            else generator.mutate({ job, template: chosen, ...forParties });
+            else
+              generator.mutate({
+                job,
+                template: chosen,
+                ...forParties,
+                ...(contract ? { contract_number: contract.number, terms: contract.terms } : {}),
+              });
           }}
           onClose={() => setDraft(null)}
         />

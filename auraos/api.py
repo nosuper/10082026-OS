@@ -64,6 +64,25 @@ DEAL_TABLE_FIELDS = [
 ]
 
 
+def _terms(terms):
+    """The generation dialog's typed values, as a plain mapping.
+
+    Frappe hands a whitelisted method its arguments as strings when the
+    call arrives as form data, so a dict may land here as JSON text.
+    Parsed in one place rather than trusted, and an unreadable value
+    becomes no terms at all rather than a crash on a contract nobody
+    can print.
+    """
+    if not terms:
+        return {}
+    if isinstance(terms, str):
+        try:
+            terms = frappe.parse_json(terms)
+        except Exception:
+            return {}
+    return terms if isinstance(terms, dict) else {}
+
+
 def _parent_contract_number(job):
     """The number of this job's contract, for a paper written about it.
 
@@ -1581,6 +1600,9 @@ def job_profitability(job=None, include_closed=0):
 PAPERWORK_TEMPLATE_FIELDS = [
     "name",
     "template_name",
+    # Which numbered document this is, so the screen knows whether to
+    # ask for a signing date and a number at all (#139).
+    "kind",
     "template_file",
     "template_source",
     "notes",
@@ -1645,7 +1667,7 @@ def paperwork_library():
 
 @frappe.whitelist()
 def generate_job_paperwork(
-    job, template, vendor=None, freelancer=None, contract_number=None
+    job, template, vendor=None, freelancer=None, contract_number=None, terms=None
 ):
     """Fill a template for this job and attach the result to it.
 
@@ -1668,7 +1690,7 @@ def generate_job_paperwork(
     frappe.has_permission("Paperwork Template", "read", throw=True)
     document, filled = paperwork_template.generate(
         template, job, vendor=vendor, freelancer=freelancer,
-        contract_number=contract_number,
+        contract_number=contract_number, terms=_terms(terms),
     )
     _register_paper(
         job, template, vendor, freelancer, document, contract_number=contract_number
