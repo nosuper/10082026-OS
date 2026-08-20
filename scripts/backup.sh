@@ -43,6 +43,32 @@ log() {
   printf '%s\n' "$*"
 }
 
+# Where a successful run says so, and the only place absence is legible
+# (#152).
+#
+# **The log cannot answer the question that matters.** It records what
+# happened when something happened - and the failure this exists to catch
+# is a cron that never fires, which writes nothing at all. A missing
+# nightly line and a quiet month look identical in a file nobody opens.
+# So success writes a marker whose *age* is the signal: stale or absent
+# both mean "nobody has proved a backup lately", which is the one alarm
+# worth having and is true of both failure modes at once.
+#
+# Written inside the site rather than beside the archive, because the
+# archive lives on the docker host and the app cannot see it. This path
+# is the site's own private directory, which the app reads directly - so
+# the founder's dashboard can answer the question without anything being
+# mounted, shipped or granted.
+#
+# Deliberately last. `set -e` means any earlier failure exits before this
+# line, so the marker cannot claim a backup that did not finish.
+MARKER="sites/$SITE/private/last-backup"
+
+mark_success() {
+  docker exec "$CONTAINER" bash -lc \
+    "cd $BENCH_DIR && printf '%s %s %s\\n' '$(date -Is)' '$(basename "$ARCHIVE")' '$1' > $MARKER"
+}
+
 docker exec "$CONTAINER" bash -lc \
   "cd $BENCH_DIR && bench --site $SITE backup --with-files" > /dev/null
 
@@ -80,6 +106,12 @@ if [ -n "$OFFSITE" ]; then
       ;;
   esac
   log "OK $SITE → $ARCHIVE ($size), offsite → $OFFSITE"
+  mark_success "$size"
 else
   log "OK $SITE → $ARCHIVE ($size), no offsite target configured"
+  # Marked all the same. An on-site-only backup is a weaker backup and a
+  # real one; refusing to record it would report "no backup" about a
+  # backup that exists, which is the false alarm that teaches a founder
+  # to ignore the alarm.
+  mark_success "$size"
 fi
