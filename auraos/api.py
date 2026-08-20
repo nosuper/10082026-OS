@@ -540,6 +540,24 @@ def deal_profit(deal):
 # -- quote delivery (T6, issue #8) --
 
 
+# What a typo can live in. Deliberately text only: package prices and
+# line figures are derived from the deal, so editing them on a version
+# would put a number on the client's page that the deal cannot reproduce
+# - which is a worse defect than the typo this door exists to fix. Money
+# still moves by publishing a new version.
+QUOTE_TEXT_FIELDS = (
+    "title",
+    "client_name",
+    "client_address",
+    "client_tax_code",
+    "client_contact",
+    "notes",
+    "assumptions",
+    "exclusions",
+    "included_revision_rounds",
+)
+
+
 def _quote_dict(quote, tracking=None):
     """A quote version as the producer's screen needs it.
 
@@ -562,6 +580,10 @@ def _quote_dict(quote, tracking=None):
         "opens": tracking.get("Page", 0),
         "downloads": tracking.get("PDF", 0),
         "last_open": tracking.get("last_open"),
+        # The wording, so the amend form (#35) opens filled rather than
+        # asking the screen to fetch each version separately. A deal has a
+        # handful of versions, so this is cheaper than the round trips.
+        **{field: quote.get(field) for field in QUOTE_TEXT_FIELDS},
     }
 
 
@@ -579,9 +601,14 @@ def deal_quotes(deal):
     quotes = frappe.get_all(
         "Deal Quote",
         filters={"deal": deal},
+        # The text fields ride along because _quote_dict returns them for
+        # the amend form (#35). Selecting them here is not optional: a row
+        # that arrives without a column reads back as None, and the form
+        # would open blank and then save the blanks over real wording.
         fields=[
             "name", "version", "status", "total", "token",
             "published_on", "sent_on", "confirmed_on",
+            *QUOTE_TEXT_FIELDS,
         ],
         order_by="version desc",
     )
@@ -751,6 +778,38 @@ def _quote_for_write(name):
     quote = frappe.get_doc("Deal Quote", name)
     _check_deal_permission(quote.deal, "write")
     return quote
+
+
+@frappe.whitelist()
+def amend_quote(quote, values):
+    """Fix wording on a version that has not gone out yet (#35).
+
+    The founder's pain was a spelling mistake forcing a v2 that says
+    nothing new. A version nobody can be holding is still a draft, so it
+    may be corrected in place; one that has been sent - or merely opened,
+    which the open log can prove and the status cannot - has become a
+    record and refuses. The controller owns that judgement; this only
+    decides which fields a caller may reach.
+    """
+    doc = _quote_for_write(quote)
+    # An explicit payload rather than **kwargs: a whitelisted method's
+    # keyword arguments are whatever the request happened to carry, and
+    # "whatever arrived" is not a good basis for deciding what to write.
+    values = frappe.parse_json(values) or {}
+    unknown = sorted(set(values) - set(QUOTE_TEXT_FIELDS))
+    if unknown:
+        frappe.throw(
+            _("Not editable on a published version: {0}").format(", ".join(unknown)),
+            frappe.ValidationError,
+        )
+    for field in QUOTE_TEXT_FIELDS:
+        if field in values:
+            doc.set(field, values[field])
+    # No is_new guard needed: DealQuote.validate refuses the write itself
+    # once the version has hardened, so the refusal is one rule in one
+    # place rather than a second opinion here that could drift from it.
+    doc.save()
+    return _quote_dict(doc)
 
 
 @frappe.whitelist()

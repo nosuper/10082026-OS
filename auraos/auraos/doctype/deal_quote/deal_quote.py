@@ -27,10 +27,17 @@ from auraos.lib.quote import (
 from auraos.lib.quote import client_entries as quote_client_entries
 from auraos.settings import setting
 
-# Delivery status is the only thing that moves after publishing;
-# everything else is the frozen snapshot the client may already have
-# opened. Frappe's own bookkeeping columns are exempt.
+# Delivery status is the only thing that moves once a version has
+# hardened; everything else is the frozen snapshot the client holds.
+# Frappe's own bookkeeping columns are exempt.
 MUTABLE_FIELDS = frozenset({"status", "sent_on", "confirmed_on"})
+
+# Locked at every status, hardened or not (#35). These are not content:
+# the token IS the access control on the public page, the version is the
+# version's identity, and published_on and deal are what a version is
+# filed under. "Freely editable before sending" was never meant to let
+# v2 become v3 or a link be re-pointed.
+IDENTITY_FIELDS = frozenset({"token", "version", "published_on", "deal"})
 
 # Frappe's own columns (name, owner, creation, modified, docstatus…) are
 # not quote content, and comparing them raises false alarms: a freshly
@@ -57,11 +64,54 @@ class DealQuote(Document):
         self.confirmed_on = None
 
     def validate(self):
-        if not self.is_new():
+        if self.is_new():
+            return
+        self.reject_identity_changes()
+        # #35, lock-on-send. A version nobody can be holding is still a
+        # draft in every sense that matters: it is the founder's typo to
+        # fix, and forcing a v2 over a spelling mistake was the pain that
+        # produced this ticket. The moment it can have reached a client it
+        # stops being a draft and becomes a record.
+        if self.has_hardened():
             self.reject_content_changes()
 
+    def has_hardened(self):
+        """Whether this version is a record rather than a draft.
+
+        Sent or Confirmed, **or opened** - and the open is not belt and
+        braces. `Deal Quote Open` logs every visit to the public page, so
+        a version can be read by a client while still sitting at
+        "Published" because nobody ticked a box. The premise for editing
+        freely is that nobody holds the link; an opened page is a held
+        page whatever the status says, and the log is the only witness
+        that outranks the checkbox.
+
+        Read from the stored row, not from self: the save that marks a
+        version Sent must be judged on what it was before it, or marking
+        sent would trip the guard it is turning on.
+        """
+        before = self.get_doc_before_save()
+        status = (before.status if before else self.status) or "Published"
+        if status in ("Sent", "Confirmed"):
+            return True
+        return bool(frappe.db.exists("Deal Quote Open", {"quote": self.name}))
+
+    def reject_identity_changes(self):
+        """What a version is, as opposed to what it says."""
+        before = self.get_doc_before_save()
+        if not before:
+            return
+        for field in IDENTITY_FIELDS:
+            if self.get(field) != before.get(field):
+                frappe.throw(
+                    _("Quote {0}: {1} identifies the version and cannot change.").format(
+                        self.name, field
+                    ),
+                    frappe.ValidationError,
+                )
+
     def reject_content_changes(self):
-        """A published version is a historical record, not a draft."""
+        """A version the client may hold is a record, not a draft."""
         before = self.get_doc_before_save()
         if not before:
             return
@@ -70,21 +120,21 @@ class DealQuote(Document):
                 continue
             if self.get(field) != before.get(field):
                 frappe.throw(
-                    _("Quote {0} is published - {1} cannot change. Publish a new version instead.").format(
+                    _("Quote {0} has gone out - {1} cannot change. Publish a new version instead.").format(
                         self.name, field
                     ),
                     frappe.ValidationError,
                 )
         if packages_snapshot(self) != packages_snapshot(before):
             frappe.throw(
-                _("Quote {0} is published - its packages cannot change. Publish a new version instead.").format(
+                _("Quote {0} has gone out - its packages cannot change. Publish a new version instead.").format(
                     self.name
                 ),
                 frappe.ValidationError,
             )
         if lines_snapshot(self) != lines_snapshot(before):
             frappe.throw(
-                _("Quote {0} is published - its lines cannot change. Publish a new version instead.").format(
+                _("Quote {0} has gone out - its lines cannot change. Publish a new version instead.").format(
                     self.name
                 ),
                 frappe.ValidationError,

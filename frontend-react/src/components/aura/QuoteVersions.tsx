@@ -60,7 +60,33 @@ export type QuoteVersion = {
   opens: number;
   downloads: number;
   last_open: string | null;
+  /** The wording, for the amend form (#35). Editable only while the version
+   *  is still amendable - see `isAmendable`. */
+  title: string | null;
+  client_name: string | null;
+  client_address: string | null;
+  client_tax_code: string | null;
+  client_contact: string | null;
+  notes: string | null;
+  assumptions: string | null;
+  exclusions: string | null;
+  included_revision_rounds: number | null;
 };
+
+/**
+ * Whether this version's wording can still be corrected in place (#35).
+ *
+ * Published, and nobody has opened it. **The opens matter as much as the
+ * status**: the whole premise for editing a published version is that nobody
+ * holds the link, and a client can read the page while the status still says
+ * Published because nobody ticked Sent. The server decides this the same way
+ * and refuses regardless - this only decides whether to offer the button, so
+ * the screen never invites an edit the server will reject.
+ */
+export function isAmendable(version: QuoteVersion): boolean {
+  if (version.status !== "Published") return false;
+  return (version.opens ?? 0) === 0 && (version.downloads ?? 0) === 0;
+}
 
 export function versionActivity(version: QuoteVersion): QuoteActivity {
   return {
