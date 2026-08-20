@@ -30,6 +30,7 @@
   "cost_lines",
   "packages",
   "params_section",
+  "contingency_pct",
   "quote_mf_pct",
   "vat_pct",
   "column_break_params",
@@ -221,6 +222,13 @@
    "fieldname": "params_section",
    "fieldtype": "Section Break",
    "label": "Quote Parameters"
+  },
+  {
+   "fieldname": "contingency_pct",
+   "fieldtype": "Percent",
+   "label": "Contingency %",
+   "default": "10",
+   "description": "Dự phòng, nằm trong cost và trước markup (playbook 3.1.4). Không phải lợi nhuận: nó nâng cả chi phí lẫn giá bán, nên margin % không đổi. Deal cũ để trống (0) và giữ nguyên giá đã báo."
   },
   {
    "default": "10",

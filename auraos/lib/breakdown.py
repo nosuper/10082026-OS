@@ -49,6 +49,7 @@ def breakdown_view(
     quote_mf_pct,
     vat_pct,
     commission_pct,
+    contingency_pct=0,
     margin_floor_pct=0,
 ):
     """The complete money view of a breakdown, as one dict.
@@ -64,6 +65,8 @@ def breakdown_view(
       lines:     [{subtotal, cost_basis, input_vat, quote_price, margin}]
       packages:  [{title, default_price, price, variance, overridden}]
       subtotal, management_fee, vat, total, margin, margin_pct,
+      contingency (the reserve inside the cost basis, as one figure for
+      the screen to name - it is already in every cost number above),
       floor_breached, and the founder block (total_commission, cm,
       profit_before_tax, tndn, net_profit, total_input_vat,
       vat_payable). Exposing or withholding the founder block is the
@@ -73,6 +76,9 @@ def breakdown_view(
         quote_mf_rate=rate(quote_mf_pct),
         vat_rate=rate(vat_pct),
         commission_rate=rate(commission_pct),
+        # Zero when a caller does not pass it, so a deal quoted before
+        # contingency existed recomputes to the figures it was sold at.
+        contingency_rate=rate(contingency_pct),
     )
     result = pricing.compute_quote(engine_lines(line_rows), params)
 
@@ -129,6 +135,17 @@ def breakdown_view(
             for line in result.lines
         ],
         "packages": packages,
+        # What the reserve came to, for a screen that has to say so.
+        # Derived, not a separate cost: it is already inside every
+        # cost_basis above and inside the prices markup produced from it.
+        "contingency": round_vnd(
+            sum(
+                (line.profit_cost_basis for line in result.lines), to_decimal(0)
+            )
+            * rate(contingency_pct)
+            / (1 + rate(contingency_pct))
+        ),
+        "contingency_pct": float(to_decimal(contingency_pct or 0)),
         "subtotal": round_vnd(chain.subtotal),
         "management_fee": round_vnd(chain.mf_amount),
         "vat": round_vnd(chain.vat_amount),
