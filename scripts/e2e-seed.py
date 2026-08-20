@@ -26,7 +26,7 @@ import os
 import frappe
 from frappe.utils import add_months, today
 
-from auraos.auraos.doctype.job.job import CLOSED_STAGE, create_from_deal
+from auraos.auraos.doctype.job.job import STAGES, CLOSED_STAGE, create_from_deal
 from auraos.api import generate_job_paperwork, set_paper_status
 
 
@@ -40,6 +40,18 @@ DEAL = "Playwright Existing Deal"
 # never has to move a deal another spec is reading.
 JOB_DEAL = "Playwright Job Deal"
 CLOSED_DEAL = "Playwright Closed Deal"
+
+# What run() prints once the site is written and committed, and the only
+# thing scripts/e2e.sh will accept as proof the seed finished. Spelled by
+# concatenation on both sides so neither the checker nor the checked can
+# match itself: this file is read into the console as text, and a literal
+# here would travel with it.
+SEEDED_MARKER = "AURAOS_SEED" "_OK"
+
+# Where a seeded job is open. Taken from the head of STAGES rather than
+# written out, for the same reason CLOSED_STAGE is taken from its tail:
+# insert a stage before Pre-production and this moves with it.
+OPEN_STAGE = STAGES[0]
 
 # Two accounts, because one cannot show money moving between places.
 BANK = "Playwright Bank"
@@ -255,12 +267,38 @@ def ensure_won_deal(title, company):
 
 
 def ensure_job(title, company):
-    """The job a deal became, with its quoted lines carried across."""
+    """The job a deal became, with its quoted lines carried across, and
+    stated open rather than returned as found.
+
+    Saying the stage is what makes a second pass behave like a first.
+    This function returned the existing job untouched, which was fine on
+    a disposable site and wrong everywhere else, in two ways that only
+    show up on the second seed:
+
+    - **It let the closed job stay closed.** `ensure_closed_job` calls
+      this and then writes expenses, and `reject_change_after_close` is
+      stage-only - no dirty check, no no-op check - so it throws on a
+      re-seed that changes nothing. That throw landed before `run()`
+      reached `commit()`, so the whole second pass rolled back and the
+      re-seed restored nothing at all (#135).
+    - **It let the open job drift.** A spec that moves this job leaves it
+      moved, and "an open job beside a closed one" quietly becomes two
+      closed jobs. Nothing raises; the contrast just stops existing,
+      which is the failure the pair is here to prevent.
+
+    Reopening here rather than inside `ensure_closed_job` because the
+    stage is this function's to state either way: the job it returns is
+    open, and the caller that wants it closed says so afterwards.
+    """
     deal = ensure_won_deal(title, company)
     existing = frappe.db.exists("Job", {"deal": deal.name})
-    if existing:
-        return frappe.get_doc("Job", existing)
-    return create_from_deal(deal.name)
+    if not existing:
+        return create_from_deal(deal.name)
+    job = frappe.get_doc("Job", existing)
+    if job.stage != OPEN_STAGE:
+        job.stage = OPEN_STAGE
+        job.save(ignore_permissions=True)
+    return job
 
 
 def line_named(job, description):
@@ -422,6 +460,15 @@ def ensure_closed_job(company):
     the close comes last. Reordering these two statements raises an
     exception that reads as a bug in this seed, when it is the lock
     doing its job.
+
+    **That ordering is within one pass, and persistence reverses it.**
+    On a second seed the close already happened, in a previous run,
+    before this function is entered at all - so the expenses below are
+    written against a job that is already Complete and the lock throws
+    however carefully these two statements are ordered here. What makes
+    the order hold across passes is `ensure_job` stating the job open,
+    which happens on the line below (#135). Guarding the axis you are
+    looking along is not the same as bounding the hazard.
     """
     job = ensure_job(CLOSED_DEAL, company)
     ensure_expense(
@@ -480,14 +527,11 @@ def ensure_paperwork(job):
         "<p>Bên A: {{client.company_name}}</p>",
     )
 
-    ensure_paper(job, contract)
-    signed = ensure_paper(job, handover)
-
-    # Through set_paper_status, not a direct write, so status_changed_by
-    # and status_changed_on are written by the controller that owns them
-    # rather than left null for a screen to render as a blank.
-    if signed is not None and signed.status != "Signed":
-        set_paper_status(signed.name, "Signed")
+    # Both statuses stated, because the contrast is the fixture: one
+    # paper waiting and one settled. A single status is a presence, and
+    # a presence cannot show that the screen reads the field at all.
+    ensure_paper(job, contract, "Draft")
+    ensure_paper(job, handover, "Signed")
 
     return contract
 
@@ -511,18 +555,36 @@ def ensure_template(name, source):
     return template
 
 
-def ensure_paper(job, template):
-    """One generated paper, or the one already there."""
+def ensure_paper(job, template, status):
+    """One generated paper, at the status this seed says it is in.
+
+    The status is an argument with no default because both papers need
+    stating and only one of them used to be. The handover's `Signed` was
+    the only asserted status by accident: the contract took whatever
+    `generate_job_paperwork` happened to leave and a re-seed restored
+    neither, so a spec that signed the contract left it signed for every
+    later pass (#134).
+
+    Set through `set_paper_status` rather than written on the doc, so
+    `status_changed_by` and `status_changed_on` are filled by the
+    controller that owns them instead of left null for a screen to
+    render as a blank.
+    """
     existing = frappe.db.exists(
         "Generated Paper", {"job": job.name, "template": template.name}
     )
-    if existing:
-        return frappe.get_doc("Generated Paper", existing)
-    generate_job_paperwork(job.name, template.name)
-    name = frappe.db.exists(
-        "Generated Paper", {"job": job.name, "template": template.name}
-    )
-    return frappe.get_doc("Generated Paper", name) if name else None
+    if not existing:
+        generate_job_paperwork(job.name, template.name)
+        existing = frappe.db.exists(
+            "Generated Paper", {"job": job.name, "template": template.name}
+        )
+    if not existing:
+        return None
+    paper = frappe.get_doc("Generated Paper", existing)
+    if paper.status != status:
+        set_paper_status(paper.name, status)
+        paper = frappe.get_doc("Generated Paper", existing)
+    return paper
 
 
 def ensure_library_document():
@@ -556,3 +618,11 @@ def run():
     ensure_library_document()
 
     frappe.db.commit()
+
+    # Said last, and only here. `bench console` exits 0 even when the code
+    # it ran raised, so scripts/e2e.sh cannot read success from the exit
+    # status and reads it from this line instead. After commit() rather
+    # than before it: everything above rolls back if anything throws, and
+    # a marker printed before the commit would announce a site that was
+    # never written (#133).
+    print(SEEDED_MARKER)

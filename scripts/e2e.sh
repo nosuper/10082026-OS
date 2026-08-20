@@ -74,12 +74,55 @@ fi
 # have deleted the React suite's seed. The failure would have been a stack that
 # boots, a suite that runs, and assertions failing against data nobody created,
 # which reads as "the React app broke" rather than "the seed is gone".
+# The seed runs inside `bench console`, which prints a traceback and then
+# exits 0. So `set -e` cannot see a seed that failed, and a half-seeded
+# site runs the whole suite: most specs still pass, the ones that do not
+# fail against data nobody created, and the run reads as a screen defect.
+# That is not hypothetical - it is how #135 stayed invisible.
+#
+# The exit status cannot carry the signal, so the seed states its own
+# success instead. run() prints the marker below as its last act, after
+# commit(), and this checks the output for it. Anything that stops the
+# seed early - a throw, an import error, a rollback - stops the marker.
+#
+# Read out of the seed rather than restated here. Spelling it in both
+# files would be two independent statements of one value, which is the
+# defect rule 32 names for dates and e2e/fixture.js avoids for names -
+# they agree until somebody edits one of them.
+#
+# The empty case has to be fatal and is the reason this is three lines
+# rather than one: `grep -q ""` matches anything, so a marker that failed
+# to extract would turn the seed check into a check that always passes.
+# A guard that silently becomes vacuous is worse than no guard.
+SEED_MARKER=$(
+  grep -m1 '^SEEDED_MARKER' "$REPO_DIR/scripts/e2e-seed.py" \
+    | grep -o '"[^"]*"' | tr -d '"\n'
+)
+if [ -z "$SEED_MARKER" ]; then
+  echo "e2e: cannot read SEEDED_MARKER out of scripts/e2e-seed.py." >&2
+  echo "e2e: refusing to run, because an empty marker matches everything." >&2
+  exit 1
+fi
+
 seed() {
-  printf '%s\n' \
-    'namespace = {}; exec(compile(open("/workspace/repo/scripts/e2e-seed.py", "rb").read(), "e2e-seed.py", "exec"), namespace); namespace["run"]()' \
-    | "${COMPOSE[@]}" exec --no-TTY \
-    frappe bash -lc \
-    'cd /home/frappe/frappe-bench && bench --site dev.localhost console'
+  local output
+  local status=0
+  output=$(
+    printf '%s\n' \
+      'namespace = {}; exec(compile(open("/workspace/repo/scripts/e2e-seed.py", "rb").read(), "e2e-seed.py", "exec"), namespace); namespace["run"]()' \
+      | "${COMPOSE[@]}" exec --no-TTY \
+      frappe bash -lc \
+      'cd /home/frappe/frappe-bench && bench --site dev.localhost console' 2>&1
+  ) || status=$?
+
+  printf '%s\n' "$output"
+
+  if ! printf '%s' "$output" | grep -q "$SEED_MARKER"; then
+    echo "e2e: the seed did not finish - no completion marker in its output." >&2
+    echo "e2e: the site is half-seeded, so the suite is not being run." >&2
+    return 1
+  fi
+  return "$status"
 }
 
 seed
