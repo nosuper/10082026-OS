@@ -175,9 +175,18 @@ if [ -n "${E2E_AFTER:-}" ]; then
   # Only one runner exists now. The variable stays rather than being
   # hardcoded so that an invocation still passing E2E_AFTER_SERVICE=playwright
   # - the Vue container, which #103 removed - fails loudly on an unknown
-  # service instead of being silently ignored.
+  # service instead of being silently ignored. It is also the seam that lets a
+  # follow-up run somewhere else in the stack - E2E_AFTER_SERVICE=frappe for a
+  # bench console check against the same seeded site.
+  #
+  # No npm ci is prepended. It was, and it made this hook playwright-react's
+  # alone: frappe has no package.json, so the command died before E2E_AFTER
+  # was ever reached (#149). Nothing is lost by dropping it - node_modules is
+  # the playwright-react-node-modules named volume, which the suite run above
+  # already populated and which outlives each `run --rm`. A follow-up that
+  # genuinely needs a fresh install can say so in E2E_AFTER itself.
   "${COMPOSE[@]}" run --rm "${E2E_AFTER_SERVICE:-playwright-react}" \
-    bash -lc "npm ci --no-audit --no-fund && ${E2E_AFTER}" || after_status=$?
+    bash -lc "${E2E_AFTER}" || after_status=$?
   echo "e2e: follow-up exit ${after_status}"
 fi
 
