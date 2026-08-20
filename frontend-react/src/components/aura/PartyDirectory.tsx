@@ -237,6 +237,10 @@ type FieldDef = {
 
 const COMPANY_FIELDS: FieldDef[] = [
   { name: "company_name", label: "Company name", required: true, wide: true },
+  // Suggested from the name by auraos.api.suggest_short_code and editable
+  // afterwards. Not required: a client with no contract yet does not need
+  // one, and generation asks when it is missing rather than inventing it.
+  { name: "short_code", label: "Short code" },
   { name: "tax_code", label: "Tax code", numeric: true },
   { name: "phone", label: "Phone", numeric: true },
   { name: "email", label: "Email", type: "email" },

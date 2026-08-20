@@ -14,7 +14,7 @@ from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, exposure, finance, library, paper_status, paperwork, settlement
+from auraos.lib import breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement
 from auraos.lib import reporting
 # Imported by name: `milestones` is a parameter of save_job_milestones.
 from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
@@ -62,6 +62,24 @@ DEAL_TABLE_FIELDS = [
     "quote_sent_on",
     "modified",
 ]
+
+
+@frappe.whitelist()
+def suggest_short_code(company_name):
+    """The partner abbreviation proposed for a company name (#139).
+
+    Asked of the server rather than worked out in the browser, so the
+    rule that builds a contract number has one home. A second copy in
+    TypeScript would agree with this one until somebody changed one of
+    them, which is the defect the date rule and the fixture-name mirror
+    both exist to avoid.
+
+    A suggestion only. The field it fills is editable and may be left
+    blank; generation asks for a code when it is missing rather than
+    inventing one.
+    """
+    frappe.has_permission("Party Company", "read", throw=True)
+    return contracts.suggest_short_code(company_name or "")
 
 
 @frappe.whitelist()
