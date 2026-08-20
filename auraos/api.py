@@ -15,7 +15,7 @@ from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
 from auraos import statements
-from auraos.lib import breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax
+from auraos.lib import acceptance, breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax
 from auraos.lib import reporting
 from auraos.lib import statement
 # Imported by name: `milestones` is a parameter of save_job_milestones.
@@ -103,6 +103,65 @@ def _parent_contract_number(job):
         if row.contract_number:
             return row.contract_number
     return None
+
+
+def _settlement_table(job_doc, adjustments=None, extras=None):
+    """The acceptance document's figures for this job (#153).
+
+    **quote_price, never cost_basis.** A Deal Cost Line carries both:
+    what the client is charged and what the work costs us. This document
+    states what the client owes, and the cost column is the one the
+    permlevel system keeps off client-facing screens. Reading the wrong
+    field would demand the wrong amount and print our margin.
+    """
+    lines = [
+        {
+            "name": row.name,
+            "description": row.description,
+            "amount": row.get("quote_price"),
+        }
+        for row in job_doc.get("cost_lines") or []
+    ]
+    rows = acceptance.settled_lines(lines, adjustments)
+    rows += acceptance.added_lines(extras)
+
+    paid = [
+        {"amount": m.get("amount"), "vat_pct": m.get("invoice_vat_pct")}
+        for m in job_doc.get("payment_milestones") or []
+        if m.get("status") == "Paid" and m.get("paid_on")
+    ]
+    collected = acceptance.collected_bands(paid)
+
+    vat_pct = job_doc.get("vat_pct")
+    band_totals = acceptance.band_from_lines(rows, collected.get("pre_vat"))
+    table = {
+        "pre_vat": band_totals,
+        "vat": acceptance.band(
+            job_doc.get("quote_vat_amount"),
+            _vat_on(band_totals["settled"], vat_pct),
+            collected.get("vat"),
+        ),
+        "total": acceptance.band(
+            job_doc.get("quote_total"),
+            _with_vat(band_totals["settled"], vat_pct),
+            collected.get("total"),
+        ),
+    }
+    return {"lines": rows, "table": table}
+
+
+def _vat_on(amount, pct):
+    """VAT on a settled figure, or nothing if either is unknown."""
+    if amount is None or pct is None:
+        return None
+    from decimal import Decimal
+
+    return amount * Decimal(str(pct)) / 100
+
+
+def _with_vat(amount, pct):
+    vat = _vat_on(amount, pct)
+    return None if vat is None else amount + vat
 
 
 @frappe.whitelist()
