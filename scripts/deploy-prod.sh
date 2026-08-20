@@ -22,7 +22,7 @@
 #
 # Usage:
 #   scripts/deploy-prod.sh                       # dev stack, origin/main
-#   AURA_DEPLOY_REF=origin/main scripts/deploy-prod.sh
+#   AURA_DEPLOY_REF=origin/feat/x scripts/deploy-prod.sh   # refused: not on the gate
 #   AURA_DEPLOY_PROJECT=aura-prod AURA_DEPLOY_SITE=os.example.vn \
 #   AURA_DEPLOY_CONFIRM=yes scripts/deploy-prod.sh
 #   AURA_DEPLOY_DRY_RUN=yes scripts/deploy-prod.sh   # plan only, changes nothing
@@ -32,7 +32,16 @@ set -euo pipefail
 
 PROJECT="${AURA_DEPLOY_PROJECT:-docker}"
 SITE="${AURA_DEPLOY_SITE:-dev.localhost}"
+# What to deploy, and what prod is allowed to run. **Two variables, not
+# one.** They were one until the acceptance run was being planned, and
+# the check was vacuous: TARGET came from REF, so "is TARGET contained in
+# REF" was always true, and `AURA_DEPLOY_REF=<a local sha>` would have
+# deployed unpushed work while printing "contained in". A guard that
+# cannot fail is not a guard - the same defect as a substring regex that
+# matches its own negation, found the same way, by asking how it would be
+# rehearsed.
 REF="${AURA_DEPLOY_REF:-origin/main}"
+GATE="${AURA_DEPLOY_GATE:-origin/main}"
 REPO="${AURA_DEPLOY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PORT="${AURA_WEB_PORT:-8000}"
 URL="${AURA_DEPLOY_URL:-http://127.0.0.1:$PORT}"
@@ -102,16 +111,18 @@ ok "$REF is ${TARGET:0:12}"
 # The refusal that makes this a deployment rather than a copy. A commit
 # that is not on the deploy ref is not reviewable, not reachable by name
 # from another machine, and not recoverable if this box is lost.
-git -C "$REPO" merge-base --is-ancestor "$TARGET" "$REF" \
-  || die "${TARGET:0:12} is not contained in $REF - prod runs only what origin has"
-ok "contained in $REF"
+git -C "$REPO" rev-parse --verify "$GATE^{commit}" >/dev/null 2>&1 \
+  || die "$GATE does not resolve in $REPO - the gate must be an origin ref"
+git -C "$REPO" merge-base --is-ancestor "$TARGET" "$GATE" \
+  || die "${TARGET:0:12} is not contained in $GATE - prod runs only what origin has"
+ok "contained in $GATE"
 
 # The container's clone has this host checkout as its origin - `bench
 # get-app auraos /workspace/repo`, and compose mounts `..` there. So the
 # commit has to exist *here* before the container can fetch it, and it
 # has to be reachable from a branch the container's fetch will advertise:
 # fetching a bare sha from a non-bare repo is not something git promises.
-BRANCH="${REF#origin/}"
+BRANCH="${GATE#origin/}"
 git -C "$REPO" fetch --quiet origin "$BRANCH:refs/heads/$BRANCH" 2>/dev/null \
   || git -C "$REPO" fetch --quiet origin "$BRANCH" \
   || die "could not update local $BRANCH from origin"
