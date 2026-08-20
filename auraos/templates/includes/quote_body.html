@@ -73,6 +73,20 @@
     border-top: 1px solid #f3f4f6; color: #4b5563; font-size: .875rem;
     white-space: pre-line; }
 
+  /* Assumptions and exclusions. Deliberately not styled like the notes:
+     this is the part of a quote that gets pointed at three weeks later
+     when the scope moves, so it reads as terms rather than as an aside.
+     `pre-line` keeps one item per line without asking anyone to write
+     HTML into a Small Text field. */
+  .aura-quote .aura-terms { margin-top: 2.5rem; padding-top: 1rem;
+    border-top: 1px solid #e5e7eb; font-size: .875rem; color: #374151; }
+  .aura-quote .aura-terms h2 { font-size: .8125rem; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; color: #6b7280;
+    margin: 0 0 .35rem; }
+  .aura-quote .aura-terms .aura-term + .aura-term { margin-top: 1.25rem; }
+  .aura-quote .aura-terms p { margin: 0; white-space: pre-line; }
+  .aura-quote .aura-rounds { margin-top: 1.25rem; }
+
   /* Letterhead */
   .aura-letterhead { display: flex; justify-content: space-between;
     align-items: flex-start; gap: 2rem; padding-bottom: 1.25rem;
@@ -297,6 +311,42 @@
 
   {% if notes %}
   <div class="aura-notes">{{ notes }}</div>
+  {% endif %}
+
+  {#
+    Playbook 3.1.7: the part that protects the company most. Printed on
+    every version that carried them, frozen at publish - what the client
+    received is what stays readable, whatever the deal says today.
+
+    Escaped, not `| safe`: these are Small Text fields, one item per line,
+    and `pre-line` does the rest. A quote is a public page, and the day
+    somebody pastes formatted text out of Word into an assumptions box is
+    not the day to discover it renders as markup.
+  #}
+  {% if assumptions or exclusions or included_revision_rounds %}
+  <div class="aura-terms">
+    {% if assumptions %}
+    <div class="aura-term">
+      <h2>Assumptions</h2>
+      <p>{{ assumptions }}</p>
+    </div>
+    {% endif %}
+    {% if exclusions %}
+    <div class="aura-term">
+      <h2>Not included</h2>
+      <p>{{ exclusions }}</p>
+    </div>
+    {% endif %}
+    {% if included_revision_rounds %}
+    <div class="aura-term aura-rounds">
+      <h2>Revisions</h2>
+      <p>
+        {{ included_revision_rounds }} round{% if included_revision_rounds != 1 %}s{% endif %}
+        included. Further rounds are quoted as a change order.
+      </p>
+    </div>
+    {% endif %}
+  </div>
   {% endif %}
 
   {% if company.has_bank %}

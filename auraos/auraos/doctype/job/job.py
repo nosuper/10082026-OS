@@ -96,6 +96,12 @@ CARRIED_FIELDS = (
     "title",
     "company",
     "contact",
+    # The rounds the quote promised. Carried rather than defaulted, so the
+    # number the client was sold and the number included_rounds() charges
+    # after are one number. Without this a deal quoted at four free rounds
+    # would become a job that starts charging after two, and the mismatch
+    # would surface as an invoice argument rather than as a bug.
+    "included_revision_rounds",
     "quote_mf_pct",
     "vat_pct",
     "quote_subtotal",

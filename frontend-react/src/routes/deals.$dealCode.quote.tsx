@@ -180,6 +180,9 @@ type DealDoc = {
   quote_mf_pct: number | null;
   vat_pct: number | null;
   contingency_pct: number | null;
+  assumptions: string | null;
+  exclusions: string | null;
+  included_revision_rounds: number | null;
   quote_detail_level: string | null;
   commission_pct: number | null;
   cost_lines: Partial<LineFields>[] | null;
@@ -247,6 +250,12 @@ type OpenEvent = {
 };
 
 /** The three rates and dials a client's copy is built from. */
+/** The protective half of a quote (playbook 3.1.7) and the promise it makes.
+ *  Edited on the deal, frozen onto each published version, printed on the
+ *  client's page. Grouped with the rates because they are the same kind of
+ *  thing: what a version says, fixed at the moment it is sent. */
+type QuoteTerms = { assumptions: string; exclusions: string; revisionRounds: number };
+
 type Terms = {
   mfPct: number;
   vatPct: number;
@@ -367,12 +376,17 @@ function snapshotOf(
   lines: Line[],
   packages: Package[],
   terms: Terms,
+  quoteTerms: QuoteTerms,
   commission: number | null,
 ): string {
   return JSON.stringify({
     lines: lines.map(wireLine),
     packages: packages.map(wirePackage),
     terms,
+    // In the snapshot because `dirty` is what enables Save. Left out, an
+    // assumption typed into the box would never mark the form dirty and
+    // would be lost on the next reload without anything saying so.
+    quoteTerms,
     commission,
   });
 }
@@ -485,6 +499,11 @@ function BreakdownPage() {
     contingencyPct: 0,
     detailLevel: DEFAULT_DETAIL_LEVEL,
   });
+  const [quoteTerms, setQuoteTerms] = useState<QuoteTerms>({
+    assumptions: "",
+    exclusions: "",
+    revisionRounds: 0,
+  });
   const [commission, setCommission] = useState<number | null>(null);
   const [visibleMeta, setVisibleMeta] = useState<MetaKey[]>(() => loadColumns(session.userId));
   const [failure, setFailure] = useState<unknown>(null);
@@ -520,15 +539,32 @@ function BreakdownPage() {
     setLines(seededLines);
     setPackages(seededPackages);
     setTerms(seededTerms);
+    setQuoteTerms({
+      assumptions: data.assumptions ?? "",
+      exclusions: data.exclusions ?? "",
+      revisionRounds: data.included_revision_rounds ?? 0,
+    });
     setCommission(data.commission_pct ?? null);
-    setBaseline(snapshotOf(seededLines, seededPackages, seededTerms, data.commission_pct ?? null));
+    setBaseline(
+      snapshotOf(
+        seededLines,
+        seededPackages,
+        seededTerms,
+        {
+          assumptions: data.assumptions ?? "",
+          exclusions: data.exclusions ?? "",
+          revisionRounds: data.included_revision_rounds ?? 0,
+        },
+        data.commission_pct ?? null,
+      ),
+    );
   }, [deal.data]);
 
   const wireLines = useMemo(() => JSON.stringify(lines.map(wireLine)), [lines]);
   const wirePackages = useMemo(() => JSON.stringify(packages.map(wirePackage)), [packages]);
   const snapshot = useMemo(
-    () => snapshotOf(lines, packages, terms, commission),
-    [lines, packages, terms, commission],
+    () => snapshotOf(lines, packages, terms, quoteTerms, commission),
+    [lines, packages, terms, quoteTerms, commission],
   );
 
   const dirty = Boolean(baseline) && snapshot !== baseline;
@@ -641,6 +677,9 @@ function BreakdownPage() {
       vat_pct: terms.vatPct,
       contingency_pct: terms.contingencyPct,
       quote_detail_level: terms.detailLevel,
+      assumptions: blank(quoteTerms.assumptions),
+      exclusions: blank(quoteTerms.exclusions),
+      included_revision_rounds: quoteTerms.revisionRounds,
     };
     // Producers never receive this field and the server ignores it from them.
     if (view?.founder && commission !== null) doc["commission_pct"] = commission;
@@ -1624,8 +1663,68 @@ function BreakdownPage() {
           </Card>
 
           <Card
+            title="Assumptions and exclusions"
+            subtitle="What this price assumes, and what it does not cover. Frozen into every version you publish, and printed on the client's page."
+          >
+            <div className="grid gap-4 p-4">
+              <label className="block text-xs text-muted-foreground">
+                Assumptions
+                <textarea
+                  rows={4}
+                  value={quoteTerms.assumptions}
+                  disabled={!serverDoc}
+                  onChange={(event) =>
+                    setQuoteTerms((current) => ({ ...current, assumptions: event.target.value }))
+                  }
+                  placeholder={"2 ngày quay\n1 location\nUsage: digital 12 tháng"}
+                  className={`mt-1 w-full resize-y ${cellInput}`}
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Mỗi dòng một ý. Client đổi scope thì chỉ vào đây.
+                </span>
+              </label>
+
+              <label className="block text-xs text-muted-foreground">
+                Not included
+                <textarea
+                  rows={4}
+                  value={quoteTerms.exclusions}
+                  disabled={!serverDoc}
+                  onChange={(event) =>
+                    setQuoteTerms((current) => ({ ...current, exclusions: event.target.value }))
+                  }
+                  placeholder={"Ngày quay thêm\nKOL fee\nMusic license mở rộng"}
+                  className={`mt-1 w-full resize-y ${cellInput}`}
+                />
+              </label>
+
+              <label className="block text-xs text-muted-foreground">
+                Revision rounds included
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={quoteTerms.revisionRounds}
+                  disabled={!serverDoc}
+                  onChange={(event) =>
+                    setQuoteTerms((current) => ({
+                      ...current,
+                      revisionRounds: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className={`num mt-1 block w-24 ${cellInput} text-right`}
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  In lên báo giá, và job kế thừa đúng con số này khi deal thắng - nên cái đã hứa và
+                  cái hệ thống tính tiền là một.
+                </span>
+              </label>
+            </div>
+          </Card>
+
+          <Card
             title="Publish a version"
-            subtitle="Publishing freezes the packages, the rates and the detail level into the next version at its own link. A published version never changes - send a new one instead."
+            subtitle="Publishing freezes the packages, the rates, the detail level and the assumptions into the next version at its own link. A published version never changes - send a new one instead."
           >
             <div className="p-4">
               <label className="block text-xs text-muted-foreground">
