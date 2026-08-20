@@ -704,6 +704,52 @@ def _quote_for_write(name):
     return quote
 
 
+# What a typo can live in. Deliberately text only: package prices and
+# line figures are derived from the deal, so editing them on a version
+# would put a number on the client's page that the deal cannot reproduce
+# - which is a worse defect than the typo this door exists to fix. Money
+# still moves by publishing a new version.
+QUOTE_TEXT_FIELDS = (
+    "title",
+    "client_name",
+    "client_address",
+    "client_tax_code",
+    "client_contact",
+    "notes",
+    "assumptions",
+    "exclusions",
+    "included_revision_rounds",
+)
+
+
+@frappe.whitelist()
+def amend_quote(quote, **values):
+    """Fix wording on a version that has not gone out yet (#35).
+
+    The founder's pain was a spelling mistake forcing a v2 that says
+    nothing new. A version nobody can be holding is still a draft, so it
+    may be corrected in place; one that has been sent - or merely opened,
+    which the open log can prove and the status cannot - has become a
+    record and refuses. The controller owns that judgement; this only
+    decides which fields a caller may reach.
+    """
+    doc = _quote_for_write(quote)
+    unknown = sorted(set(values) - set(QUOTE_TEXT_FIELDS))
+    if unknown:
+        frappe.throw(
+            _("Not editable on a published version: {0}").format(", ".join(unknown)),
+            frappe.ValidationError,
+        )
+    for field in QUOTE_TEXT_FIELDS:
+        if field in values:
+            doc.set(field, values[field])
+    # No is_new guard needed: DealQuote.validate refuses the write itself
+    # once the version has hardened, so the refusal is one rule in one
+    # place rather than a second opinion here that could drift from it.
+    doc.save()
+    return _quote_dict(doc)
+
+
 @frappe.whitelist()
 def mark_quote_sent(quote):
     doc = _quote_for_write(quote)
