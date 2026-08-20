@@ -16,6 +16,8 @@
   "email",
   "freelancer_section",
   "id_number",
+  "id_issued_on",
+  "id_issued_at",
   "date_of_birth",
   "tax_code",
   "column_break_freelancer",
@@ -95,6 +97,18 @@
    "fieldname": "id_number",
    "fieldtype": "Data",
    "label": "ID Number (CCCD)"
+  },
+  {
+   "description": "Ngày cấp - the date on the CCCD. Optional; freelancer contracts print it.",
+   "fieldname": "id_issued_on",
+   "fieldtype": "Date",
+   "label": "ID Issued On"
+  },
+  {
+   "description": "Nơi cấp - where the CCCD was issued. Optional; freelancer contracts print it.",
+   "fieldname": "id_issued_at",
+   "fieldtype": "Data",
+   "label": "ID Issued At"
   },
   {
    "fieldname": "date_of_birth",

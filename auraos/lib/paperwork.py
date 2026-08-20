@@ -301,6 +301,9 @@ PERSON_FIELDS = (
     "phone",
     "email",
     "id_number",
+    # Ngày cấp / nơi cấp, which freelancer contracts print (#148).
+    "id_issued_on",
+    "id_issued_at",
     "date_of_birth",
     "tax_code",
     "permanent_address",
