@@ -413,6 +413,11 @@ async function libraryName(page, title) {
 
 const documentWindow = (page, name) => page.getByRole("dialog", { name });
 
+/** The address, without a trailing slash. The router is free to add one and
+ *  it would mean nothing about the ticket, so a bare string comparison would
+ *  buy a red that costs a stack boot to read. */
+const pathOf = (page) => new URL(page.url()).pathname.replace(/\/$/, "");
+
 test("a link to a document opens that document, not the list it lives in", async ({ page }) => {
   await openTab(page, LIBRARY_URL, "Library");
   const name = await libraryName(page, SOP);
@@ -454,9 +459,7 @@ test("opening a document from the list moves the address bar", async ({ page }) 
   // Polled rather than read once: the window is drawn from the same navigation
   // that writes the address, and asserting the URL the instant the dialog
   // appears would be a race rather than a claim.
-  await expect
-    .poll(() => new URL(page.url()).pathname)
-    .toBe(`/aura-next/documents/library/${name}`);
+  await expect.poll(() => pathOf(page)).toBe(`/aura-next/documents/library/${name}`);
 });
 
 test("going back closes the document and leaves the list as it was", async ({ page }) => {
@@ -478,7 +481,7 @@ test("going back closes the document and leaves the list as it was", async ({ pa
   await page.goBack();
 
   await expect(documentWindow(page, SOP)).toHaveCount(0);
-  expect(new URL(page.url()).pathname).toBe("/aura-next/documents/library");
+  expect(pathOf(page)).toBe("/aura-next/documents/library");
   // The state the list route holds, still held: the child route renders
   // nothing and the list never unmounted, which is what makes back cheap.
   await expect(search).toHaveValue("phân loại");
