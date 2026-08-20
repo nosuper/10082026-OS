@@ -94,6 +94,14 @@ async function amountOf(page, description) {
  * never by index: the table's order is the server's business and a row that
  * moved would silently retarget every assertion here.
  *
+ * **`exact: true` is load-bearing, and the reason is the fixture's own design.**
+ * `Playwright location cash` is a prefix of `Playwright location cash, invoiced
+ * later` - the seed pairs them deliberately, one spend without an invoice and
+ * one with, because that contrast is what the exposure is about. A substring
+ * matcher therefore hits two buttons and dies on strict mode, and it dies on
+ * the pair the fixture was carefully built to provide. Nobody named anything
+ * badly; a good fixture produced the hazard.
+ *
  * The controls are all `Corrected ...` on purpose. The Money tab also holds the
  * milestone plan, whose field is `Invoice number`, and the log-expense form,
  * whose fields are `Expense amount` and `Expense category` - and the tabs are
