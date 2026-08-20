@@ -23,6 +23,7 @@ import { Route as DocumentsLibraryRouteImport } from './routes/documents.library
 import { Route as DocumentsPaperworkRouteImport } from './routes/documents.paperwork'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
 import { Route as FinanceAccountsRouteImport } from './routes/finance.accounts'
+import { Route as FinanceBankRouteImport } from './routes/finance.bank'
 import { Route as FinanceExpensesRouteImport } from './routes/finance.expenses'
 import { Route as FinanceForecastRouteImport } from './routes/finance.forecast'
 import { Route as FinanceIncomeRouteImport } from './routes/finance.income'
@@ -106,6 +107,11 @@ const FinanceAccountsRoute = FinanceAccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => FinanceRoute,
 } as any)
+const FinanceBankRoute = FinanceBankRouteImport.update({
+  id: '/bank',
+  path: '/bank',
+  getParentRoute: () => FinanceRoute,
+} as any)
 const FinanceExpensesRoute = FinanceExpensesRouteImport.update({
   id: '/expenses',
   path: '/expenses',
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
+  '/finance/bank': typeof FinanceBankRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
@@ -205,6 +212,7 @@ export interface FileRoutesByTo {
   '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
+  '/finance/bank': typeof FinanceBankRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
@@ -234,6 +242,7 @@ export interface FileRoutesById {
   '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
+  '/finance/bank': typeof FinanceBankRoute
   '/finance/expenses': typeof FinanceExpensesRoute
   '/finance/forecast': typeof FinanceForecastRoute
   '/finance/income': typeof FinanceIncomeRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
     | '/documents/library'
     | '/documents/paperwork'
     | '/finance/accounts'
+    | '/finance/bank'
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
@@ -289,6 +299,7 @@ export interface FileRouteTypes {
     | '/documents/library'
     | '/documents/paperwork'
     | '/finance/accounts'
+    | '/finance/bank'
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
@@ -317,6 +328,7 @@ export interface FileRouteTypes {
     | '/documents/library'
     | '/documents/paperwork'
     | '/finance/accounts'
+    | '/finance/bank'
     | '/finance/expenses'
     | '/finance/forecast'
     | '/finance/income'
@@ -448,6 +460,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceAccountsRouteImport
       parentRoute: typeof FinanceRoute
     }
+    '/finance/bank': {
+      id: '/finance/bank'
+      path: '/bank'
+      fullPath: '/finance/bank'
+      preLoaderRoute: typeof FinanceBankRouteImport
+      parentRoute: typeof FinanceRoute
+    }
     '/finance/expenses': {
       id: '/finance/expenses'
       path: '/expenses'
@@ -562,6 +581,7 @@ const DocumentsRouteWithChildren = DocumentsRoute._addFileChildren(
 
 interface FinanceRouteChildren {
   FinanceAccountsRoute: typeof FinanceAccountsRoute
+  FinanceBankRoute: typeof FinanceBankRoute
   FinanceExpensesRoute: typeof FinanceExpensesRoute
   FinanceForecastRoute: typeof FinanceForecastRoute
   FinanceIncomeRoute: typeof FinanceIncomeRoute
@@ -572,6 +592,7 @@ interface FinanceRouteChildren {
 
 const FinanceRouteChildren: FinanceRouteChildren = {
   FinanceAccountsRoute: FinanceAccountsRoute,
+  FinanceBankRoute: FinanceBankRoute,
   FinanceExpensesRoute: FinanceExpensesRoute,
   FinanceForecastRoute: FinanceForecastRoute,
   FinanceIncomeRoute: FinanceIncomeRoute,
