@@ -356,6 +356,7 @@ def document_values(
     freelancer: Mapping[str, Any] | None = None,
     today: date | None = None,
     contract_number: str | None = None,
+    parent_number: str | None = None,
     terms: Mapping[str, Any] | None = None,
     plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str | None]:
@@ -386,6 +387,11 @@ def document_values(
     # generation, and a template must print the number the record
     # carries rather than the number the rule would produce now.
     values["contract.number"] = _text(contract_number)
+    # The contract this paper is written *about*, when it is written
+    # about one (#148). Distinct from contract.number: a payment request
+    # has an identity of its own AND references the agreement it
+    # collects under, and the template asks for both in two sentences.
+    values["contract.parent_number"] = _text(parent_number)
 
     # What the founder types at generation because no record holds it
     # (#139): when the contract was signed, the payment terms in days,

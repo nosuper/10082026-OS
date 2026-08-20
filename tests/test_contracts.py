@@ -10,6 +10,7 @@ from auraos.lib.contracts import (
     fold,
     normalise_short_code,
     number_for,
+    parent_reference,
     payment_split,
     suggest_short_code,
 )
@@ -150,28 +151,41 @@ class TestNumberFor:
             == "HDDV200826/AURA-SUMO"
         )
 
-    def test_a_child_repeats_the_parent_rather_than_deriving(self):
+    def test_a_child_mints_its_own_number_under_its_own_prefix(self):
+        # The standard gives BBNT and DNTT prefixes of their own. A
+        # payment request is a document with an identity, not only a
+        # pointer at a contract - and the template asks for both.
+        assert (
+            number_for("DNTT", date(2026, 8, 20), "SUMO")
+            == "DNTT200826/AURA-SUMO"
+        )
+        assert (
+            number_for("BBNT", date(2026, 8, 20), "SUMO")
+            == "BBNT200826/AURA-SUMO"
+        )
+
+    def test_the_parent_reference_is_copied_never_re_derived(self):
         # Same date and partner, so a re-derivation would agree today.
-        # It inherits anyway, because agreeing today is what two
+        # It is copied anyway, because agreeing today is what two
         # derivations always do until one of them changes.
         parent = "HDDV200826/AURA-SUMO"
         for kind in ("BBNT", "DNTT"):
-            assert (
-                number_for(kind, date(2026, 8, 20), "SUMO", parent_number=parent)
-                == parent
-            )
+            assert parent_reference(kind, parent) == parent
 
-    def test_a_child_inherits_the_parents_suffix_too(self):
+    def test_a_contract_has_no_parent(self):
+        assert parent_reference("HDDV", "anything") is None
+        assert parent_reference("HDCC", "anything") is None
+
+    def test_the_reference_carries_the_parents_suffix_too(self):
         parent = "HDDV200826/AURA-SUMO-2"
-        assert (
-            number_for("BBNT", date(2026, 8, 20), "SUMO", parent_number=parent)
-            == parent
-        )
+        assert parent_reference("BBNT", parent) == parent
 
-    def test_a_child_with_no_parent_carries_nothing_rather_than_minting(self):
+    def test_a_child_with_no_parent_references_nothing_rather_than_guessing(self):
         # A delivery note quoting a contract number that no contract
-        # carries is worse than one quoting none.
-        assert number_for("BBNT", date(2026, 8, 20), "SUMO") is None
+        # carries is worse than one quoting none. Its OWN number is
+        # unaffected - the paper exists either way.
+        assert parent_reference("BBNT", None) is None
+        assert number_for("BBNT", date(2026, 8, 20), "SUMO") is not None
 
     def test_a_blank_kind_carries_no_number(self):
         # The phu luc is an attachment. A number on it would imply an
@@ -191,15 +205,12 @@ class TestNumberFor:
             == "HDCC200826/AURA-SUMO"
         )
 
-    def test_a_child_can_inherit_from_a_vendor_contract(self):
+    def test_a_child_can_reference_a_vendor_contract(self):
         # Nothing is written about a vendor contract today. The code
         # must not assume that, or the first one will silently carry no
-        # number at all.
+        # reference at all.
         parent = "HDCC200826/AURA-SUMO"
-        assert (
-            number_for("BBNT", date(2026, 8, 20), "SUMO", parent_number=parent)
-            == parent
-        )
+        assert parent_reference("BBNT", parent) == parent
 
 
 class TestPaymentSplit:

@@ -120,6 +120,9 @@ CONTRACT_KINDS = ("HDDV", "HDCC")
 CHILD_KINDS = ("BBNT", "DNTT")
 
 
+KNOWN_KINDS = CONTRACT_KINDS + CHILD_KINDS
+
+
 def number_for(
     kind: str,
     signed_on: date,
@@ -127,30 +130,42 @@ def number_for(
     taken: Iterable[str] = (),
     parent_number: str | None = None,
 ) -> str | None:
-    """The number a paper of this kind carries, or None if it carries none.
+    """The number this paper is issued under - its OWN, whatever its kind.
 
-    Three answers, and the middle one is the reason this is a function
-    rather than a call to `contract_number`:
+    Every kind in the standard has a prefix of its own: HDDV, HDCC,
+    BBNT, DNTT. A payment request is a document with an identity, not
+    only a pointer at a contract.
 
-    - **A contract mints its own.** HDDV, from date and partner.
-    - **A child paper inherits.** BBNT and DNTT are written *about* a
-      contract, so they repeat its number rather than deriving one that
-      would agree today and drift the moment either side changed. If the
-      parent has not been generated yet, this returns None rather than
-      minting one, because a delivery note quoting a contract number
-      that no contract carries is worse than one quoting none.
-    - **Everything else carries nothing.** Blank kind is a real state,
-      not an omission: the phụ lục is an attachment, and a number on it
-      would imply an agreement it does not contain.
+    This once returned the parent's number for a child paper, which read
+    "inherit the parent's number" as "have no number of your own". Those
+    are different claims, and the template caught it: the DNTT asks for
+    both its own serial and the contract's, in two different sentences.
+    The inheritance ruling governs the parent *reference* - see
+    `parent_reference` - not the paper's identity.
+
+    Blank kind still carries nothing: the phụ lục is an attachment.
+
+    `parent_number` is accepted and ignored here so callers can pass one
+    set of arguments to both functions.
     """
     kind = (kind or "").upper()
-    if not kind:
-        return None
-    if kind in CHILD_KINDS:
-        return parent_number or None
-    if kind not in CONTRACT_KINDS:
+    if kind not in KNOWN_KINDS:
         return None
     return contract_number(kind, signed_on, short_code, taken)
+
+
+def parent_reference(kind: str, parent_number: str | None) -> str | None:
+    """The contract a child paper is written *about*, or None.
+
+    Copied, never re-derived - a re-derivation would agree today and
+    drift the moment either side moved, and a paper quoting a contract
+    number no contract carries is worse than one quoting none.
+
+    A contract has no parent: HDDV and HDCC are the agreement itself.
+    """
+    if (kind or "").upper() not in CHILD_KINDS:
+        return None
+    return parent_number or None
 
 
 def contract_number(

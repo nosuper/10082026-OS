@@ -136,17 +136,17 @@ def propose_contract_number(job, template, signed_on):
     company = frappe.db.get_value("Job", job, "company")
     short_code = frappe.db.get_value("Party Company", company, "short_code") or ""
 
-    if kind in contracts.CHILD_KINDS:
-        parent = _parent_contract_number(job)
-        return {
-            "kind": kind,
-            "number": parent,
-            "needs": None if parent else "contract",
-            "plan": plan_refusal,
-        }
+    parent = contracts.parent_reference(kind, _parent_contract_number(job))
+    needs_parent = kind in contracts.CHILD_KINDS and not parent
 
     if not short_code:
-        return {"kind": kind, "number": None, "needs": "short_code", "plan": plan_refusal}
+        return {
+            "kind": kind,
+            "number": None,
+            "parent_number": parent,
+            "needs": "short_code",
+            "plan": plan_refusal,
+        }
 
     return {
         "kind": kind,
@@ -156,7 +156,10 @@ def propose_contract_number(job, template, signed_on):
             short_code,
             taken=_numbers_taken(kind, frappe.utils.getdate(signed_on), short_code),
         ),
-        "needs": None,
+        "parent_number": parent,
+        # A child paper still mints its own number; a missing parent
+        # costs it the reference, not its identity.
+        "needs": "contract" if needs_parent else None,
         "plan": plan_refusal,
     }
 
@@ -1679,7 +1682,8 @@ def paperwork_library():
 
 @frappe.whitelist()
 def generate_job_paperwork(
-    job, template, vendor=None, freelancer=None, contract_number=None, terms=None
+    job, template, vendor=None, freelancer=None, contract_number=None, terms=None,
+    parent_number=None,
 ):
     """Fill a template for this job and attach the result to it.
 
@@ -1703,6 +1707,7 @@ def generate_job_paperwork(
     document, filled = paperwork_template.generate(
         template, job, vendor=vendor, freelancer=freelancer,
         contract_number=contract_number, terms=_terms(terms),
+        parent_number=parent_number,
     )
     _register_paper(
         job, template, vendor, freelancer, document, contract_number=contract_number
