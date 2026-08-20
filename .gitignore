@@ -43,3 +43,6 @@ frontend/test-results/
 .agents/
 .worktrees/
 docker/.env.prod
+
+# The e2e hold sentinel (scripts/e2e.sh): a run artefact, never content.
+.e2e-release

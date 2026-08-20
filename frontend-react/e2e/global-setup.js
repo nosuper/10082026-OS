@@ -16,10 +16,27 @@ async function logIn(baseURL, credentials, stateFile) {
     await page.locator("#login_email").fill(credentials.user);
     await page.locator("#login_password").fill(credentials.password);
     await page.locator("button.btn-login").click();
-    await page.waitForURL("**/aura-next/deals**");
+    // A considered budget rather than Playwright's default 30s, which was
+    // never anyone's decision - it was what you get for not passing one.
+    //
+    // This wait spans a login POST, a redirect, and the SPA's first paint on a
+    // site that has existed for about a minute. e2e.sh warms both pages before
+    // handing over, so on a warm stack this returns in well under a second and
+    // the ceiling costs nothing. It exists for the case where the warm-up did
+    // not cover something: run 27 spent 30s here and reported zero of 65 tests,
+    // which is the most expensive way this can fail - the whole boot wasted and
+    // no evidence about anything.
+    //
+    // Two minutes because the failure it guards against is a cold render, and a
+    // cold render on a busy box is minutes rather than seconds. A hang that is
+    // genuinely a hang still ends; it just ends having told us it was not this.
+    const SIGN_IN_BUDGET_MS = 120_000;
+    await page.waitForURL("**/aura-next/deals**", { timeout: SIGN_IN_BUDGET_MS });
     // Wait for the app itself, not just the URL: the shell is served before
     // the bundle has mounted, and a state captured too early is useless.
-    await page.getByRole("heading", { name: "Deals", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Deals", exact: true })
+      .waitFor({ timeout: SIGN_IN_BUDGET_MS });
     await context.storageState({ path: stateFile });
   } finally {
     await context.close();

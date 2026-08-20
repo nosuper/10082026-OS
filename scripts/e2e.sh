@@ -49,24 +49,39 @@ fi
 
 # /api/method/ping answers long before a server-rendered page does: the first
 # hit on /login compiles assets and templates and can take minutes on a cold
-# site. Playwright's global setup navigates straight there with a 30s
-# timeout, so gating on ping alone let the suite start too early and fail in
-# setup with zero tests run. Warm the real page before handing over.
-warm=false
-for _ in $(seq 1 300); do
-  if curl --fail --silent --output /dev/null --max-time 30 \
-    "http://127.0.0.1:18000/login?redirect-to=%2Faura%2Fdeals"; then
-    warm=true
-    break
-  fi
-  sleep 2
-done
-
-if [ "$warm" != true ]; then
+# site. Playwright's global setup navigates straight there, so gating on ping
+# alone let the suite start too early and fail in setup with zero tests run.
+#
+# **Two pages, not one, and the second is the one that was missing.** Global
+# setup signs in and then waits for /aura-next/deals - so the login page being
+# warm only covers the first half of what it does. The SPA page behind the
+# login was still cold on every boot, and its first render happened inside
+# global setup's own timeout. Run 27 died exactly there with zero of 65 tests
+# run. This is a candidate mechanism for that class of void rather than a
+# proven one: what is certain is that the page was never warmed, and warming
+# it costs one request.
+#
+# The redirect-to also pointed at /aura/deals - the Vue app #103 deleted - so
+# the one page it did warm was warmed for a destination that no longer exists.
+warm_page() {
+  local path="$1" label="$2"
+  for _ in $(seq 1 300); do
+    if curl --fail --silent --output /dev/null --max-time 30 \
+      "http://127.0.0.1:18000${path}"; then
+      return 0
+    fi
+    sleep 2
+  done
   "${COMPOSE[@]}" logs --tail 200 frappe
-  echo "AuraOS E2E login page never rendered" >&2
-  exit 1
-fi
+  echo "AuraOS E2E ${label} never rendered" >&2
+  return 1
+}
+
+warm_page "/login?redirect-to=%2Faura-next%2Fdeals" "login page" || exit 1
+# Unauthenticated: this redirects to /login, and that is fine. The cost being
+# paid here is Frappe rendering the www page and serving the bundle for the
+# first time, which is the same work whoever asks for it.
+warm_page "/aura-next/deals" "app shell" || exit 1
 
 # The seed belongs to the stack, not to either app. It lived in frontend/e2e/
 # because the Vue suite was the first caller, and it stayed there after the
@@ -164,6 +179,36 @@ if [ -n "${E2E_AFTER:-}" ]; then
   "${COMPOSE[@]}" run --rm "${E2E_AFTER_SERVICE:-playwright-react}" \
     bash -lc "npm ci --no-audit --no-fund && ${E2E_AFTER}" || after_status=$?
   echo "e2e: follow-up exit ${after_status}"
+fi
+
+# Hold the stack open for work that runs against it from outside - seam
+# modules through `docker exec`, a console check, a hand look at a screen.
+#
+# **Ends when the work says so, not when a timer says so.** The previous
+# pattern was E2E_AFTER='sleep 900', which is wrong in both directions: it
+# wastes the box when the work takes two minutes, and it tears the stack out
+# from under the work when it takes twenty. It also gives a watcher nothing to
+# trigger on - the only line it prints is the one that means the window has
+# already closed, which is how a fifteen-minute window went unused.
+#
+# So: an explicit line saying the window is OPEN, and a sentinel file to close
+# it. The ceiling is a backstop against an abandoned session, not the design.
+if [ -n "${E2E_HOLD:-}" ]; then
+  release="$REPO_DIR/.e2e-release"
+  rm -f "$release"
+  echo "e2e: HOLD OPEN - stack is up; touch $release to tear down"
+  held=0
+  limit="${E2E_HOLD_MAX:-1800}"
+  while [ ! -f "$release" ] && [ "$held" -lt "$limit" ]; do
+    sleep 5
+    held=$((held + 5))
+  done
+  rm -f "$release"
+  if [ "$held" -ge "$limit" ]; then
+    echo "e2e: hold hit its ${limit}s ceiling and tore down on its own"
+  else
+    echo "e2e: hold released after ${held}s"
+  fi
 fi
 
 echo "e2e: react suite exit ${react_status}"

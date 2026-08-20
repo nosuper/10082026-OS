@@ -45,6 +45,12 @@ if [ ! -d "sites/$SITE" ]; then
     bench --site "$SITE" install-app auraos
     if [ "$DEV_MODE" = "1" ]; then
         bench --site "$SITE" set-config developer_mode 1
+        # `bench run-tests` refuses outright on a site without this -
+        # "Testing is disabled for the site" - and every seam run against a
+        # disposable stack has met that wall and set it by hand first. Site
+        # state, so it belongs where a site is made rather than in an image,
+        # and gated on dev mode so production can never get it.
+        bench --site "$SITE" set-config allow_tests true
     fi
     bench --site "$SITE" clear-cache
 fi
