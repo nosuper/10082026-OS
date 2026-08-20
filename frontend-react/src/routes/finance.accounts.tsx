@@ -26,9 +26,9 @@ import { useState } from "react";
 import { AppShell } from "@/components/aura/AppShell";
 import { FinanceTabs } from "@/components/aura/FinanceTabs";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
-import { Figure, QueryState } from "@/components/aura/states";
-import { countLabel, formatDate } from "@/lib/format";
-import { useMethod } from "@/lib/queries";
+import { ErrorState, Figure, QueryState } from "@/components/aura/states";
+import { countLabel, formatDate, parseVnd, vnd } from "@/lib/format";
+import { resultOf, useMethod, useMethodMutation } from "@/lib/queries";
 
 // -- what the server sends --
 //
@@ -246,6 +246,8 @@ function CashAccountsPage() {
           </QueryState>
         </Card>
 
+        <MoveMoney accounts={held.data?.accounts ?? []} />
+
         <Card
           title={selected ? `Movements in ${selected.account_name}` : "Movements"}
           subtitle="Newest first, each one showing what it came from"
@@ -345,5 +347,116 @@ function CashAccountsPage() {
         </Card>
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * Recording money that moved between two of the company's own accounts (#151).
+ *
+ * **The only write on this screen, and it is not a balance.** Every figure here
+ * is the server's sum of a column it owns; this records the movement and the
+ * sums follow. A control that set a balance would be a second opinion about
+ * the same đồng.
+ *
+ * Both ends are named because a transfer has two, and neither defaults: the
+ * server refuses a blank end as an unfinished record rather than posting to
+ * the company's usual account, which would put money somewhere nobody said.
+ *
+ * The two balances come back with the answer, because the reason to record a
+ * withdrawal is to make two figures right and the person doing it wants to see
+ * them rather than be told it worked.
+ */
+function MoveMoney({ accounts }: { accounts: CashAccount[] }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const move = useMethodMutation<
+    { name: string; balances: Record<string, number> },
+    Record<string, unknown>
+  >("auraos.api.record_cash_transfer", {
+    invalidate: [
+      resultOf("auraos.api.cash_accounts"),
+      resultOf("auraos.api.cash_account_entries"),
+      resultOf("auraos.api.cash_transfers"),
+    ],
+    onSuccess: () => {
+      setAmount("");
+      setNote("");
+    },
+  });
+
+  const value = parseVnd(amount);
+  // Refused by the server too - this only keeps the screen from offering a
+  // button that would be rejected.
+  const sound = Boolean(from && to && from !== to && value);
+
+  return (
+    <Card
+      title="Move money between accounts"
+      subtitle="A withdrawal to the cash box, or a top-up from it. The company holds the same total either way."
+    >
+      <div className="flex flex-wrap items-end gap-2 p-4">
+        <select
+          aria-label="Move money from"
+          value={from}
+          onChange={(event) => setFrom(event.target.value)}
+          className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+        >
+          <option value="">From</option>
+          {accounts.map((one) => (
+            <option key={one.name} value={one.name}>
+              {one.account_name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Move money to"
+          value={to}
+          onChange={(event) => setTo(event.target.value)}
+          className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+        >
+          <option value="">To</option>
+          {accounts
+            .filter((one) => one.name !== from)
+            .map((one) => (
+              <option key={one.name} value={one.name}>
+                {one.account_name}
+              </option>
+            ))}
+        </select>
+        <input
+          aria-label="Amount to move"
+          inputMode="numeric"
+          placeholder="Amount"
+          value={value ? vnd(value) : amount}
+          onChange={(event) => setAmount(event.target.value)}
+          className="num w-36 rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+        />
+        <input
+          aria-label="What the transfer was for"
+          placeholder="What for (optional)"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          className="min-w-40 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+        />
+        <button
+          type="button"
+          disabled={!sound || move.isPending}
+          onClick={() =>
+            move.mutate({
+              from_account: from,
+              to_account: to,
+              amount: value,
+              note: note || null,
+            })
+          }
+          className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {move.isPending ? "Moving..." : "Move"}
+        </button>
+      </div>
+      {move.error ? <ErrorState error={move.error} /> : null}
+    </Card>
   );
 }
