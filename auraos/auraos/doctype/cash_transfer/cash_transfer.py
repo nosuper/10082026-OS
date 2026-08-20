@@ -39,6 +39,7 @@ from auraos.lib import ledger
 class CashTransfer(Document):
     def validate(self):
         self.validate_accounts()
+        self.reject_moved_accounts()
         self.validate_amount()
 
     def on_update(self):
@@ -57,6 +58,42 @@ class CashTransfer(Document):
                 _("Money cannot be moved to the account it came from"),
                 frappe.ValidationError,
             )
+
+    def reject_moved_accounts(self):
+        """Which accounts the money moved between cannot be corrected.
+
+        **Found by a seam test, and it is the ledger's rule showing
+        through rather than a limit invented here.**
+        `auraos.lib.ledger.restates` compares only the amount and the
+        day, on the stated principle that the account an entry already
+        carries is where the money went and no later save is evidence
+        about that. So a redirected transfer re-posts nothing: the record
+        would say the money went to one account while the ledger says
+        another, and every balance on the screen would come from the
+        ledger. **A record and its posting disagreeing silently is worse
+        than either answer.**
+
+        The amount stays correctable, which is not an inconsistency: the
+        same rule says amount and date restate, and the seam test proves
+        both halves move together when it does.
+
+        A transfer sent to the wrong account is deleted and recorded
+        again. `on_trash` takes both entries back out, so that path ends
+        with the ledger correct - which the alternative does not.
+        """
+        previous = self.get_doc_before_save()
+        if not previous:
+            return
+        for field in ("from_account", "to_account"):
+            if (self.get(field) or None) != (previous.get(field) or None):
+                frappe.throw(
+                    _(
+                        "A transfer's accounts cannot be changed once it is "
+                        "recorded - the ledger keeps the account it posted to. "
+                        "Delete this transfer and record it again."
+                    ),
+                    frappe.ValidationError,
+                )
 
     def validate_amount(self):
         if not self.amount or float(self.amount) <= 0:

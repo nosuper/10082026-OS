@@ -160,18 +160,37 @@ class TestCorrectingAndDeleting(TransferTestCase):
         self.assertEqual(self.balance(BOX), 0)
         self.assertEqual(self.everything(), before)
 
-    def test_redirecting_a_transfer_moves_the_money_with_it(self):
-        """The account is on the record rather than defaulted, so
-        correcting it is a real correction - and the old account must not
-        keep a half."""
+    def test_redirecting_a_transfer_is_refused_rather_than_half_done(self):
+        """**This test was written the other way round and the run
+        corrected it.** It asserted that changing the destination moves
+        the money, and the ledger does not work that way: `restates`
+        compares only amount and day, so a redirected transfer re-posts
+        nothing and the record would claim one account while every
+        balance came from another. The controller now refuses, and the
+        correction path is delete and record again - which ends with the
+        ledger right."""
         third = frappe.get_doc(
             {"doctype": "Cash Account", "account_name": "Ví MoMo - transfers"}
         ).insert()
         out = self.move()
         doc = frappe.get_doc("Cash Transfer", out["name"])
-
         doc.to_account = third.name
-        doc.save()
+
+        with self.assertRaises(frappe.ValidationError):
+            doc.save()
+
+        self.assertEqual(self.balance(BOX), AMOUNT)
+        self.assertEqual(self.balance(third.name), 0)
+
+    def test_deleting_and_recording_again_is_the_correction_path(self):
+        """So the refusal above leaves a way through rather than a wall."""
+        third = frappe.get_doc(
+            {"doctype": "Cash Account", "account_name": "Ví MoMo - correction"}
+        ).insert()
+        out = self.move()
+
+        frappe.delete_doc("Cash Transfer", out["name"])
+        self.move(to_account=third.name)
 
         self.assertEqual(self.balance(BOX), 0)
         self.assertEqual(self.balance(third.name), AMOUNT)
