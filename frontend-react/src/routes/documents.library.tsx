@@ -19,7 +19,7 @@
 // dropped two live values on purpose; auraos/patches/seed_sop_deals_library_document.py
 // records why.
 
-import { createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { BookOpen, LayoutGrid, LockKeyhole, Paperclip, Plus, Rows3, Search } from "lucide-react";
 
@@ -100,7 +100,18 @@ function LibraryPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL);
   const [view, setView] = useState<View>("cards");
-  const [openName, setOpenName] = useState<string | null>(null);
+  // **Which document is open is a fact about the URL, not about this
+  // component** (#124). It used to be `useState`, which is why a link to a
+  // document landed the recipient on the tab: the address bar never learned
+  // anything. `strict: false` because this route matches with and without the
+  // child - `/documents/library` has no `docName` and that is not an error,
+  // it is the list.
+  const { docName } = useParams({ strict: false }) as { docName?: string };
+  const navigate = useNavigate();
+  const openName = docName ?? null;
+  const openDocument = (name: string) =>
+    void navigate({ to: "/documents/library/$docName", params: { docName: name } });
+  const closeDocument = () => void navigate({ to: "/documents/library" });
   const [draft, setDraft] = useState<Draft | null>(null);
 
   const canManage = index.data?.can_manage ?? false;
@@ -205,9 +216,9 @@ function LibraryPage() {
                     Nothing matches that.
                   </p>
                 ) : view === "cards" ? (
-                  <DocumentCards rows={shown} onOpen={setOpenName} />
+                  <DocumentCards rows={shown} onOpen={openDocument} />
                 ) : (
-                  <DocumentTable rows={shown} onOpen={setOpenName} />
+                  <DocumentTable rows={shown} onOpen={openDocument} />
                 )}
               </>
             )}
@@ -215,11 +226,17 @@ function LibraryPage() {
         </Card>
       </div>
 
+      {/* The child route renders nothing; it exists so the router will match
+          and restore `/documents/library/$docName`. The window stays here,
+          where `canManage` and the edit draft already live - a ticket about
+          addressability is not a reason to move state ownership. */}
+      <Outlet />
+
       {openName ? (
         <DocumentWindow
           name={openName}
           canManage={canManage}
-          onClose={() => setOpenName(null)}
+          onClose={closeDocument}
           onEdit={(doc) =>
             setDraft({
               key: Date.now(),
@@ -240,7 +257,7 @@ function LibraryPage() {
           onClose={() => setDraft(null)}
           onSaved={(name) => {
             setDraft(null);
-            setOpenName(name);
+            openDocument(name);
           }}
         />
       ) : null}
