@@ -34,6 +34,7 @@ import { Route as QuotationsIndexRouteImport } from './routes/quotations.index'
 import { Route as QuotationsQuoteRefRouteImport } from './routes/quotations.$quoteRef'
 import { Route as DealsDealCodeIndexRouteImport } from './routes/deals.$dealCode.index'
 import { Route as DealsDealCodeQuoteRouteImport } from './routes/deals.$dealCode.quote'
+import { Route as DocumentsLibraryDocNameRouteImport } from './routes/documents.library.$docName'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -160,6 +161,11 @@ const DealsDealCodeQuoteRoute = DealsDealCodeQuoteRouteImport.update({
   path: '/quote',
   getParentRoute: () => DealsDealCodeRoute,
 } as any)
+const DocumentsLibraryDocNameRoute = DocumentsLibraryDocNameRouteImport.update({
+  id: '/$docName',
+  path: '/$docName',
+  getParentRoute: () => DocumentsLibraryRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -171,7 +177,7 @@ export interface FileRoutesByFullPath {
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
-  '/documents/library': typeof DocumentsLibraryRoute
+  '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
@@ -186,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/jobs/': typeof JobsIndexRoute
   '/quotations/': typeof QuotationsIndexRoute
   '/deals/$dealCode/quote': typeof DealsDealCodeQuoteRoute
+  '/documents/library/$docName': typeof DocumentsLibraryDocNameRoute
   '/deals/$dealCode/': typeof DealsDealCodeIndexRoute
 }
 export interface FileRoutesByTo {
@@ -195,7 +202,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
-  '/documents/library': typeof DocumentsLibraryRoute
+  '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/jobs': typeof JobsIndexRoute
   '/quotations': typeof QuotationsIndexRoute
   '/deals/$dealCode/quote': typeof DealsDealCodeQuoteRoute
+  '/documents/library/$docName': typeof DocumentsLibraryDocNameRoute
   '/deals/$dealCode': typeof DealsDealCodeIndexRoute
 }
 export interface FileRoutesById {
@@ -223,7 +231,7 @@ export interface FileRoutesById {
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
-  '/documents/library': typeof DocumentsLibraryRoute
+  '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/expenses': typeof FinanceExpensesRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/jobs/': typeof JobsIndexRoute
   '/quotations/': typeof QuotationsIndexRoute
   '/deals/$dealCode/quote': typeof DealsDealCodeQuoteRoute
+  '/documents/library/$docName': typeof DocumentsLibraryDocNameRoute
   '/deals/$dealCode/': typeof DealsDealCodeIndexRoute
 }
 export interface FileRouteTypes {
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/jobs/'
     | '/quotations/'
     | '/deals/$dealCode/quote'
+    | '/documents/library/$docName'
     | '/deals/$dealCode/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -291,6 +301,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/quotations'
     | '/deals/$dealCode/quote'
+    | '/documents/library/$docName'
     | '/deals/$dealCode'
   id:
     | '__root__'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/jobs/'
     | '/quotations/'
     | '/deals/$dealCode/quote'
+    | '/documents/library/$docName'
     | '/deals/$dealCode/'
   fileRoutesById: FileRoutesById
 }
@@ -513,16 +525,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DealsDealCodeQuoteRouteImport
       parentRoute: typeof DealsDealCodeRoute
     }
+    '/documents/library/$docName': {
+      id: '/documents/library/$docName'
+      path: '/$docName'
+      fullPath: '/documents/library/$docName'
+      preLoaderRoute: typeof DocumentsLibraryDocNameRouteImport
+      parentRoute: typeof DocumentsLibraryRoute
+    }
   }
 }
 
+interface DocumentsLibraryRouteChildren {
+  DocumentsLibraryDocNameRoute: typeof DocumentsLibraryDocNameRoute
+}
+
+const DocumentsLibraryRouteChildren: DocumentsLibraryRouteChildren = {
+  DocumentsLibraryDocNameRoute: DocumentsLibraryDocNameRoute,
+}
+
+const DocumentsLibraryRouteWithChildren =
+  DocumentsLibraryRoute._addFileChildren(DocumentsLibraryRouteChildren)
+
 interface DocumentsRouteChildren {
-  DocumentsLibraryRoute: typeof DocumentsLibraryRoute
+  DocumentsLibraryRoute: typeof DocumentsLibraryRouteWithChildren
   DocumentsPaperworkRoute: typeof DocumentsPaperworkRoute
 }
 
 const DocumentsRouteChildren: DocumentsRouteChildren = {
-  DocumentsLibraryRoute: DocumentsLibraryRoute,
+  DocumentsLibraryRoute: DocumentsLibraryRouteWithChildren,
   DocumentsPaperworkRoute: DocumentsPaperworkRoute,
 }
 
