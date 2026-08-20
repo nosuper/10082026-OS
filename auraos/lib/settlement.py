@@ -1,272 +1,127 @@
-"""Money out on a job: floats, settlement, and actual against quoted.
+"""What a client still owes when a job is settled (#153).
 
-Framework-free by contract (T8 / spec #2, stories 30–34); the DocType
-controllers and the API are thin adapters over this module. All
-arithmetic is exact Decimal - rounding to whole đồng is the caller's
-concern (auraos.lib.money.round_vnd).
+The acceptance document's summary table, as arithmetic. Five columns per
+band - contracted, settled, difference, collected, remaining - and three
+bands: pre-VAT, VAT, and the total.
 
-**The float.** The founder advances cash to whoever is doing the
-spending; every expense that person pays out of it hands part of it
-back as receipts. What remains is the float - positive while they are
-still holding company money, negative once they have covered a
-shortfall themselves. Settling records the transfer that puts it back
-to zero, so the same job can be advanced, spent and settled again
-without the history being rewritten.
+**This is revenue, not cost.** "Settled" is the revised value we are
+billing the client, not what the job cost us to produce. The two are
+different quantities with different owners, and putting a cost where a
+settled value belongs would both demand the wrong amount and print our
+margin on a page the client signs. The document's own columns say which
+it means: "Thành tiền (HĐ gốc)" against "Giá trị thanh lý (thực tế)".
 
-Money the company paid directly belongs to no float: it lands in
-actual-vs-quoted and moves nobody's float.
+**Every figure refuses rather than guesses.** A remaining balance that
+prints 0 is a document saying nothing is owed, and it gets signed. One
+that prints a visible gap does not. So `None` propagates: a band whose
+settled value is unknown has no difference and no remaining, and says so
+instead of treating the unknown as zero.
 
-**Categories mirror the quote.** An expense's category is one of the
-entries the client was quoted - a package, or a cost line quoted on its
-own - which is what makes actual-vs-quoted per package fall out with no
-extra work. The quoted side is measured in what somebody on the job
-actually hands over, never the client-facing price.
+The one place zero is a real answer is collections. A client who has
+paid nothing has collected zero and owes the whole settled value, and
+that is a fact rather than an absence - which is why `collected` is
+distinguished from `None` here rather than being defaulted.
+
+Framework-free: this is money on a signed page, and it should be
+readable and testable without a site.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
-from auraos.lib.money import to_decimal as _d
-
-# Where an expense's money came from.
-FROM_ADVANCE = "Advance"  # spent out of a float someone is holding
-FROM_COMPANY = "Company"  # the company paid the vendor itself
-
-# Which way a float has to move to close.
-RETURN = "Return"  # the holder gives the remainder back
-TOP_UP = "Top-up"  # the company reimburses the holder
-EVEN = "Even"  # nothing to move
-
-# Where an expense lands when it names no category the quote knows.
-UNCATEGORISED = "Uncategorised"
-
-Row = Mapping[str, Any]
+#: The three rows the summary table states, in the document's order.
+BANDS = ("pre_vat", "vat", "total")
 
 
-@dataclass(frozen=True)
-class Float:
-    """What one person is holding of the company's money on one job.
+def _amount(value: Any) -> Decimal | None:
+    """A figure, or None for anything that is not one.
 
-    `amount` is the float itself - what they were advanced, less what
-    they have spent out of it, less what has already been settled.
+    Blank, missing and unparseable all become None rather than zero,
+    because the whole point of this module is that those are different.
     """
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
 
-    holder: str
-    advanced: Decimal
-    spent: Decimal
-    settled: Decimal
-    amount: Decimal
-    direction: str
 
+def band(contracted: Any, settled: Any, collected: Any) -> dict[str, Decimal | None]:
+    """One row of the table: what was agreed, what it became, what is left.
 
-def floats(
-    advances: Iterable[Row],
-    expenses: Iterable[Row],
-    settlements: Iterable[Row] = (),
-) -> list[Float]:
-    """Every float on a job, one per person, sorted by holder.
+    `difference` is settled minus contracted, so an overrun is positive
+    and an underrun negative. The sign is the document's meaning, not a
+    display choice: "chênh lệch" of +2.000.000 and -2.000.000 are
+    opposite sentences about who owes whom more than they expected.
 
-    Only expenses paid from an advance touch a float; the rest is the
-    company's own spending. Settlements are signed the way the money
-    moves: positive when the holder returns cash, negative when the
-    company tops them up.
+    `remaining` is settled minus collected - what the client still owes
+    against the settled value, not against the original. Billing the
+    contracted figure after a scope reduction would demand money the
+    settlement just agreed to drop.
     """
-    advanced: dict[str, Decimal] = {}
-    spent: dict[str, Decimal] = {}
-    settled: dict[str, Decimal] = {}
+    contracted_amount = _amount(contracted)
+    settled_amount = _amount(settled)
+    collected_amount = _amount(collected)
 
-    for row in advances:
-        _add(advanced, row.get("recipient"), row.get("amount"))
-    for row in expenses:
-        if (row.get("paid_from") or FROM_ADVANCE) == FROM_ADVANCE:
-            _add(spent, row.get("paid_by"), row.get("amount"))
-    for row in settlements:
-        _add(settled, row.get("recipient"), row.get("amount"))
-
-    holders = set(advanced) | set(spent) | set(settled)
-    return [_held_by(holder, advanced, spent, settled) for holder in sorted(holders)]
-
-
-def _add(totals: dict[str, Decimal], key: str, amount: Any) -> None:
-    totals[key] = totals.get(key, Decimal(0)) + _d(amount or 0)
-
-
-def _held_by(holder, advanced, spent, settled) -> Float:
-    zero = Decimal(0)
-    amount = (
-        advanced.get(holder, zero)
-        - spent.get(holder, zero)
-        - settled.get(holder, zero)
+    difference = (
+        settled_amount - contracted_amount
+        if settled_amount is not None and contracted_amount is not None
+        else None
     )
-    return Float(
-        holder=holder,
-        advanced=advanced.get(holder, zero),
-        spent=spent.get(holder, zero),
-        settled=settled.get(holder, zero),
-        amount=amount,
-        direction=direction_of(amount),
+    remaining = (
+        settled_amount - collected_amount
+        if settled_amount is not None and collected_amount is not None
+        else None
     )
-
-
-def float_for(
-    holder: str,
-    advances: Iterable[Row],
-    expenses: Iterable[Row],
-    settlements: Iterable[Row] = (),
-) -> Float:
-    """One person's float, whether or not they are holding anything.
-
-    An empty float is a real answer - "you have nothing of ours" - and
-    the screen that asks after every logged expense needs it as often as
-    it needs a full one.
-    """
-    for held in floats(advances, expenses, settlements):
-        if held.holder == holder:
-            return held
-    zero = Decimal(0)
-    return Float(
-        holder=holder,
-        advanced=zero,
-        spent=zero,
-        settled=zero,
-        amount=zero,
-        direction=EVEN,
-    )
-
-
-def direction_of(amount: Any) -> str:
-    """Which way a float has to move to close."""
-    amount = _d(amount)
-    if amount > 0:
-        return RETURN
-    if amount < 0:
-        return TOP_UP
-    return EVEN
-
-
-@dataclass(frozen=True)
-class CategoryActual:
-    """What one quoted entry was expected to cost, and what it has cost."""
-
-    title: str
-    quoted: Decimal
-    actual: Decimal
-    variance: Decimal  # actual − quoted; positive is over the quoted cost
-
-
-def categories(packages: Iterable[Row], cost_lines: Iterable[Row]) -> list[str]:
-    """The categories an expense on this job may carry, in quote order.
-
-    Exactly what the client was offered: the packages, then any cost
-    line standing in none of them - the same rule the quote page reads
-    (auraos.lib.quote.client_entries). Anything else and actual-vs-quoted
-    would have holes in it.
-    """
-    return list(_quoted_costs(packages, cost_lines))
-
-
-def category_actuals(
-    packages: Iterable[Row],
-    cost_lines: Iterable[Row],
-    expenses: Iterable[Row],
-) -> list[CategoryActual]:
-    """Quoted cash-out against money actually spent, per category.
-
-    Every category appears whether or not anything has been spent on it
-    - an untouched package is the interesting one during a shoot. An
-    expense naming no known category is gathered into one trailing row
-    rather than quietly dropped.
-    """
-    quoted = _quoted_costs(packages, cost_lines)
-
-    actual: dict[str, Decimal] = {}
-    for row in expenses:
-        title = row.get("category") or UNCATEGORISED
-        _add(actual, title if title in quoted else UNCATEGORISED, row.get("amount"))
-
-    rows = [
-        _actual_row(title, amount, actual.get(title, Decimal(0)))
-        for title, amount in quoted.items()
-    ]
-    if UNCATEGORISED in actual:
-        rows.append(_actual_row(UNCATEGORISED, Decimal(0), actual[UNCATEGORISED]))
-    return rows
-
-
-def _actual_row(title, quoted, actual) -> CategoryActual:
-    return CategoryActual(
-        title=title, quoted=quoted, actual=actual, variance=actual - quoted
-    )
-
-
-def _quoted_costs(packages, cost_lines) -> dict[str, Decimal]:
-    """Cash out expected per category, keyed in quote order.
-
-    A package's quoted cost is its member lines'; a line in no package
-    carries its own.
-
-    Per line that is the cost after the vendor management fee, plus the
-    VAT on an invoice-bearing one - money somebody on the job hands
-    over, which is the same kind of money an expense records. It is
-    deliberately *not* the line's profit cost basis: for a freelancer
-    that basis is grossed up by the PIT the company remits later
-    through its accountant, which nobody logs against a shoot. Comparing
-    against it would leave every crew-heavy package reading ~10% under
-    for good.
-    """
-    costs: dict[str, Decimal] = {
-        (package.get("title") or ""): Decimal(0) for package in packages
+    return {
+        "contracted": contracted_amount,
+        "settled": settled_amount,
+        "difference": difference,
+        "collected": collected_amount,
+        "remaining": remaining,
     }
-    for line in cost_lines:
-        title = line.get("package") or line.get("description") or ""
-        costs.setdefault(title, Decimal(0))
-        costs[title] += handed_over(line)
-    return costs
 
 
-def handed_over(line: Row) -> Decimal:
-    """What one cost line is expected to cost in cash paid out.
+def summary(
+    contracted: Mapping[str, Any] | None = None,
+    settled: Mapping[str, Any] | None = None,
+    collected: Mapping[str, Any] | None = None,
+) -> dict[str, dict[str, Decimal | None]]:
+    """The whole table, one band at a time.
 
-    Public because it is the answer to a question more than one report
-    asks. The quoted-versus-actual comparison above needs it per
-    category, and now that an expense names the line it spends against
-    (#123), per-line quoted-versus-actual is a question the app can ask
-    again.
-
-    It is deliberately *not* what the no-invoice exposure is measured
-    on. That was the defect #123 fixes: this is what a line was
-    *expected* to cost, and a tax liability arises from what was
-    actually paid.
+    The bands are computed independently rather than derived from each
+    other. It is tempting to make `total` the sum of `pre_vat` and
+    `vat`, and it would be wrong the moment one of them is unknown: the
+    sum of a number and an absence would either raise or quietly become
+    the number, and the second is how a total ends up understating a
+    bill by exactly its VAT.
     """
-    vendor_mf_rate = _d(line.get("vendor_mf_pct") or 0) / 100
-    after_vendor_mf = _d(line.get("subtotal") or 0) * (1 + vendor_mf_rate)
-    return after_vendor_mf + _d(line.get("input_vat") or 0)
+    contracted = contracted or {}
+    settled = settled or {}
+    collected = collected or {}
+    return {
+        name: band(contracted.get(name), settled.get(name), collected.get(name))
+        for name in BANDS
+    }
 
 
-@dataclass(frozen=True)
-class Totals:
-    """A job's money out at a glance."""
+def refusals(table: Mapping[str, Mapping[str, Any]]) -> tuple[str, ...]:
+    """Which figures the table cannot state, named for a person to fix.
 
-    advanced: Decimal
-    spent: Decimal
-    quoted: Decimal
-
-
-def totals(
-    advances: Iterable[Row],
-    expenses: Iterable[Row],
-    categories: Iterable[CategoryActual],
-) -> Totals:
-    """What the job has handed out, paid out, and expected to pay out."""
-    return Totals(
-        advanced=_total(row.get("amount") for row in advances),
-        spent=_total(row.get("amount") for row in expenses),
-        quoted=sum((row.quoted for row in categories), Decimal(0)),
-    )
-
-
-def _total(amounts) -> Decimal:
-    return sum((_d(amount or 0) for amount in amounts), Decimal(0))
+    Reported rather than inferred from blanks on the page, because a
+    person about to send an acceptance document should be told what is
+    missing before they print it, not after the client asks.
+    """
+    missing = []
+    for name in BANDS:
+        row = table.get(name) or {}
+        if row.get("settled") is None:
+            missing.append(f"{name}: no settled value")
+        if row.get("contracted") is None:
+            missing.append(f"{name}: no contracted value")
+        if row.get("collected") is None:
+            missing.append(f"{name}: no collection total")
+    return tuple(missing)
