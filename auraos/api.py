@@ -14,8 +14,10 @@ from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
+from auraos import statements
 from auraos.lib import breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax
 from auraos.lib import reporting
+from auraos.lib import statement
 # Imported by name: `milestones` is a parameter of save_job_milestones.
 from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
 from auraos.lib.milestones import PAID as MILESTONE_PAID
@@ -2877,3 +2879,296 @@ def _forecast_months(months):
     except (TypeError, ValueError):
         wanted = 6
     return max(MIN_FORECAST_MONTHS, min(wanted, MAX_FORECAST_MONTHS))
+
+
+# -- bank statements, and lining them up against the ledger (#150) --
+
+
+def _statement_line_references(row):
+    """Every reference a statement line's description carries."""
+    return statement.references(row.get("description") or "")
+
+
+def _entry_references(entry, contracts, invoices):
+    """What a ledger entry can be called on a bank line.
+
+    Two kinds, and both come from records the entry points at rather
+    than from the entry itself: the contract number of the job the money
+    belongs to, and - for a client payment - the invoice number recorded
+    on the milestone that was collected. **A ledger entry has no
+    reference of its own**, which is the honest position: the bank quotes
+    the paperwork, and the paperwork is what the job carries.
+    """
+    found = set()
+    number = contracts.get(entry.get("job"))
+    if number:
+        found.add(number.upper())
+    invoice = invoices.get(entry.get("source_name"))
+    if invoice:
+        found.add(f"HD:{invoice}")
+    return found
+
+
+def _ledger_for_matching(account, period_from, period_to, window_days):
+    """The entries a statement's lines could be, with their references.
+
+    Widened by the matcher's own window at both ends: an entry dated the
+    day before the statement's period can still be the first line on it,
+    because the bank posts when it posts.
+    """
+    edge = frappe.utils.add_days
+    rows = frappe.get_all(
+        "Cash Ledger Entry",
+        filters={
+            "account": account,
+            "entry_date": ["between", [edge(period_from, -window_days),
+                                       edge(period_to, window_days)]],
+        },
+        fields=["name", "entry_date", "amount", "direction", "flow", "job",
+                "source_doctype", "source_name", "description"],
+        order_by="entry_date asc",
+        limit_page_length=0,
+    )
+    jobs = {row.job for row in rows if row.job}
+    contracts = {job: _parent_contract_number(job) for job in jobs}
+    milestones = [row.source_name for row in rows
+                  if row.source_doctype == "Job Payment Milestone" and row.source_name]
+    invoices = {}
+    if milestones:
+        for row in frappe.get_all(
+            "Job Payment Milestone",
+            filters={"name": ["in", milestones], "invoice_no": ["is", "set"]},
+            fields=["name", "invoice_no"],
+        ):
+            number = (row.invoice_no or "").strip()
+            if number.isdigit():
+                invoices[row.name] = int(number)
+    return rows, contracts, invoices
+
+
+@frappe.whitelist()
+def import_bank_statement(file_url, account):
+    """Record a bank statement, if it agrees with itself.
+
+    Founder-only: this is the company's bank position, which sits behind
+    the same boundary as the profit chain and the tax exposure.
+
+    **The file is read, never trusted.** Its own totals are checked
+    against its own lines before anything is written - see
+    `Bank Statement.validate` - so an import either produces a statement
+    that adds up or produces a refusal naming where it does not.
+
+    The account is the caller's, not the file's, because a bank prints
+    an account *number* and AuraOS keeps accounts by name. The number is
+    read and handed back so the screen can show what the file said it
+    was and let a person see the two agree.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may import a bank statement"), frappe.PermissionError
+        )
+    if not frappe.db.exists("Cash Account", account):
+        frappe.throw(_("{0} is not a cash account").format(account), frappe.DoesNotExistError)
+
+    path = frappe.get_doc("File", {"file_url": file_url}).get_full_path()
+    try:
+        read = statements.read_file(path)
+    except ValueError as wrong:
+        frappe.throw(_("This file could not be read as a statement: {0}").format(wrong))
+
+    summary = statement.read_summary(read["summary"])
+    lines = statement.read_lines(read["lines"])
+    doc = frappe.get_doc(
+        {
+            "doctype": "Bank Statement",
+            "account": account,
+            "period_from": statement.to_day(read["period_from"]),
+            "period_to": statement.to_day(read["period_to"]),
+            "source_file": file_url,
+            "opening": summary["opening"],
+            "withdrawn": summary["withdrawn"],
+            "deposited": summary["deposited"],
+            "closing": summary["closing"],
+            "lines": [
+                {
+                    "effective_on": line["effective_on"],
+                    "transacted_at": line["transacted_at"],
+                    "sequence": line["sequence"],
+                    "description": line["description"],
+                    "withdrawn": line["withdrawn"],
+                    "deposited": line["deposited"],
+                    "running_balance": line["running_balance"],
+                }
+                for line in lines
+            ],
+        }
+    )
+    doc.insert()
+    return {
+        "name": doc.name,
+        "account_number": read["account_number"],
+        "lines": len(lines),
+    }
+
+
+@frappe.whitelist()
+def bank_statements():
+    """Every statement on file, newest period first."""
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may read bank statements"), frappe.PermissionError
+        )
+    return frappe.get_all(
+        "Bank Statement",
+        fields=["name", "account", "period_from", "period_to", "opening", "closing",
+                "withdrawn", "deposited"],
+        order_by="period_from desc",
+        limit_page_length=0,
+    )
+
+
+@frappe.whitelist()
+def bank_reconciliation(statement_name):
+    """One statement beside the ledger, with the differences named.
+
+    **The two lists are the product.** What the bank saw and AuraOS did
+    not, and what AuraOS recorded and the bank did not - a screen that
+    showed only the matches would be a screen that agreed with itself.
+
+    Nothing here writes. Suggestions are offered per line and a person
+    confirms them one at a time through `match_statement_line`.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may reconcile a bank statement"), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Bank Statement", statement_name)
+    entries, contracts, invoices = _ledger_for_matching(
+        doc.account, doc.period_from, doc.period_to, statement.WINDOW_DAYS
+    )
+    for entry in entries:
+        entry["references"] = _entry_references(entry, contracts, invoices)
+
+    claimed = {row.matched_entry for row in doc.lines if row.matched_entry}
+    free = [entry for entry in entries if entry["name"] not in claimed]
+
+    lines = []
+    for row in doc.lines:
+        read = {
+            "name": row.name,
+            "effective_on": row.effective_on,
+            "transacted_at": row.transacted_at,
+            "sequence": row.sequence,
+            "description": row.description,
+            "withdrawn": round_vnd(row.withdrawn or 0),
+            "deposited": round_vnd(row.deposited or 0),
+            "amount": round_vnd((row.deposited or 0) - (row.withdrawn or 0)),
+            "direction": statement.IN if row.deposited else statement.OUT,
+            "running_balance": round_vnd(row.running_balance or 0),
+            "matched_entry": row.matched_entry,
+            "matched_on": row.matched_on,
+            "matched_by": row.matched_by,
+            "unmodelled": statement.unmodelled(row.description or ""),
+            "candidates": [],
+            "suggestion": None,
+        }
+        if not row.matched_entry:
+            found = statement.candidates(
+                {
+                    "effective_on": row.effective_on,
+                    "description": row.description or "",
+                    "amount": (row.deposited or 0) - (row.withdrawn or 0),
+                    "direction": read["direction"],
+                },
+                free,
+            )
+            read["candidates"] = found
+            read["suggestion"] = statement.suggestion(found)
+        lines.append(read)
+
+    matched = {row.matched_entry for row in doc.lines if row.matched_entry}
+    return {
+        "statement": {
+            "name": doc.name,
+            "account": doc.account,
+            "period_from": doc.period_from,
+            "period_to": doc.period_to,
+            "opening": round_vnd(doc.opening or 0),
+            "withdrawn": round_vnd(doc.withdrawn or 0),
+            "deposited": round_vnd(doc.deposited or 0),
+            "closing": round_vnd(doc.closing or 0),
+        },
+        "lines": lines,
+        # The other half of the difference: entries AuraOS holds for this
+        # account and period that no line on this statement claims.
+        "unmatched_entries": [
+            {
+                "name": entry["name"],
+                "entry_date": entry["entry_date"],
+                "amount": round_vnd(entry["amount"]),
+                "flow": entry["flow"],
+                "job": entry["job"],
+                "description": entry["description"],
+            }
+            for entry in entries
+            if entry["name"] not in matched
+        ],
+    }
+
+
+def _statement_line(doc, line):
+    for row in doc.lines:
+        if row.name == line:
+            return row
+    frappe.throw(
+        _("Line {0} is not on statement {1}").format(line, doc.name),
+        frappe.DoesNotExistError,
+    )
+
+
+@frappe.whitelist()
+def match_statement_line(statement_name, line, entry):
+    """Confirm that this bank line is this ledger entry.
+
+    **A person decides.** The matcher ranks and suggests; nothing here
+    is reachable without somebody having looked at both.
+
+    One entry, one line: an entry already claimed elsewhere on the
+    statement is refused rather than silently moved, because two lines
+    pointing at one entry would say the company paid once and the bank
+    saw it twice.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may reconcile a bank statement"), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Bank Statement", statement_name)
+    row = _statement_line(doc, line)
+    if not frappe.db.exists("Cash Ledger Entry", entry):
+        frappe.throw(_("{0} is not a ledger entry").format(entry), frappe.DoesNotExistError)
+    taken = [one for one in doc.lines if one.matched_entry == entry and one.name != line]
+    if taken:
+        frappe.throw(
+            _("Ledger entry {0} is already matched to line {1}").format(
+                entry, taken[0].sequence or taken[0].idx
+            ),
+            frappe.ValidationError,
+        )
+    row.matched_entry = entry
+    doc.save()
+    return {"line": row.name, "matched_entry": row.matched_entry,
+            "matched_on": row.matched_on, "matched_by": row.matched_by}
+
+
+@frappe.whitelist()
+def unmatch_statement_line(statement_name, line):
+    """Take a confirmation back. A match is a judgement, not a fact."""
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may reconcile a bank statement"), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Bank Statement", statement_name)
+    row = _statement_line(doc, line)
+    row.matched_entry = None
+    doc.save()
+    return {"line": row.name, "matched_entry": None}

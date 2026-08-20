@@ -194,6 +194,21 @@ class TestReferencesAreReadWhereReferencesCanBe:
 
         assert found == {"HD:13", "HDDV:2805-2026"}
 
+    def test_the_number_this_app_mints_is_taken_whole(self):
+        """`HDDV200826/AURA-SUMO` is #139's shape - kind, DDMMYY,
+        partner - and is specific enough to need no hint. It is also a
+        different shape from every form in the July sample, which
+        predates it: on that file no match can be strong, and that is a
+        fact about the statement rather than about the matcher."""
+        assert statement.references("AURA THANH TOAN HDDV200826/AURA-SUMO") == {
+            "HDDV200826/AURA-SUMO"
+        }
+
+    def test_a_same_day_second_contract_keeps_its_ordinal(self):
+        assert statement.references("TT HDDV200826/AURA-SUMO-2") == {
+            "HDDV200826/AURA-SUMO-2"
+        }
+
     def test_digits_in_a_description_with_no_contract_in_it_are_not_references(self):
         """The guard that keeps this safe. Without the hint, a bank's own
         trace code would attach money to a job it has nothing to do

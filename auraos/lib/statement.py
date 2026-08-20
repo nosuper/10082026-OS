@@ -207,6 +207,14 @@ CONTRACT_DASHED = re.compile(r"(?<!\d)(\d{4})-(\d{4})(?!\d)")
 CONTRACT_RUN = re.compile(r"(?<!\d)(\d{2})(\d{2})(\d{4})(?!\d)")
 INVOICE = re.compile(r"HO[AÁ]\s*DON\s*S[OỐ]\s*(\d+)")
 
+# The number this app mints, which is a different shape from any of the
+# four above: `HDDV200826/AURA-SUMO` - kind, DDMMYY, partner (#139). The
+# July 2026 sample predates it, so every contract in that file is written
+# the old way and **no match against it can be strong**. That is worth
+# knowing before somebody reads a month of weak matches as a defect in
+# the matcher: it is a statement older than the numbering.
+MINTED = re.compile(r"\b(HDDV\d{6}/AURA-[A-Z0-9]+(?:-\d+)?)\b")
+
 
 def references(description: str) -> set[str]:
     """Every contract or invoice reference in a line's description.
@@ -221,6 +229,10 @@ def references(description: str) -> set[str]:
     found = set()
     for number in INVOICE.findall(text):
         found.add(f"HD:{int(number)}")
+    # The app's own numbers are taken whole, and without the contract
+    # hint: the shape is specific enough to stand on its own, and a bank
+    # line that carries one is quoting a contract by name.
+    found.update(MINTED.findall(text))
     if CONTRACT_HINT.search(text):
         for head, tail in CONTRACT_DASHED.findall(text):
             found.add(f"HDDV:{head}-{tail}")
