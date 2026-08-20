@@ -319,6 +319,19 @@ MONEY_FIELDS = {
     "vat_amount": "quote_vat_amount",
     "total": "quote_total",
 }
+# The deposit and final halves of the payment plan (#146). Percentages
+# and amounts are formatted differently, so they are listed apart.
+PLAN_PCT_FIELDS = ("deposit_pct", "final_pct")
+PLAN_MONEY_FIELDS = ("deposit_amount", "final_amount")
+
+# Entered at generation, held by no record. See document_values.
+TERM_FIELDS = (
+    "signed_on",
+    "deposit_days",
+    "final_days",
+    "service_start",
+    "service_end",
+)
 PCT_FIELDS = {"mf_pct": "quote_mf_pct", "vat_pct": "vat_pct"}
 
 
@@ -329,6 +342,9 @@ def document_values(
     vendor: Mapping[str, Any] | None = None,
     freelancer: Mapping[str, Any] | None = None,
     today: date | None = None,
+    contract_number: str | None = None,
+    terms: Mapping[str, Any] | None = None,
+    plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str | None]:
     """Every placeholder a template may use, filled from plain records.
 
@@ -351,6 +367,33 @@ def document_values(
     """
     values: dict[str, str | None] = {}
     job = job or {}
+
+    # The number this paper is issued under (#139). Passed in rather
+    # than derived here: it is frozen on the Generated Paper at
+    # generation, and a template must print the number the record
+    # carries rather than the number the rule would produce now.
+    values["contract.number"] = _text(contract_number)
+
+    # What the founder types at generation because no record holds it
+    # (#139): when the contract was signed, the payment terms in days,
+    # and the service window. Offered as its own namespace rather than
+    # folded into `job` - `job.*` is what the record says, and a reader
+    # who cannot tell the two apart will eventually look for these on
+    # the Job and not find them. Absent stays absent: a term nobody
+    # entered reports as missing data rather than as a plausible zero.
+    terms = terms or {}
+    for name in TERM_FIELDS:
+        values[f"terms.{name}"] = _text(terms.get(name))
+
+    # The two halves a contract describes (#146). Absent rather than
+    # zero when the plan cannot say them: a contract whose final
+    # instalment reads 0% is worse than one with a visible gap, because
+    # only one of the two stops somebody signing it.
+    plan = plan or {}
+    for name in PLAN_PCT_FIELDS:
+        values[f"plan.{name}"] = _pct(plan.get(name)) if plan.get(name) is not None else None
+    for name in PLAN_MONEY_FIELDS:
+        values[f"plan.{name}"] = _money(plan.get(name)) if plan.get(name) is not None else None
 
     for name, fieldname in JOB_FIELDS.items():
         values[f"job.{name}"] = _text(job.get(fieldname))
