@@ -10,6 +10,7 @@ from auraos.lib.contracts import (
     fold,
     normalise_short_code,
     number_for,
+    parent_reference,
     payment_split,
     suggest_short_code,
 )
@@ -150,28 +151,41 @@ class TestNumberFor:
             == "HDDV200826/AURA-SUMO"
         )
 
-    def test_a_child_repeats_the_parent_rather_than_deriving(self):
+    def test_a_child_mints_its_own_number_under_its_own_prefix(self):
+        # The standard gives BBNT and DNTT prefixes of their own. A
+        # payment request is a document with an identity, not only a
+        # pointer at a contract - and the template asks for both.
+        assert (
+            number_for("DNTT", date(2026, 8, 20), "SUMO")
+            == "DNTT200826/AURA-SUMO"
+        )
+        assert (
+            number_for("BBNT", date(2026, 8, 20), "SUMO")
+            == "BBNT200826/AURA-SUMO"
+        )
+
+    def test_the_parent_reference_is_copied_never_re_derived(self):
         # Same date and partner, so a re-derivation would agree today.
-        # It inherits anyway, because agreeing today is what two
+        # It is copied anyway, because agreeing today is what two
         # derivations always do until one of them changes.
         parent = "HDDV200826/AURA-SUMO"
         for kind in ("BBNT", "DNTT"):
-            assert (
-                number_for(kind, date(2026, 8, 20), "SUMO", parent_number=parent)
-                == parent
-            )
+            assert parent_reference(kind, parent) == parent
 
-    def test_a_child_inherits_the_parents_suffix_too(self):
+    def test_a_contract_has_no_parent(self):
+        assert parent_reference("HDDV", "anything") is None
+        assert parent_reference("HDCC", "anything") is None
+
+    def test_the_reference_carries_the_parents_suffix_too(self):
         parent = "HDDV200826/AURA-SUMO-2"
-        assert (
-            number_for("BBNT", date(2026, 8, 20), "SUMO", parent_number=parent)
-            == parent
-        )
+        assert parent_reference("BBNT", parent) == parent
 
-    def test_a_child_with_no_parent_carries_nothing_rather_than_minting(self):
+    def test_a_child_with_no_parent_references_nothing_rather_than_guessing(self):
         # A delivery note quoting a contract number that no contract
-        # carries is worse than one quoting none.
-        assert number_for("BBNT", date(2026, 8, 20), "SUMO") is None
+        # carries is worse than one quoting none. Its OWN number is
+        # unaffected - the paper exists either way.
+        assert parent_reference("BBNT", None) is None
+        assert number_for("BBNT", date(2026, 8, 20), "SUMO") is not None
 
     def test_a_blank_kind_carries_no_number(self):
         # The phu luc is an attachment. A number on it would imply an
@@ -181,6 +195,22 @@ class TestNumberFor:
 
     def test_an_unknown_kind_carries_nothing_rather_than_inventing(self):
         assert number_for("XXXX", date(2026, 8, 20), "SUMO") is None
+
+    def test_the_vendor_contract_mints_its_own_too(self):
+        # HDCC joined HDDV when vendor contracts became numbered. The
+        # single-kind form encoded "HDDV is the only thing that can be a
+        # parent", which was true by accident.
+        assert (
+            number_for("HDCC", date(2026, 8, 20), "SUMO")
+            == "HDCC200826/AURA-SUMO"
+        )
+
+    def test_a_child_can_reference_a_vendor_contract(self):
+        # Nothing is written about a vendor contract today. The code
+        # must not assume that, or the first one will silently carry no
+        # reference at all.
+        parent = "HDCC200826/AURA-SUMO"
+        assert parent_reference("BBNT", parent) == parent
 
 
 class TestPaymentSplit:
@@ -239,3 +269,43 @@ class TestPaymentSplit:
         # message can say what it found.
         _, refusal = payment_split([{"pct": 100, "amount": 10_000_000}])
         assert refusal == "plan_has_1"
+
+
+class TestFreelancerFee:
+    """The fee triple, pinned against pricing.py's own arithmetic (#148)."""
+
+    def test_the_template_states_the_gross_as_tax_inclusive(self):
+        from auraos.lib.contracts import freelancer_fee
+
+        # net 9,000,000 -> gross 10,000,000, tax 1,000,000.
+        out = freelancer_fee(9_000_000)
+        assert int(out["gross"]) == 10_000_000
+        assert int(out["tax"]) == 1_000_000
+        assert int(out["net"]) == 9_000_000
+
+    def test_it_agrees_with_pricing_rather_than_restating_the_rate(self):
+        # The rate lives in pricing.py. If somebody changes it there and
+        # not here, this fails rather than the two quietly disagreeing on
+        # a signed contract.
+        from decimal import Decimal
+
+        from auraos.lib.contracts import freelancer_fee
+
+        net = Decimal("7_500_000".replace("_", ""))
+        out = freelancer_fee(net)
+        assert out["gross"] == net / Decimal("0.9")
+        assert out["tax"] == net / 9
+
+    def test_the_three_figures_reconcile(self):
+        from auraos.lib.contracts import freelancer_fee
+
+        out = freelancer_fee(9_000_000)
+        assert out["net"] + out["tax"] == out["gross"]
+
+    def test_no_fee_is_a_gap_not_a_zero(self):
+        from auraos.lib.contracts import freelancer_fee
+
+        assert freelancer_fee(None) is None
+        assert freelancer_fee("") is None
+        assert freelancer_fee("abc") is None
+        assert freelancer_fee(-1) is None

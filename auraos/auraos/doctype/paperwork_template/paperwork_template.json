@@ -27,11 +27,11 @@
    "unique": 1
   },
   {
-   "description": "Which numbered document this is. Blank means it is not a numbered contract - the phu luc, and anything else that carries no contract number of its own.",
+   "description": "Which numbered document this is. HDDV is the client contract, HDCC the vendor one; both mint their own number. BBNT and DNTT carry their parent contract's. Blank means it is not a numbered contract - the phu luc, and anything else that carries none.",
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "\nHDDV\nBBNT\nDNTT"
+   "options": "\nHDDV\nHDCC\nBBNT\nDNTT"
   },
   {
    "description": "The .docx as designed in Word, with {{client.tax_code}} typed where a value belongs",
