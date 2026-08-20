@@ -198,9 +198,17 @@ function BankPage() {
  * number back and the founder sees the two agree rather than being told they
  * do.
  *
- * The upload and the import are two steps on purpose: a file that cannot be
- * read as a statement is still a file the founder chose, and losing it because
- * the parse failed would make the second attempt start further back.
+ * The upload and the import are two steps on purpose, and the file survives a
+ * failed parse rather than being cleaned up. Two reasons, and **neither is a
+ * founder ruling - this was decided here**:
+ *
+ *   - **A rejected file is evidence.** "What did the bank actually send" is
+ *     the first question after a parse fails, and deleting the file would
+ *     throw away the only artefact that answers it.
+ *   - **A second attempt should not start further back** than the first.
+ *
+ * Consistent with how template uploads already behave, which is where the
+ * shape comes from rather than from any decision about this screen.
  */
 function Import() {
   const accounts = useMethod<CashAccountsReport>("auraos.api.cash_accounts");
