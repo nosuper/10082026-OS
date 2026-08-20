@@ -22,6 +22,8 @@ const producerTest = test.extend({ storageState: producerState });
 
 const PNL = "auraos.api.finance_profit_and_loss";
 const MARGINS = "auraos.api.job_profitability";
+/** Founder-only at the server. A producer's screen must not even ask. */
+const TAX_POSITION = "auraos.api.period_tax_position";
 
 /**
  * The range the screen opens on: FinanceRange's third preset, "This year",
@@ -148,6 +150,13 @@ producerTest("a producer gets the same report, carrying no founder figure", asyn
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
 
+  // Registered before the navigation, because the point is what the screen
+  // asks for and a listener attached afterwards would miss the first load.
+  const asked = [];
+  page.on("request", (request) => {
+    if (request.url().includes(TAX_POSITION)) asked.push(request.url());
+  });
+
   await openReports(page);
 
   const range = thisYear();
@@ -172,13 +181,37 @@ producerTest("a producer gets the same report, carrying no founder figure", asyn
   );
   expect(leaked, `a producer's payload carried ${leaked.join(", ")}`).toEqual([]);
 
-  // And the sentence that would trip a word match is on the screen while the
-  // key set above passes. This is here so that a future red is never "fixed"
-  // by deleting the paragraph: the screen saying it does not know the tax
-  // position is the screen being right.
-  // .first() because the sentence sits inside a <strong> inside a <span>, and
-  // a getByText that resolves to both is a strict mode violation, not a pass.
-  await expect(page.getByText(/tax position is not on this screen/i).first()).toBeVisible();
+  // **Nothing tax-shaped anywhere on the page**, which is a different claim
+  // from the key set above and a stricter one: the payload check would pass a
+  // screen that rendered the founder's VAT figure from some other source, and
+  // this would not.
+  //
+  // This replaces an assertion that the screen *said* "tax position is not on
+  // this screen". #109 removed that sentence, and restoring it was never on
+  // the table for two reasons worth keeping written down:
+  //
+  //   - **It had become false.** The sentence claimed nothing in AuraOS works
+  //     out a tax figure; #109 works one out.
+  //   - **Write boundaries are announced, read boundaries are silent.** This
+  //     app tells a producer about actions they lack - "only the founder can
+  //     change templates" - and never signposts content they cannot see.
+  //     Commission, profit and exposure are all silently absent, and a
+  //     sentence explaining the absence of the tax card would have been the
+  //     one exception.
+  //
+  // Word boundaries rather than substrings, which is the trap the exposure
+  // spec next door met from the other side: `/vat/i` matches "private" and
+  // "innovative", and a leak detector that cries at ordinary prose gets
+  // loosened by the next person rather than believed.
+  const said = String((await page.getByRole("main").textContent()) ?? "");
+  const taxWords = said.match(/\b(tax|thu[eế]|vat|tndn)\b/gi) ?? [];
+  expect(taxWords, `the reports screen said ${taxWords.join(", ")} to a producer`).toEqual([]);
+
+  // And it did not ask, either. A screen that fetched the founder's tax
+  // position and merely declined to draw it would satisfy every assertion
+  // above while putting the figure in the browser - which is where a devtools
+  // tab would find it.
+  expect(asked, "the screen asked the server for the founder's tax position").toEqual([]);
   expect(failures).toEqual([]);
 });
 
