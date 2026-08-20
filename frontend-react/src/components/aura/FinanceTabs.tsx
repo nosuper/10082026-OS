@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 const tabs = [
   { to: "/finance", label: "Dashboard", exact: true },
   { to: "/finance/accounts", label: "Accounts" },
+  { to: "/finance/bank", label: "Bank" },
   { to: "/finance/income", label: "Income" },
   { to: "/finance/expenses", label: "Expenses" },
   { to: "/finance/receivables", label: "Receivables" },
