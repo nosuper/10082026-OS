@@ -233,9 +233,7 @@ function ForecastPage() {
                 <Money value={report?.open_pipeline ?? 0} />
               </Figure>
             }
-            sub={
-              forecast.isSuccess ? "If every open deal landed in full" : undefined
-            }
+            sub={forecast.isSuccess ? "If every open deal landed in full" : undefined}
           />
           <Stat
             label="Open deals"
@@ -515,7 +513,10 @@ function ForecastPage() {
 function bestMonth(months: ForecastMonth[]): ForecastMonth | null {
   let best: ForecastMonth | null = null;
   for (const month of months) {
-    if (month.weighted_projection > 0 && (!best || month.weighted_projection > best.weighted_projection)) {
+    if (
+      month.weighted_projection > 0 &&
+      (!best || month.weighted_projection > best.weighted_projection)
+    ) {
       best = month;
     }
   }

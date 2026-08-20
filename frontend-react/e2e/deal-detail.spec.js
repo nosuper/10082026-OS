@@ -90,9 +90,7 @@ test("changing the stage in the header records the move in stage history", async
   // The restore is the worst place in a spec for an unawaited write: there is
   // nothing after it to force the wait, so the test ends and the request dies
   // with the context. The next spec then reads a deal this one moved.
-  await saving(page, SET_VALUE, () =>
-    page.getByLabel("Stage").selectOption("Brief Received"),
-  );
+  await saving(page, SET_VALUE, () => page.getByLabel("Stage").selectOption("Brief Received"));
   await expect(page.getByLabel("Stage")).toHaveValue("Brief Received");
 });
 

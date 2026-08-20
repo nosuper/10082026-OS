@@ -89,10 +89,7 @@ export function FormDialog({
 
         <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
           {fields.map((f) => (
-            <label
-              key={f.name}
-              className={cn("block", f.span === 2 ? "sm:col-span-2" : undefined)}
-            >
+            <label key={f.name} className={cn("block", f.span === 2 ? "sm:col-span-2" : undefined)}>
               <span className="label-caps">
                 {f.label}
                 {f.required ? <span className="text-ember"> *</span> : null}

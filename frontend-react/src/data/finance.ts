@@ -24,10 +24,34 @@ export const monthly: MonthPoint[] = [
 
 /** Forecast months (Sep–Dec 2026) with pipeline confidence */
 export const forecast = [
-  { month: "Sep", committed: 470_000_000, weighted: 182_000_000, expense: 430_000_000, confidence: 0.75 },
-  { month: "Oct", committed: 425_000_000, weighted: 316_000_000, expense: 512_000_000, confidence: 0.6 },
-  { month: "Nov", committed: 210_000_000, weighted: 498_000_000, expense: 486_000_000, confidence: 0.45 },
-  { month: "Dec", committed: 120_000_000, weighted: 742_000_000, expense: 604_000_000, confidence: 0.35 },
+  {
+    month: "Sep",
+    committed: 470_000_000,
+    weighted: 182_000_000,
+    expense: 430_000_000,
+    confidence: 0.75,
+  },
+  {
+    month: "Oct",
+    committed: 425_000_000,
+    weighted: 316_000_000,
+    expense: 512_000_000,
+    confidence: 0.6,
+  },
+  {
+    month: "Nov",
+    committed: 210_000_000,
+    weighted: 498_000_000,
+    expense: 486_000_000,
+    confidence: 0.45,
+  },
+  {
+    month: "Dec",
+    committed: 120_000_000,
+    weighted: 742_000_000,
+    expense: 604_000_000,
+    confidence: 0.35,
+  },
 ];
 
 export type IncomeRow = {

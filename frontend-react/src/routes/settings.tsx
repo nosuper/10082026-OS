@@ -745,9 +745,7 @@ function StageForecastCard({ rules }: { rules: StageForecastRule[] }) {
   );
 
   const set = (stage: string, field: "win_probability_pct" | "lead_days", next: number) => {
-    setDraft((rows) =>
-      rows.map((row) => (row.stage === stage ? { ...row, [field]: next } : row)),
-    );
+    setDraft((rows) => rows.map((row) => (row.stage === stage ? { ...row, [field]: next } : row)));
     setSaved(false);
   };
 
@@ -757,9 +755,7 @@ function StageForecastCard({ rules }: { rules: StageForecastRule[] }) {
     <Card
       title="Cash forecast dials"
       subtitle="What each stage is worth, and how far ahead it bills"
-      action={
-        unconfigured ? <Pill tone="ember">{unconfigured} on house defaults</Pill> : null
-      }
+      action={unconfigured ? <Pill tone="ember">{unconfigured} on house defaults</Pill> : null}
     >
       <form
         className="p-4"

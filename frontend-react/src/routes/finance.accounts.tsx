@@ -130,9 +130,9 @@ function CashAccountsPage() {
           <Scale className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
           <span>
             <strong className="font-medium text-foreground">Nothing here is typed in.</strong> Every
-            balance is the sum of the ledger entries against that account, and an entry exists because money
-            moved on a record that says so - a milestone collected, a vendor paid, an advance handed
-            over, a float settled. There is no field anywhere that holds a balance.
+            balance is the sum of the ledger entries against that account, and an entry exists
+            because money moved on a record that says so - a milestone collected, a vendor paid, an
+            advance handed over, a float settled. There is no field anywhere that holds a balance.
           </span>
         </p>
 

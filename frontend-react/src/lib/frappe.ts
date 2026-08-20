@@ -295,10 +295,7 @@ export type UploadOptions = {
  * It lives here because two screens wrote this by hand independently before it
  * did, which is how one shared client quietly becomes several.
  */
-export async function uploadFile(
-  file: File,
-  options: UploadOptions = {},
-): Promise<UploadedFile> {
+export async function uploadFile(file: File, options: UploadOptions = {}): Promise<UploadedFile> {
   const form = new FormData();
   form.append("file", file, file.name);
   if (options.isPrivate) form.append("is_private", "1");

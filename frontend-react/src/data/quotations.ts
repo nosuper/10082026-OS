@@ -41,9 +41,7 @@ export const clientContacts = [
 ];
 
 export function memberSum(lineIds: number[]): number {
-  return costLines
-    .filter((l) => lineIds.includes(l.id))
-    .reduce((a, l) => a + l.quotePrice, 0);
+  return costLines.filter((l) => lineIds.includes(l.id)).reduce((a, l) => a + l.quotePrice, 0);
 }
 
 export function isDivider(l: QuoteLine): boolean {
@@ -125,10 +123,34 @@ export type OpenEvent = {
 };
 
 export const seedOpenLog: OpenEvent[] = [
-  { when: "17 Aug 2026 · 09:12", who: "Chị Phạm Thu Hà", where: "Ho Chi Minh City, VN", device: "iPhone · Safari", detail: "Opened link · viewed 2m 41s" },
-  { when: "17 Aug 2026 · 09:20", who: "Chị Phạm Thu Hà", where: "Ho Chi Minh City, VN", device: "iPhone · Safari", detail: "Downloaded PDF" },
-  { when: "16 Aug 2026 · 15:48", who: "Unknown (forwarded)", where: "Hanoi, VN", device: "Windows · Chrome", detail: "Opened link · viewed 48s" },
-  { when: "15 Aug 2026 · 11:02", who: "Trần Quốc Bảo", where: "Ho Chi Minh City, VN", device: "macOS · Chrome", detail: "Published v2 · link created" },
+  {
+    when: "17 Aug 2026 · 09:12",
+    who: "Chị Phạm Thu Hà",
+    where: "Ho Chi Minh City, VN",
+    device: "iPhone · Safari",
+    detail: "Opened link · viewed 2m 41s",
+  },
+  {
+    when: "17 Aug 2026 · 09:20",
+    who: "Chị Phạm Thu Hà",
+    where: "Ho Chi Minh City, VN",
+    device: "iPhone · Safari",
+    detail: "Downloaded PDF",
+  },
+  {
+    when: "16 Aug 2026 · 15:48",
+    who: "Unknown (forwarded)",
+    where: "Hanoi, VN",
+    device: "Windows · Chrome",
+    detail: "Opened link · viewed 48s",
+  },
+  {
+    when: "15 Aug 2026 · 11:02",
+    who: "Trần Quốc Bảo",
+    where: "Ho Chi Minh City, VN",
+    device: "macOS · Chrome",
+    detail: "Published v2 · link created",
+  },
 ];
 
 export type VersionSnapshot = {
@@ -243,8 +265,20 @@ export const versionShares: VersionShare[] = [
     published: "17 Aug 2026",
     lastOpen: "17 Aug 2026 · 18:04",
     log: [
-      { when: "17 Aug 2026 · 18:04", who: "Anh Đỗ Quang Vinh", where: "Ho Chi Minh City, VN", device: "macOS · Chrome", detail: "Opened link · viewed 3m 12s" },
-      { when: "17 Aug 2026 · 17:50", who: "Trần Quốc Bảo", where: "Ho Chi Minh City, VN", device: "macOS · Chrome", detail: "Published v2-C · link created" },
+      {
+        when: "17 Aug 2026 · 18:04",
+        who: "Anh Đỗ Quang Vinh",
+        where: "Ho Chi Minh City, VN",
+        device: "macOS · Chrome",
+        detail: "Opened link · viewed 3m 12s",
+      },
+      {
+        when: "17 Aug 2026 · 17:50",
+        who: "Trần Quốc Bảo",
+        where: "Ho Chi Minh City, VN",
+        device: "macOS · Chrome",
+        detail: "Published v2-C · link created",
+      },
     ],
   },
   {
@@ -256,7 +290,13 @@ export const versionShares: VersionShare[] = [
     published: "16 Aug 2026",
     lastOpen: null,
     log: [
-      { when: "16 Aug 2026 · 11:30", who: "Trần Quốc Bảo", where: "Ho Chi Minh City, VN", device: "macOS · Chrome", detail: "Draft link created · not sent" },
+      {
+        when: "16 Aug 2026 · 11:30",
+        who: "Trần Quốc Bảo",
+        where: "Ho Chi Minh City, VN",
+        device: "macOS · Chrome",
+        detail: "Draft link created · not sent",
+      },
     ],
   },
   {
@@ -268,9 +308,27 @@ export const versionShares: VersionShare[] = [
     published: "05 Aug 2026",
     lastOpen: "07 Aug 2026 · 14:11",
     log: [
-      { when: "07 Aug 2026 · 14:11", who: "Chị Phạm Thu Hà", where: "Ho Chi Minh City, VN", device: "iPhone · Safari", detail: "Opened link · viewed 1m 07s" },
-      { when: "06 Aug 2026 · 08:42", who: "Anh Bùi Trọng Nghĩa", where: "Hanoi, VN", device: "Windows · Edge", detail: "Downloaded PDF" },
-      { when: "05 Aug 2026 · 16:20", who: "Trần Quốc Bảo", where: "Ho Chi Minh City, VN", device: "macOS · Chrome", detail: "Published v1 · link created" },
+      {
+        when: "07 Aug 2026 · 14:11",
+        who: "Chị Phạm Thu Hà",
+        where: "Ho Chi Minh City, VN",
+        device: "iPhone · Safari",
+        detail: "Opened link · viewed 1m 07s",
+      },
+      {
+        when: "06 Aug 2026 · 08:42",
+        who: "Anh Bùi Trọng Nghĩa",
+        where: "Hanoi, VN",
+        device: "Windows · Edge",
+        detail: "Downloaded PDF",
+      },
+      {
+        when: "05 Aug 2026 · 16:20",
+        who: "Trần Quốc Bảo",
+        where: "Ho Chi Minh City, VN",
+        device: "macOS · Chrome",
+        detail: "Published v1 · link created",
+      },
     ],
   },
 ];
