@@ -402,7 +402,9 @@ def _founder_view(view, commission_pct):
     }
 
 
-def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct):
+def _breakdown_view(
+    line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct, contingency_pct=0
+):
     """lib/breakdown with this module's error channel and stored floor."""
     try:
         return breakdown.breakdown_view(
@@ -411,6 +413,7 @@ def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_p
             quote_mf_pct=quote_mf_pct,
             vat_pct=vat_pct,
             commission_pct=commission_pct,
+            contingency_pct=contingency_pct,
             margin_floor_pct=margin_floor_pct(),
         )
     except ValueError as err:
@@ -418,7 +421,14 @@ def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_p
 
 
 @frappe.whitelist()
-def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, packages=None):
+def compute_breakdown(
+    lines,
+    quote_mf_pct=10,
+    vat_pct=8,
+    commission_pct=None,
+    packages=None,
+    contingency_pct=0,
+):
     """Live engine results for the breakdown editor, before anything is saved.
 
     Producer sessions get costs, quote prices, margin and the floor
@@ -434,8 +444,11 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     if not _is_founder() or commission_pct is None:
         commission_pct = DEFAULT_COMMISSION_PCT
 
+    # Defaults to 0 rather than to 10 so that a caller which has not been
+    # taught about contingency yet gets the pre-#69 arithmetic instead of a
+    # silent 10% - the editor sends the deal's own stored rate.
     view = _breakdown_view(
-        line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct
+        line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct, contingency_pct
     )
     out = {
         **view,

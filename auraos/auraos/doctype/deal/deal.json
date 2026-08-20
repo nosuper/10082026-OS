@@ -30,11 +30,15 @@
   "cost_lines",
   "packages",
   "params_section",
+  "contingency_pct",
   "quote_mf_pct",
   "vat_pct",
   "column_break_params",
   "commission_pct",
   "quote_detail_level",
+  "included_revision_rounds",
+  "assumptions",
+  "exclusions",
   "quote_section",
   "quote_subtotal",
   "quote_mf_amount",
@@ -223,6 +227,13 @@
    "label": "Quote Parameters"
   },
   {
+   "fieldname": "contingency_pct",
+   "fieldtype": "Percent",
+   "label": "Contingency %",
+   "default": "10",
+   "description": "Dự phòng, nằm trong cost và trước markup (playbook 3.1.4). Không phải lợi nhuận: nó nâng cả chi phí lẫn giá bán, nên margin % không đổi. Deal cũ để trống (0) và giữ nguyên giá đã báo."
+  },
+  {
    "default": "10",
    "fieldname": "quote_mf_pct",
    "fieldtype": "Percent",
@@ -252,6 +263,25 @@
    "fieldtype": "Select",
    "label": "Quote Detail Level",
    "options": "Package totals\nLine by line\nLump sum"
+  },
+  {
+   "fieldname": "included_revision_rounds",
+   "fieldtype": "Int",
+   "label": "Included Revision Rounds",
+   "default": "2",
+   "description": "Số vòng revision miễn phí, in thẳng lên báo giá (playbook 3.1.7). Job kế thừa đúng con số này khi deal thắng, nên cái đã hứa và cái hệ thống tính tiền là một."
+  },
+  {
+   "fieldname": "assumptions",
+   "fieldtype": "Small Text",
+   "label": "Assumptions",
+   "description": "Báo giá này dựa trên giả định gì: số ngày quay, số location, phạm vi usage. Mỗi dòng một ý. Client đổi scope thì chỉ vào đây."
+  },
+  {
+   "fieldname": "exclusions",
+   "fieldtype": "Small Text",
+   "label": "Exclusions",
+   "description": "KHÔNG bao gồm gì: ngày quay thêm, KOL fee, music license mở rộng, phát sóng TV. Mỗi dòng một ý."
   },
   {
    "collapsible": 1,

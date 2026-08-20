@@ -193,6 +193,14 @@ def publish(deal_name, notes=None):
             **client_block(deal),
             "detail_level": detail_level,
             "notes": notes,
+            # Frozen with the version that shipped them (#35, lock-on-send).
+            # Assumptions and exclusions are the half of a quote that gets
+            # argued over later - "the deal was for two locations" - so what
+            # the client received has to be what we can still read, not
+            # whatever the deal says today.
+            "assumptions": deal.assumptions,
+            "exclusions": deal.exclusions,
+            "included_revision_rounds": deal.included_revision_rounds,
             "quote_mf_pct": deal.quote_mf_pct,
             "vat_pct": deal.vat_pct,
             "subtotal": round_vnd(totals.subtotal),
