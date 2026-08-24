@@ -67,7 +67,7 @@
           <div class="rounded-md border border-gray-300 bg-white">
             <TextEditor
               :content="draft"
-              :mentions="mentionable"
+              :mentions="mentionSource"
               :upload-args="uploadArgs"
               editor-class="prose-sm max-w-none px-3 py-2 focus:outline-none"
               placeholder="Write a comment"
@@ -101,7 +101,7 @@
         <TextEditor
           :key="composerKey"
           :content="newComment"
-          :mentions="mentionable"
+          :mentions="mentionSource"
           :upload-args="uploadArgs"
           editor-class="prose-sm max-w-none px-3 py-2 focus:outline-none"
           placeholder="Write a comment"
@@ -156,6 +156,13 @@ const mentionable = computed(() =>
     .filter((user) => user.name !== me)
     .map((user) => ({ id: user.name, label: user.full_name || user.name }))
 )
+
+// A getter, not the list: the editor freezes whatever it is configured
+// with at mount, and the seats are still being fetched when a card
+// opens - handed the array, the @ popup would come up empty for good.
+// The plain object survives the template's ref unwrapping, which a
+// `{ mentions: mentionable }` literal would not.
+const mentionSource = { mentions: () => mentionable.value }
 
 // Comment images are ordinary deal attachments: uploaded private and
 // readable by exactly the seats that may read the deal, which is what

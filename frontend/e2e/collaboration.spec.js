@@ -86,8 +86,10 @@ test("the file manager is reachable from the nav and manages a deal's files", as
   await expect(page).toHaveURL(/\/aura\/files$/)
   await expect(page.getByRole("heading", { name: "Files", exact: true })).toBeVisible()
 
-  const row = page.getByRole("row").filter({ hasText: seededFile })
-  await expect(row).toContainText(existingDeal)
+  // Located by its deal, not its file name: renaming swaps the name for
+  // an input, and a row filtered on the old name stops matching mid-test.
+  const row = page.getByRole("row").filter({ hasText: existingDeal })
+  await expect(row).toContainText(seededFile)
   // Uploaded private, so no "public" badge to warn about a shared link.
   await expect(row.getByText("public", { exact: true })).toHaveCount(0)
 

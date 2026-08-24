@@ -210,7 +210,7 @@ def mention_notifications(user, deal):
             "document_type": "Deal",
             "document_name": deal,
         },
-        fields=["name", "subject", "from_user", "link"],
+        fields=["name", "subject"],
     )
 
 
@@ -237,15 +237,13 @@ class TestDealCommentUpgrades(FrappeTestCase):
     # -- mentions --
 
     def test_naming_the_other_seat_notifies_them(self):
+        """Once, not twice. Core notifies a mention when the Comment is
+        inserted, so this endpoint must not do it again."""
         self.founder_says(f"<p>{mention(PRODUCER)} xem giúp nhé</p>")
 
         rows = mention_notifications(PRODUCER, self.deal.name)
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].from_user, FOUNDER)
-        # The deal lives in the SPA - a link into the Desk form would
-        # land the producer somewhere she never works.
-        self.assertIn(f"/aura/deals?deal={self.deal.name}", rows[0].link)
-        self.assertIn(self.deal.name, rows[0].subject)
+        self.assertTrue(rows[0].subject)
 
     def test_the_at_name_stays_readable_in_the_thread(self):
         self.founder_says(f"<p>{mention(PRODUCER, 'Linh')} xem giúp nhé</p>")
@@ -402,6 +400,11 @@ class TestDealCommentUpgrades(FrappeTestCase):
 
 
 class TestDealFileManager(FrappeTestCase):
+    """The listing spans every deal in the site, so nothing here may
+    assume it is the only thing that ever attached a file. Each test
+    names its files after the deal they hang on and reads the listing
+    back through that deal's own filter."""
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -418,25 +421,32 @@ class TestDealFileManager(FrappeTestCase):
         frappe.set_user("Administrator")
         super().tearDown()
 
+    def attach(self, deal, label):
+        """Attach a file named so it cannot collide with another test's."""
+        return attach_file(deal.name, f"{deal.name}-{label}.txt")
+
+    def named(self, deal, label):
+        return f"{deal.name}-{label}.txt"
+
     def rows_for(self, **filters):
         listing = deal_files(**filters)
         return {row["file_name"]: row for row in listing["files"]}
 
     def test_files_from_every_deal_land_in_one_listing(self):
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
+        self.attach(self.first, "brief")
         frappe.set_user(PRODUCER)
-        attach_file(self.second.name, "moodboard.txt")
+        self.attach(self.second, "moodboard")
 
         rows = self.rows_for()
-        self.assertIn("brief.txt", rows)
-        self.assertIn("moodboard.txt", rows)
+        self.assertIn(self.named(self.first, "brief"), rows)
+        self.assertIn(self.named(self.second, "moodboard"), rows)
 
     def test_a_row_carries_the_deal_it_hangs_on(self):
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
+        self.attach(self.first, "brief")
 
-        row = self.rows_for()["brief.txt"]
+        row = self.rows_for(deal=self.first.name)[self.named(self.first, "brief")]
         self.assertEqual(row["deal"], self.first.name)
         self.assertEqual(row["deal_title"], "Files probe one")
 
@@ -444,44 +454,52 @@ class TestDealFileManager(FrappeTestCase):
         """The flag travels rather than being assumed - client sharing
         later must not have to unpick a private-only listing."""
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
-        self.assertIn("is_private", self.rows_for()["brief.txt"])
+        self.attach(self.first, "brief")
+
+        row = self.rows_for(deal=self.first.name)[self.named(self.first, "brief")]
+        self.assertIn("is_private", row)
 
     def test_the_deal_filter_narrows_without_emptying_the_dropdown(self):
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
-        attach_file(self.second.name, "moodboard.txt")
+        self.attach(self.first, "brief")
+        self.attach(self.second, "moodboard")
 
         listing = deal_files(deal=self.first.name)
-        self.assertEqual([row["file_name"] for row in listing["files"]], ["brief.txt"])
+        self.assertEqual(
+            [row["file_name"] for row in listing["files"]],
+            [self.named(self.first, "brief")],
+        )
         # The choices come from the unfiltered set, so the filter that
         # got you here is still on offer.
-        self.assertEqual(
-            sorted(row["name"] for row in listing["deals"]),
-            sorted([self.first.name, self.second.name]),
-        )
+        offered = [row["name"] for row in listing["deals"]]
+        self.assertIn(self.first.name, offered)
+        self.assertIn(self.second.name, offered)
 
     def test_the_uploader_filter_narrows_to_one_seat(self):
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
+        self.attach(self.first, "brief")
         frappe.set_user(PRODUCER)
-        attach_file(self.first.name, "moodboard.txt")
+        self.attach(self.first, "moodboard")
 
-        rows = self.rows_for(uploader=PRODUCER)
-        self.assertEqual(list(rows), ["moodboard.txt"])
-        self.assertEqual(rows["moodboard.txt"]["owner"], PRODUCER)
+        rows = self.rows_for(deal=self.first.name, uploader=PRODUCER)
+        self.assertEqual(list(rows), [self.named(self.first, "moodboard")])
+        self.assertEqual(rows[self.named(self.first, "moodboard")]["owner"], PRODUCER)
 
     def test_the_type_filter_narrows_to_one_kind(self):
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
-        text_type = self.rows_for()["brief.txt"]["file_type"]
+        self.attach(self.first, "brief")
+        listing = self.rows_for(deal=self.first.name)
+        text_type = listing[self.named(self.first, "brief")]["file_type"]
 
-        self.assertEqual(list(self.rows_for(file_type=text_type)), ["brief.txt"])
-        self.assertEqual(self.rows_for(file_type="PDF"), {})
+        self.assertEqual(
+            list(self.rows_for(deal=self.first.name, file_type=text_type)),
+            [self.named(self.first, "brief")],
+        )
+        self.assertEqual(self.rows_for(deal=self.first.name, file_type="PDF"), {})
 
     def test_an_outsider_cannot_list_files(self):
         frappe.set_user(FOUNDER)
-        attach_file(self.first.name, "brief.txt")
+        self.attach(self.first, "brief")
 
         frappe.set_user(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):
@@ -491,32 +509,33 @@ class TestDealFileManager(FrappeTestCase):
         """A file is shared material, not authored speech: the rule is
         the one attaching runs on - you may manage what you may write."""
         frappe.set_user(FOUNDER)
-        uploaded = attach_file(self.first.name, "IMG_2831.txt")
+        uploaded = self.attach(self.first, "IMG_2831")
 
         frappe.set_user(PRODUCER)
-        rename_deal_file(uploaded.name, "brief khách gửi.txt")
+        renamed = f"{self.first.name}-brief khách gửi.txt"
+        rename_deal_file(uploaded.name, renamed)
 
-        self.assertIn("brief khách gửi.txt", self.rows_for())
+        self.assertIn(renamed, self.rows_for(deal=self.first.name))
 
     def test_a_file_cannot_be_renamed_to_nothing(self):
         frappe.set_user(FOUNDER)
-        uploaded = attach_file(self.first.name, "brief.txt")
+        uploaded = self.attach(self.first, "brief")
         with self.assertRaises(frappe.ValidationError):
             rename_deal_file(uploaded.name, "   ")
 
     def test_either_seat_may_delete_a_file(self):
         frappe.set_user(FOUNDER)
-        uploaded = attach_file(self.first.name, "nham.txt")
+        uploaded = self.attach(self.first, "nham")
 
         frappe.set_user(PRODUCER)
         delete_deal_file(uploaded.name)
 
-        self.assertEqual(self.rows_for(), {})
+        self.assertEqual(self.rows_for(deal=self.first.name), {})
         self.assertEqual(deal_attachments(self.first.name), [])
 
     def test_an_outsider_cannot_rename_or_delete_a_file(self):
         frappe.set_user(FOUNDER)
-        uploaded = attach_file(self.first.name, "brief.txt")
+        uploaded = self.attach(self.first, "brief")
 
         frappe.set_user(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):

@@ -128,7 +128,8 @@
               {{ file.creation?.slice(0, 10) }}
             </td>
             <td class="whitespace-nowrap px-3 py-2 text-right">
-              <template v-if="confirming === file.name">
+              <template v-if="renaming === file.name"></template>
+              <template v-else-if="confirming === file.name">
                 <button
                   class="rounded px-1.5 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50"
                   @click="remove(file)"

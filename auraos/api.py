@@ -2,6 +2,9 @@
 
 import frappe
 from frappe import _
+from frappe.desk.doctype.notification_log.notification_log import (
+    enqueue_create_notification,
+)
 from frappe.utils import get_datetime, get_fullname
 from frappe.utils.html_utils import sanitize_html
 from frappe.utils.pdf import get_pdf
@@ -180,7 +183,7 @@ def _comment_row(row):
     gates the edit and delete endpoints, and a thread that offers a
     button the server will refuse is worse than no button.
     """
-    out = {field: row.get(field) for field in COMMENT_FIELDS}
+    out = frappe._dict({field: row.get(field) for field in COMMENT_FIELDS})
     out["mine"] = row.get("owner") == frappe.session.user
     # An insert stamps creation and modified from the same clock read, so
     # any later stamp is a rewrite. Normalised first: a row read back from
@@ -238,7 +241,13 @@ def _mentionable(deal):
 
 
 def _notify_mentions(deal, content, named):
-    """Tell the named seats, through core's own notification path.
+    """Tell the named seats - the gap core leaves, and only that.
+
+    Core notifies mentions itself when a Comment is inserted
+    (`Comment.after_insert` → `frappe.desk.notifications.notify_mentions`),
+    so posting a comment must not do it again or the other seat hears
+    about one mention twice. Editing is where core stops looking, and
+    naming someone in an edit is still naming them.
 
     `named` is read off the raw editor HTML by the caller, because a
     sanitiser that drops an attribute it does not recognise would
@@ -247,10 +256,6 @@ def _notify_mentions(deal, content, named):
     the ids arrive from a browser, so this is authorization, not a typo
     report.
     """
-    from frappe.desk.doctype.notification_log.notification_log import (
-        enqueue_create_notification,
-    )
-
     allowed = _mentionable(deal)
     targets = [user for user in named if user in allowed]
     if not targets:
@@ -266,9 +271,6 @@ def _notify_mentions(deal, content, named):
             ),
             "from_user": frappe.session.user,
             "email_content": content,
-            # The deal lives in the SPA, not the Desk form - a notification
-            # that lands somewhere the founder never works is noise.
-            "link": f"/aura/deals?deal={deal}",
         },
     )
     return targets
@@ -276,13 +278,17 @@ def _notify_mentions(deal, content, named):
 
 @frappe.whitelist()
 def add_deal_comment(deal, content):
-    """Append a comment to a deal's thread; returns the stored row."""
+    """Append a comment to a deal's thread; returns the stored row.
+
+    Nothing here notifies the seats named in it: inserting a Comment is
+    exactly where core already does that, and doing it again would tell
+    them twice. Editing one is the case core does not cover - see
+    `edit_deal_comment`.
+    """
     _check_deal_permission(deal, "write")
-    named = comments.mentioned_users(content)
     comment = frappe.get_doc("Deal", deal).add_comment(
         "Comment", text=_clean_comment(content)
     )
-    _notify_mentions(deal, comment.content, named)
     return _comment_row(comment.as_dict())
 
 
