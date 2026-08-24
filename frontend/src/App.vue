@@ -40,18 +40,6 @@ import { Button, createResource } from "frappe-ui"
 const route = useRoute()
 const router = useRouter()
 
-// Settings only appears for sessions that can actually read it (the
-// founder); probing the floor endpoint doubles as the role check.
-const isFounder = ref(false)
-createResource({
-  url: "auraos.api.get_margin_floor",
-  auto: true,
-  onSuccess() {
-    isFounder.value = true
-  },
-  onError() {},
-})
-
 // Which app this session is in (T7.1). A crew member has no deals
 // board and no jobs list to offer, and a nav bar full of links that
 // answer with a permission error is worse than no nav bar at all.
@@ -73,6 +61,16 @@ createResource({
 
 const crewOnly = computed(() => scope.value?.crew_only === true)
 
+// Settings stopped being a founder-only door in T3.5 (issue #29): a
+// producer manages deal sources there. So the link appears for anyone
+// with something on that page - the company numbers, or a list they may
+// edit - and the page itself draws only the sections they may use.
+const canOpenSettings = computed(
+  () =>
+    scope.value?.can_read_settings === true ||
+    (scope.value?.manages_vocabularies || []).length > 0
+)
+
 const nav = computed(() => {
   if (crewOnly.value) return [{ label: "My work", route: "/my-work" }]
   return [
@@ -83,7 +81,7 @@ const nav = computed(() => {
     // Both roles: producers generate paperwork, the founder owns the
     // templates, and the page itself only offers what the session may do.
     { label: "Paperwork", route: "/paperwork" },
-    ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
+    ...(canOpenSettings.value ? [{ label: "Settings", route: "/settings" }] : []),
   ]
 })
 

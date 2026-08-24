@@ -2,11 +2,38 @@
   <div class="mx-auto max-w-xl px-4 py-6">
     <h1 class="mb-4 text-lg font-semibold text-gray-900">Company Settings</h1>
 
-    <div v-if="denied" class="rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600">
+    <!--
+      T3.5 (issue #29): the page is no longer a founder-only door. The
+      lists a producer manages are drawn here, the company numbers below
+      only for a session that can read them - the margin floor stays
+      founder-only whatever else this page grows.
+    -->
+    <div
+      v-if="denied && !manageable.length"
+      class="rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600"
+    >
       Only the founder can view company settings.
     </div>
 
-    <div v-else class="rounded-lg border bg-white p-4">
+    <div v-if="manageable.length" class="mb-4 rounded-lg border bg-white p-4">
+      <h2 class="text-sm font-semibold text-gray-800">Lists</h2>
+      <p class="mt-1 text-xs text-gray-500">
+        The values the deal form offers. Renaming one carries every deal
+        already on it across; a value still on a deal cannot be removed -
+        rename it, or clear it from those deals first. Tags are not here:
+        both roles invent those while editing a deal.
+      </p>
+      <div class="mt-4 grid gap-5 sm:grid-cols-2">
+        <VocabularyList
+          v-for="vocab in manageable"
+          :key="vocab.key"
+          :vocab="vocab"
+          @updated="vocabularies = $event"
+        />
+      </div>
+    </div>
+
+    <div v-if="!denied" class="rounded-lg border bg-white p-4">
       <label class="flex items-center gap-2 text-sm font-medium text-gray-800">
         Global margin floor %
         <span
@@ -269,6 +296,7 @@
 import { computed, reactive, ref } from "vue"
 import { Button, ErrorMessage, FileUploader, createResource } from "frappe-ui"
 import VndInput from "../components/VndInput.vue"
+import VocabularyList from "../components/VocabularyList.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 
 // Mirrors auraos.lib.quote.COMPANY_FIELDS, minus the logo, which has its
@@ -293,7 +321,30 @@ const IDENTITY_FIELDS = [
   { name: "signatory_title", label: "Signatory title" },
 ]
 
+// -- managed lists (T3.5, issue #29) --
+//
+// Sections, not a page-level gate: the endpoint answers for every list
+// with what this session may do to it, and only the manageable ones are
+// drawn. A producer therefore gets the sources section and no
+// project-type section at all, rather than one that refuses when used.
+const vocabularies = ref([])
+const manageable = computed(() =>
+  vocabularies.value.filter((vocab) => vocab.can_manage)
+)
+
+createResource({
+  url: "auraos.api.get_vocabularies",
+  auto: true,
+  onSuccess(rows) {
+    vocabularies.value = rows
+  },
+  onError() {},
+})
+
 const floorPct = ref(0)
+// The founder-only half of this page: the margin floor, the nudges, the
+// tier dials and the company identity all read the settings single, so
+// one refusal from it hides the lot.
 const denied = ref(false)
 const saved = ref(false)
 const error = ref("")

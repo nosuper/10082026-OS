@@ -13,7 +13,7 @@ from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.job_task import job_task
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, paperwork, settlement
+from auraos.lib import breakdown, paperwork, settlement, vocabulary
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import COMPANY_FIELDS
@@ -1626,9 +1626,170 @@ def session_scope():
     answer with a permission error is worse than no nav bar at all.
     """
     user = frappe.session.user
+    roles = frappe.get_roles()
     return {
         "user": user,
         "crew_only": job_task.is_crew_only(user),
         "can_read_jobs": bool(frappe.has_permission("Job", "read")),
         "can_read_deals": bool(frappe.has_permission("Deal", "read")),
+        # T3.5: Settings is no longer a founder-only door. A producer
+        # manages deal sources there, so the nav needs the link even
+        # though the margin floor on that page stays out of reach.
+        "can_read_settings": bool(frappe.has_permission("AuraOS Settings", "read")),
+        "manages_vocabularies": list(vocabulary.manageable_keys(roles)),
     }
+
+
+# -- managed vocabularies on the Settings screen (T3.5, issue #29) --
+#
+# A thin adapter over auraos.lib.vocabulary, which owns every rule: who
+# manages which list, what a rename does to the deals already on a value,
+# and why a value in use cannot be removed. Two gates, not one: the seam
+# decides, and the write still goes through the DocType's own permissions,
+# so opening a list to a role takes agreeing edits in both places.
+
+
+def _vocabulary(kind):
+    """The managed list a request names, or a refusal by name."""
+    try:
+        return vocabulary.vocabulary(kind)
+    except vocabulary.UnknownVocabulary:
+        frappe.throw(_("No such list: {0}").format(kind), frappe.ValidationError)
+
+
+def _managed_vocabulary(kind):
+    """The list a request names, once this session may manage it."""
+    vocab = _vocabulary(kind)
+    if not vocabulary.may_manage(vocab.key, frappe.get_roles()):
+        frappe.throw(
+            _("Your role cannot manage {0}").format(vocab.label),
+            frappe.PermissionError,
+        )
+    return vocab
+
+
+def _clean(raw):
+    try:
+        return vocabulary.clean_value(raw)
+    except ValueError as exc:
+        frappe.throw(_(str(exc)), frappe.ValidationError)
+
+
+def _in_use_counts(vocab):
+    """{value: how many records hold it} across every Link into the list.
+
+    Counted rather than merely tested, because the refusal a founder
+    reads when a removal is blocked names the number.
+    """
+    counts = {}
+    for doctype, fieldname in vocab.used_by:
+        rows = frappe.get_all(
+            doctype,
+            filters={fieldname: ["is", "set"]},
+            fields=[f"{fieldname} as value", "count(name) as total"],
+            group_by=fieldname,
+        )
+        for row in rows:
+            counts[row.value] = counts.get(row.value, 0) + row.total
+    return counts
+
+
+def _vocabulary_view(vocab):
+    counts = _in_use_counts(vocab)
+    return {
+        "key": vocab.key,
+        "label": vocab.label,
+        "can_manage": vocabulary.may_manage(vocab.key, frappe.get_roles()),
+        "values": [
+            {"name": name, "in_use": counts.get(name, 0)}
+            for name in frappe.get_all(
+                vocab.doctype, pluck="name", order_by="name asc", limit_page_length=0
+            )
+        ],
+    }
+
+
+@frappe.whitelist()
+def get_vocabularies():
+    """Every managed list, its values, their use counts and who may edit.
+
+    Readable by anyone who can read a deal - the values themselves are
+    already on the deal form. `can_manage` is what the Settings screen
+    draws its sections from, so a producer is offered the sources
+    section and no project-type section at all.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    return [_vocabulary_view(vocab) for vocab in vocabulary.VOCABULARIES.values()]
+
+
+@frappe.whitelist()
+def add_vocabulary_value(kind, value):
+    vocab = _managed_vocabulary(kind)
+    value = _clean(value)
+    if frappe.db.exists(vocab.doctype, value):
+        frappe.throw(
+            _("{0} is already in {1}").format(value, vocab.label.lower()),
+            frappe.DuplicateEntryError,
+        )
+    frappe.get_doc({"doctype": vocab.doctype, vocab.value_field: value}).insert()
+    return get_vocabularies()
+
+
+@frappe.whitelist()
+def rename_vocabulary_value(kind, value, new_value):
+    """Rename a value and carry every record on it across.
+
+    The migrating half of the T3.5 decision (see auraos.lib.vocabulary):
+    `rename_doc` rewrites the Link on every deal already on the old
+    value, so nothing is left holding a name that no longer exists.
+    """
+    vocab = _managed_vocabulary(kind)
+    new_value = _clean(new_value)
+    if not frappe.db.exists(vocab.doctype, value):
+        frappe.throw(
+            _("{0} is not in {1}").format(value, vocab.label.lower()),
+            frappe.DoesNotExistError,
+        )
+    if new_value == value:
+        return get_vocabularies()
+    refusal = vocabulary.rename_refusal(
+        vocab,
+        value,
+        new_value,
+        frappe.get_all(vocab.doctype, pluck="name", limit_page_length=0),
+    )
+    if refusal:
+        frappe.throw(_(refusal), frappe.ValidationError)
+    frappe.rename_doc(vocab.doctype, value, new_value)
+    # These lists are named by their own field (`autoname: field:...`),
+    # so the field has to end up saying what the row is now called -
+    # otherwise it reads "Expo" while being called "Trade show"
+    # everywhere else. Written flat rather than through the document,
+    # which would only invite the naming machinery to run a second time.
+    frappe.db.set_value(
+        vocab.doctype, new_value, vocab.value_field, new_value, update_modified=False
+    )
+    return get_vocabularies()
+
+
+@frappe.whitelist()
+def remove_vocabulary_value(kind, value):
+    """Remove a value, unless records still hold it.
+
+    The refusing half of the T3.5 decision: a value on even one deal
+    stays, because deleting it could only blank that deal or dangle its
+    link, and both throw away the answer the field is kept for.
+    """
+    vocab = _managed_vocabulary(kind)
+    if not frappe.db.exists(vocab.doctype, value):
+        frappe.throw(
+            _("{0} is not in {1}").format(value, vocab.label.lower()),
+            frappe.DoesNotExistError,
+        )
+    refusal = vocabulary.removal_refusal(
+        vocab, value, _in_use_counts(vocab).get(value, 0)
+    )
+    if refusal:
+        frappe.throw(_(refusal), frappe.ValidationError)
+    frappe.delete_doc(vocab.doctype, value)
+    return get_vocabularies()
