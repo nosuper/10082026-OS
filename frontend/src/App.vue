@@ -34,7 +34,11 @@
 
 <script setup>
 import { computed, ref } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import { Button, createResource } from "frappe-ui"
+
+const route = useRoute()
+const router = useRouter()
 
 // Settings only appears for sessions that can actually read it (the
 // founder); probing the floor endpoint doubles as the role check.
@@ -48,16 +52,40 @@ createResource({
   onError() {},
 })
 
-const nav = computed(() => [
-  { label: "Home", route: "/" },
-  { label: "Deals", route: "/deals" },
-  { label: "Jobs", route: "/jobs" },
-  { label: "Contacts", route: "/contacts" },
-  // Both roles: producers generate paperwork, the founder owns the
-  // templates, and the page itself only offers what the session may do.
-  { label: "Paperwork", route: "/paperwork" },
-  ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
-])
+// Which app this session is in (T7.1). A crew member has no deals
+// board and no jobs list to offer, and a nav bar full of links that
+// answer with a permission error is worse than no nav bar at all.
+const scope = ref(null)
+createResource({
+  url: "auraos.api.session_scope",
+  auto: true,
+  onSuccess(data) {
+    scope.value = data
+    // A crew session has one screen. Landing anywhere else - a
+    // bookmark, the default route - would show a permission error
+    // where a page should be, so send them to their own list.
+    if (data?.crew_only && !route.path.startsWith("/my-work")) {
+      router.replace("/my-work")
+    }
+  },
+  onError() {},
+})
+
+const crewOnly = computed(() => scope.value?.crew_only === true)
+
+const nav = computed(() => {
+  if (crewOnly.value) return [{ label: "My work", route: "/my-work" }]
+  return [
+    { label: "Home", route: "/" },
+    { label: "Deals", route: "/deals" },
+    { label: "Jobs", route: "/jobs" },
+    { label: "Contacts", route: "/contacts" },
+    // Both roles: producers generate paperwork, the founder owns the
+    // templates, and the page itself only offers what the session may do.
+    { label: "Paperwork", route: "/paperwork" },
+    ...(isFounder.value ? [{ label: "Settings", route: "/settings" }] : []),
+  ]
+})
 
 // Log out via the API, then land on a login page that returns here -
 // otherwise re-login strands the user in the Desk.

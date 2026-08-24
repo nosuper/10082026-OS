@@ -384,6 +384,16 @@
         </div>
       </div>
 
+      <!-- The plan the crew work from: tasks, a board of them, and the
+           shoot-to-delivery timeline (T7.1). The same panel a crew
+           session sees at /my-work/<job>, with planning switched on. -->
+      <div v-show="activeTab === 'Tasks'">
+        <JobTasksPanel
+          :job="name"
+          empty-message="No tasks yet - add the first one, then give it to whoever is doing it."
+        />
+      </div>
+
       <div v-show="activeTab === 'Money'" class="space-y-4">
         <!-- Money in: what the client owes, and where it has got to -->
         <MilestonesPanel ref="milestones" :job="name" @changed="moneyChanged" />
@@ -405,6 +415,7 @@
 import { ref, computed, watch } from "vue"
 import { useRoute } from "vue-router"
 import { Button, ErrorMessage, FeatherIcon, createResource } from "frappe-ui"
+import JobTasksPanel from "../components/JobTasksPanel.vue"
 import PaperworkPanel from "../components/PaperworkPanel.vue"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { vnd } from "../utils/money"
@@ -422,7 +433,7 @@ import {
 const route = useRoute()
 const name = route.params.name
 
-const TABS = ["Production", "Money", "Paperwork"]
+const TABS = ["Production", "Tasks", "Money", "Paperwork"]
 const activeTab = ref("Production")
 
 const error = ref("")

@@ -36,6 +36,19 @@ const routes = [
     component: () => import("./pages/JobExpensePage.vue"),
   },
   {
+    // The crew screens (T7.1): the only pages a designer or editor can
+    // open, and money-free by construction - they read
+    // auraos.api.crew_job and auraos.api.job_tasks, never the Job.
+    path: "/my-work",
+    name: "MyWork",
+    component: () => import("./pages/MyWorkPage.vue"),
+  },
+  {
+    path: "/my-work/:name",
+    name: "CrewJob",
+    component: () => import("./pages/CrewJobPage.vue"),
+  },
+  {
     path: "/contacts",
     name: "Contacts",
     component: () => import("./pages/ContactsPage.vue"),
