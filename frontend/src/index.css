@@ -8,3 +8,23 @@
 #aura-frontend-root .truncate {
   line-height: 1.5;
 }
+
+/* A comment carries HTML now (T3.4): a pasted screenshot and an @name
+   for the other seat. Keep a picture inside the card, keep the tight
+   spacing a thread needs, and make a mention look like one. */
+#aura-frontend-root .comment-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+  margin: 0.25rem 0;
+}
+#aura-frontend-root .comment-body > :first-child {
+  margin-top: 0;
+}
+#aura-frontend-root .comment-body > :last-child {
+  margin-bottom: 0;
+}
+#aura-frontend-root .comment-body .mention {
+  font-weight: 600;
+  color: #1d4ed8;
+}

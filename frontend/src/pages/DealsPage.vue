@@ -481,8 +481,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue"
-import { useRouter } from "vue-router"
+import { ref, computed, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import {
   Button,
   Dialog,
@@ -1074,6 +1074,27 @@ function onSaved(deal) {
 }
 
 const router = useRouter()
+const route = useRoute()
+
+// A card is addressable: /aura/deals?deal=DEAL-0007 opens it. That is
+// where a mention notification lands the person who was named (T3.4),
+// and where the file manager's deal column points. Closing the dialog
+// drops the parameter so a refresh doesn't reopen it.
+watch(
+  () => route.query.deal,
+  (name) => {
+    if (!name) return
+    dialogName.value = String(name)
+    dialogOpen.value = true
+  },
+  { immediate: true }
+)
+
+watch(dialogOpen, (open) => {
+  if (open || !route.query.deal) return
+  const { deal: _opened, ...rest } = route.query
+  router.replace({ query: rest })
+})
 
 function openBreakdown(deal) {
   router.push(`/deals/${deal.name}/breakdown`)

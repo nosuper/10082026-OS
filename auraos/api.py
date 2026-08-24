@@ -2,6 +2,8 @@
 
 import frappe
 from frappe import _
+from frappe.utils import get_datetime, get_fullname
+from frappe.utils.html_utils import sanitize_html
 from frappe.utils.pdf import get_pdf
 
 from auraos.auraos.doctype.deal.deal import (
@@ -12,7 +14,7 @@ from auraos.auraos.doctype.deal_quote import deal_quote
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, paperwork, settlement
+from auraos.lib import breakdown, comments, paperwork, settlement
 from auraos.lib.money import round_vnd
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import COMPANY_FIELDS
@@ -160,14 +162,41 @@ def _check_job_permission(job, ptype):
     frappe.has_permission("Job", ptype, doc=job, throw=True)
 
 
-COMMENT_FIELDS = ["name", "content", "comment_email", "comment_by", "creation"]
+COMMENT_FIELDS = [
+    "name",
+    "content",
+    "comment_email",
+    "comment_by",
+    "creation",
+    "modified",
+    "owner",
+]
+
+
+def _comment_row(row):
+    """One thread row as the SPA reads it.
+
+    `mine` is decided here rather than in the browser: the same answer
+    gates the edit and delete endpoints, and a thread that offers a
+    button the server will refuse is worse than no button.
+    """
+    out = {field: row.get(field) for field in COMMENT_FIELDS}
+    out["mine"] = row.get("owner") == frappe.session.user
+    # An insert stamps creation and modified from the same clock read, so
+    # any later stamp is a rewrite. Normalised first: a row read back from
+    # the database carries datetimes, a freshly inserted doc carries the
+    # strings it was stamped with.
+    written = get_datetime(row.get("creation")) if row.get("creation") else None
+    changed = get_datetime(row.get("modified")) if row.get("modified") else None
+    out["edited"] = bool(written and changed and changed > written)
+    return out
 
 
 @frappe.whitelist()
 def deal_comments(deal):
     """Comment thread of a deal, oldest first."""
     _check_deal_permission(deal, "read")
-    return frappe.get_all(
+    rows = frappe.get_all(
         "Comment",
         filters={
             "comment_type": "Comment",
@@ -177,16 +206,130 @@ def deal_comments(deal):
         fields=COMMENT_FIELDS,
         order_by="creation asc",
     )
+    return [_comment_row(row) for row in rows]
+
+
+def _clean_comment(content):
+    """Scrub editor HTML and hold the one rule about what a comment is.
+
+    Core sanitises comment content on save too; doing it here as well
+    means the rule is this app's, testable at this seam, and applied
+    before anything is stored rather than trusted to a base class.
+    """
+    content = sanitize_html(content or "")
+    if comments.is_blank(content):
+        frappe.throw(_("Comment cannot be empty"), frappe.ValidationError)
+    return content
+
+
+def _mentionable(deal):
+    """Users a comment on this deal may name.
+
+    An operating seat that can read the deal, and never the author -
+    naming someone who cannot open what they were called into is a
+    notification with nowhere to go.
+    """
+    return {
+        row["name"]
+        for row in operating_users()
+        if row["name"] != frappe.session.user
+        and frappe.has_permission("Deal", "read", doc=deal, user=row["name"])
+    }
+
+
+def _notify_mentions(deal, content, named):
+    """Tell the named seats, through core's own notification path.
+
+    `named` is read off the raw editor HTML by the caller, because a
+    sanitiser that drops an attribute it does not recognise would
+    otherwise leave the visible "@Linh" with nobody notified behind it.
+    Anything named that is not mentionable here is dropped in silence:
+    the ids arrive from a browser, so this is authorization, not a typo
+    report.
+    """
+    from frappe.desk.doctype.notification_log.notification_log import (
+        enqueue_create_notification,
+    )
+
+    allowed = _mentionable(deal)
+    targets = [user for user in named if user in allowed]
+    if not targets:
+        return targets
+    enqueue_create_notification(
+        targets,
+        {
+            "type": "Mention",
+            "document_type": "Deal",
+            "document_name": deal,
+            "subject": _("{0} mentioned you in a comment on {1}").format(
+                get_fullname(frappe.session.user), deal
+            ),
+            "from_user": frappe.session.user,
+            "email_content": content,
+            # The deal lives in the SPA, not the Desk form - a notification
+            # that lands somewhere the founder never works is noise.
+            "link": f"/aura/deals?deal={deal}",
+        },
+    )
+    return targets
 
 
 @frappe.whitelist()
 def add_deal_comment(deal, content):
     """Append a comment to a deal's thread; returns the stored row."""
     _check_deal_permission(deal, "write")
-    if not (content or "").strip():
-        frappe.throw(_("Comment cannot be empty"), frappe.ValidationError)
-    comment = frappe.get_doc("Deal", deal).add_comment("Comment", text=content)
-    return {field: comment.get(field) for field in COMMENT_FIELDS}
+    named = comments.mentioned_users(content)
+    comment = frappe.get_doc("Deal", deal).add_comment(
+        "Comment", text=_clean_comment(content)
+    )
+    _notify_mentions(deal, comment.content, named)
+    return _comment_row(comment.as_dict())
+
+
+def _own_comment(comment):
+    """Load a deal comment this session is allowed to change.
+
+    Two gates, and both are needed. The thread is only open to someone
+    who may write the deal - that is the same rule the rest of the card
+    runs on. Inside the thread you may only touch what you wrote, which
+    is what keeps the other seat's words untouchable even though both
+    seats have full write on the deal.
+    """
+    doc = frappe.get_doc("Comment", comment)
+    if doc.comment_type != "Comment" or doc.reference_doctype != "Deal":
+        frappe.throw(_("{0} is not a deal comment").format(comment), frappe.ValidationError)
+    _check_deal_permission(doc.reference_name, "write")
+    if doc.owner != frappe.session.user:
+        frappe.throw(
+            _("You may only edit or delete your own comments"), frappe.PermissionError
+        )
+    return doc
+
+
+@frappe.whitelist()
+def edit_deal_comment(comment, content):
+    """Rewrite one of your own comments; returns the stored row."""
+    doc = _own_comment(comment)
+    named = comments.mentioned_users(content)
+    # Only the newly named are told: a second notification for a name
+    # that was already in the comment is a re-read of old news.
+    already = comments.mentioned_users(doc.content)
+    doc.content = _clean_comment(content)
+    doc.save(ignore_permissions=True)
+    _notify_mentions(
+        doc.reference_name,
+        doc.content,
+        [user for user in named if user not in already],
+    )
+    return _comment_row(doc.as_dict())
+
+
+@frappe.whitelist()
+def delete_deal_comment(comment):
+    """Remove one of your own comments from a deal's thread."""
+    doc = _own_comment(comment)
+    frappe.delete_doc("Comment", doc.name, ignore_permissions=True)
+    return {"deleted": doc.name}
 
 
 @frappe.whitelist()
@@ -199,6 +342,160 @@ def deal_attachments(deal):
         fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
         order_by="creation desc",
     )
+
+
+# -- the file manager (T3.4, issue #28) --
+#
+# Everything hanging on a deal, in one place, rather than one card at a
+# time. Two things about the shape here are deliberate:
+#
+# `is_private` travels with every row instead of being assumed. Today
+# every deal file is uploaded private and only a signed-in seat can open
+# it; the day a file is handed to a client the page already carries the
+# flag that says which kind it is, and nothing here has to be unpicked.
+#
+# The listing is scoped by the deals the caller may list, never by the
+# File doctype's own permissions - core File lets any System User read a
+# File row, so the deal it hangs on is the only real boundary. That is
+# the same rule `auraos/attachments.py` applies on the way in.
+
+FILE_FIELDS = [
+    "name",
+    "file_name",
+    "file_url",
+    "file_size",
+    "file_type",
+    "is_private",
+    "owner",
+    "creation",
+    "attached_to_name",
+]
+
+
+def _labels(doctype, names, field):
+    """{name: label} for a handful of records, or {} for none.
+
+    Both lookups here are for display only, so they read past row-level
+    permissions deliberately - the rows they label were already scoped
+    by the deals the caller may list.
+    """
+    if not names:
+        return {}
+    return {
+        row["name"]: row[field]
+        for row in frappe.get_all(
+            doctype, filters={"name": ["in", names]}, fields=["name", field]
+        )
+    }
+
+
+def _file_row(row):
+    out = {field: row.get(field) for field in FILE_FIELDS}
+    out["deal"] = out.pop("attached_to_name")
+    return out
+
+
+@frappe.whitelist()
+def deal_files(deal=None, file_type=None, uploader=None):
+    """Files across every deal this session may read, newest first.
+
+    Returns the filtered rows together with the choices the filters
+    offer, both read from the same unfiltered set - so narrowing to one
+    deal never empties the dropdown that got you there.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    # get_all skips row-level permissions, so scope the files to the
+    # deals this user may actually list.
+    permitted = frappe.get_list("Deal", pluck="name", limit_page_length=0)
+    rows = (
+        frappe.get_all(
+            "File",
+            filters={
+                "attached_to_doctype": "Deal",
+                "attached_to_name": ["in", permitted],
+            },
+            fields=FILE_FIELDS,
+            order_by="creation desc",
+            limit_page_length=0,
+        )
+        if permitted
+        else []
+    )
+
+    # Labels for the rows and the dropdowns: a deal's title and an
+    # uploader's name, looked up once rather than per row.
+    with_files = sorted({row.attached_to_name for row in rows})
+    uploaders = sorted({row.owner for row in rows})
+    titles = _labels("Deal", with_files, "title")
+    names = _labels("User", uploaders, "full_name")
+
+    def keep(row):
+        return (
+            (not deal or row.attached_to_name == deal)
+            and (not file_type or (row.file_type or "") == file_type)
+            and (not uploader or row.owner == uploader)
+        )
+
+    files = []
+    for row in rows:
+        if not keep(row):
+            continue
+        out = _file_row(row)
+        out["deal_title"] = titles.get(row.attached_to_name)
+        out["uploader_name"] = names.get(row.owner) or row.owner
+        files.append(out)
+
+    return {
+        "files": files,
+        "deals": sorted(
+            ({"name": name, "title": titles.get(name) or name} for name in with_files),
+            key=lambda row: row["title"].lower(),
+        ),
+        "file_types": sorted({row.file_type for row in rows if row.file_type}),
+        "uploaders": sorted(
+            (
+                {"name": user, "full_name": names.get(user) or user}
+                for user in uploaders
+            ),
+            key=lambda row: row["full_name"].lower(),
+        ),
+    }
+
+
+def _manageable_file(file):
+    """Load a deal file this session may rename or remove.
+
+    The same rule as attaching one (`auraos/attachments.py`): you may
+    manage what you may write. Unlike a comment, a file is shared
+    material rather than authored speech - a badly named brief is
+    everyone's problem, so the own-uploads-only rule that guards the
+    thread would be wrong here.
+    """
+    doc = frappe.get_doc("File", file)
+    if doc.attached_to_doctype != "Deal" or not doc.attached_to_name:
+        frappe.throw(_("{0} is not a deal file").format(file), frappe.ValidationError)
+    _check_deal_permission(doc.attached_to_name, "write")
+    return doc
+
+
+@frappe.whitelist()
+def rename_deal_file(file, file_name):
+    """Give a deal file a name a human would recognise."""
+    doc = _manageable_file(file)
+    renamed = (file_name or "").strip()
+    if not renamed:
+        frappe.throw(_("File name cannot be empty"), frappe.ValidationError)
+    doc.file_name = renamed
+    doc.save(ignore_permissions=True)
+    return _file_row(doc.as_dict())
+
+
+@frappe.whitelist()
+def delete_deal_file(file):
+    """Remove a deal file for good."""
+    doc = _manageable_file(file)
+    frappe.delete_doc("File", doc.name, ignore_permissions=True)
+    return {"deleted": doc.name}
 
 
 @frappe.whitelist()

@@ -9,6 +9,7 @@ PRODUCER = os.environ["E2E_PRODUCER_USER"]
 PRODUCER_PASSWORD = os.environ["E2E_PRODUCER_PASSWORD"]
 COMPANY = "Playwright Client"
 DEAL = "Playwright Existing Deal"
+ATTACHMENT = "playwright-brief.txt"
 
 
 def ensure_user():
@@ -84,8 +85,27 @@ def ensure_breakdown():
     deal.save(ignore_permissions=True)
 
 
+def ensure_attachment():
+    """One file hanging on the deal, so the file manager has a row the
+    moment the spec opens it (T3.4). Private, the way the SPA uploads."""
+    if frappe.db.exists("File", {"file_name": ATTACHMENT}):
+        return
+    deal = frappe.get_doc("Deal", {"title": DEAL})
+    frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": ATTACHMENT,
+            "content": "brief cua Playwright",
+            "is_private": 1,
+            "attached_to_doctype": "Deal",
+            "attached_to_name": deal.name,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def run():
     ensure_user()
     ensure_deal(ensure_company())
     ensure_breakdown()
+    ensure_attachment()
     frappe.db.commit()

@@ -36,6 +36,13 @@ const routes = [
     component: () => import("./pages/JobExpensePage.vue"),
   },
   {
+    // Every file across every deal - the view a single deal card
+    // cannot give (T3.4, issue #28).
+    path: "/files",
+    name: "Files",
+    component: () => import("./pages/FilesPage.vue"),
+  },
+  {
     path: "/contacts",
     name: "Contacts",
     component: () => import("./pages/ContactsPage.vue"),

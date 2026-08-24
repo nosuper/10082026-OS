@@ -52,6 +52,7 @@ const nav = computed(() => [
   { label: "Home", route: "/" },
   { label: "Deals", route: "/deals" },
   { label: "Jobs", route: "/jobs" },
+  { label: "Files", route: "/files" },
   { label: "Contacts", route: "/contacts" },
   // Both roles: producers generate paperwork, the founder owns the
   // templates, and the page itself only offers what the session may do.

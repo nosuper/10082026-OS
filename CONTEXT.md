@@ -156,6 +156,27 @@ _Avoid_: default, fallback, empty value, placeholder (unqualified)
 A paperwork template filled for one job and attached to it - printed, signed by hand and sealed. Generating one never changes the template it came from.
 _Avoid_: output, export, contract (unqualified), attachment
 
+## Collaboration
+
+**Mention**:
+Naming one of the two operating seats inside a comment, which notifies
+them and links them back to the deal they were called into. A name that
+belongs to nobody who may read the deal names nobody.
+_Avoid_: tag, ping, at-reply, callout
+
+**Attachment**:
+A file hanging on a deal - including a picture pasted into a comment,
+which is an attachment like any other. Private by default: the link
+opens for the seats that may read the deal and for nobody else.
+_Avoid_: upload, document, asset, media
+
+**File manager**:
+The page listing every attachment across every deal, with the deal each
+one hangs on. What a deal card cannot answer - "we have that brief
+somewhere, which deal was it on?" - and where an attachment is renamed
+or removed.
+_Avoid_: drive, library, file browser, documents page
+
 ## Environments
 
 **Preview stack**:

@@ -1,8 +1,12 @@
 <template>
+  <!-- A stray click outside must not close a half-filled card. It also
+       must not close it when the click lands on the mention popup, which
+       tippy appends to the body and is therefore "outside". -->
   <Dialog
     :modelValue="modelValue"
     @update:modelValue="$emit('update:modelValue', $event)"
     :options="{ title: name ? `Edit Deal · ${name}` : 'New Deal', size: 'xl' }"
+    disable-outside-click-to-close
   >
     <template #body-content>
       <div v-if="loading" class="py-8 text-center text-sm text-gray-500">
@@ -226,45 +230,11 @@
           </div>
         </div>
 
-        <!-- Comments (existing deals only) -->
+        <!-- Comments (existing deals only). Loaded on demand: the
+             editor behind mentions and pasted images is a large chunk
+             and the board should not pay for it. -->
         <div v-if="name" class="border-t pt-3">
-          <div class="mb-2 text-xs font-medium text-gray-700">Comments</div>
-          <div class="space-y-2">
-            <div
-              v-for="comment in comments.data || []"
-              :key="comment.name"
-              class="rounded-md bg-gray-50 px-3 py-2"
-            >
-              <div class="flex gap-2 text-xs text-gray-500">
-                <span class="font-medium text-gray-700">
-                  {{ comment.comment_by || comment.comment_email }}
-                </span>
-                <span class="tabular-nums">
-                  {{ comment.creation?.slice(0, 16) }}
-                </span>
-              </div>
-              <!-- Comment content is server-sanitized HTML; render as text -->
-              <div class="mt-0.5 whitespace-pre-line text-sm text-gray-800">
-                {{ stripHtml(comment.content) }}
-              </div>
-            </div>
-          </div>
-          <div class="mt-2 flex gap-1.5">
-            <input
-              v-model="commentInput"
-              placeholder="Write a comment"
-              class="w-full rounded border-gray-300 py-1.5 text-sm placeholder-gray-500 focus:border-gray-500 focus:ring-0"
-              @keydown.enter.prevent="postComment"
-            />
-            <Button
-              variant="subtle"
-              :loading="addComment.loading"
-              @click="postComment"
-            >
-              Comment
-            </Button>
-          </div>
-          <ErrorMessage class="mt-1" :message="commentError" />
+          <DealCommentThread :deal="name" :owners="owners" />
         </div>
 
         <div v-if="stageHistory.length">
@@ -311,7 +281,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from "vue"
+import { ref, reactive, computed, defineAsyncComponent, watch } from "vue"
 import { useRouter } from "vue-router"
 import {
   Dialog,
@@ -324,6 +294,12 @@ import {
 } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import VndInput from "./VndInput.vue"
+
+// The comment thread carries the rich-text editor (mentions, pasted
+// images); async so it lands in its own chunk rather than the board's.
+const DealCommentThread = defineAsyncComponent(() =>
+  import("./DealCommentThread.vue")
+)
 
 const props = defineProps({
   modelValue: Boolean,
@@ -571,36 +547,9 @@ function addLink() {
   linkUrl.value = ""
 }
 
-// -- comments & attachments (persisted rows; existing deals only) --
+// -- attachments (persisted rows; existing deals only) --
 
-const comments = createResource({ url: "auraos.api.deal_comments" })
 const attachments = createResource({ url: "auraos.api.deal_attachments" })
-
-const commentInput = ref("")
-const commentError = ref("")
-
-const addComment = createResource({
-  url: "auraos.api.add_deal_comment",
-  onSuccess() {
-    commentInput.value = ""
-    comments.reload()
-  },
-  onError(err) {
-    commentError.value = frappeErrorMessage(err)
-  },
-})
-
-function postComment() {
-  if (!commentInput.value.trim()) return
-  commentError.value = ""
-  addComment.submit({ deal: props.name, content: commentInput.value })
-}
-
-function stripHtml(html) {
-  const el = document.createElement("div")
-  el.innerHTML = html || ""
-  return el.textContent
-}
 
 function formatSize(bytes) {
   if (!bytes) return ""
@@ -639,11 +588,9 @@ watch(
     saveError.value = ""
     tagError.value = ""
     linkError.value = ""
-    commentError.value = ""
     tagInput.value = ""
     linkLabel.value = ""
     linkUrl.value = ""
-    commentInput.value = ""
     serverDoc = null
     stageHistory.value = []
     form.value = {}
@@ -657,10 +604,8 @@ watch(
     if (props.name) {
       loading.value = true
       fetchDoc.fetch({ doctype: "Deal", name: props.name })
-      comments.fetch({ deal: props.name })
       attachments.fetch({ deal: props.name })
     } else {
-      comments.reset()
       attachments.reset()
     }
   }

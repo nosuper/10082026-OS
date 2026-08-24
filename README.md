@@ -102,6 +102,25 @@ any document, so every doctype here that accepts attachments is gated by
 doctype to `GUARDED` there the moment anything starts hanging files on
 it - generated paperwork made that true for Job.
 
+### Collaboration on a deal card
+
+A comment is HTML: it can name the other seat and carry a pasted
+screenshot. Two rules hold it together, and both are seam-tested in
+`auraos/auraos/doctype/deal/test_deal_collab.py`:
+
+- **Your own words only.** Both seats have full write on every deal, so
+  document permissions alone would let either rewrite the other's
+  comment. `auraos.api` gates edit and delete on authorship as well.
+- **Who may be named is checked, not trusted.** Mention ids arrive from
+  a browser, so `auraos/lib/comments.py` reads them off the markup and
+  the API keeps only the operating seats that may read the deal.
+
+A pasted image is an ordinary deal attachment - uploaded private, so it
+renders for exactly the seats that may read the deal. `/aura/files`
+lists every attachment across every deal; renaming and deleting there
+follow the same rule as attaching (`auraos/attachments.py`): you may
+manage what you may write.
+
 ### Paperwork templates
 
 The company signs on paper, so `auraos/lib/paperwork.py` fills the
