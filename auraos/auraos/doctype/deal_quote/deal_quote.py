@@ -1,10 +1,17 @@
 """A published quote version: the client-facing snapshot of a deal.
 
-Publishing freezes the deal's packages and totals into a new row with
-its own random token. Rows are immutable afterwards - "wrong version
-sent" (spec #2, story 21) is exactly the failure a mutable quote page
-causes, so the controller refuses every content change and leaves only
-the delivery status (sent / confirmed) writable.
+Publishing copies the deal's packages and totals into a new row with its
+own random token. A row hardens - stops accepting content changes, and
+leaves only the delivery status writable - when it can have reached a
+client: marked Sent or Confirmed, **or opened**, whichever happens
+first. "Wrong version sent" (spec #2, story 21) is the failure a mutable
+quote page causes, and that is what hardening prevents.
+
+Until then it is still a draft. #35 moved this line deliberately: a
+version nobody can be holding is the founder's typo to fix, and forcing
+a v2 over a spelling mistake was the pain that produced the ticket. What
+is locked at every status, hardened or not, is the version's identity -
+see IDENTITY_FIELDS.
 """
 
 import frappe

@@ -75,6 +75,15 @@ def engine_result(deal):
         quote_mf_rate=frappe.utils.flt(deal.quote_mf_pct) / 100,
         vat_rate=frappe.utils.flt(deal.vat_pct) / 100,
         commission_rate=frappe.utils.flt(deal.commission_pct) / 100,
+        # Read off the deal like every other rate, and for a sharper
+        # reason than symmetry: `DealParams.contingency_rate` defaults to
+        # zero deliberately (an unset rate has to be an identity, so
+        # re-saving a pre-#69 deal cannot silently reprice it by 10%),
+        # while the Deal doctype defaults the field to the company's
+        # standing 10%. An oracle that omits it therefore prices every
+        # new deal 10% under what the document correctly stored, and
+        # reports the difference as the document being wrong.
+        contingency_rate=frappe.utils.flt(deal.contingency_pct) / 100,
     )
     lines = [
         pricing.CostLine(
@@ -569,7 +578,16 @@ class TestDealBreakdown(FrappeTestCase):
     def test_compute_breakdown_matches_saved_deal_for_producer(self):
         deal = make_breakdown_deal()
         frappe.set_user(PRODUCER)
-        out = compute_breakdown(lines=[dict(row) for row in LINES])
+        # Sending the deal's own rate is what the editor does, and the
+        # endpoint defaults it to 0 on purpose so a caller that predates
+        # #69 keeps the arithmetic it was written against. Comparing an
+        # untaught call to a saved deal measures that default, not the
+        # drift between the live editor and the document, which is what
+        # this test is for.
+        out = compute_breakdown(
+            lines=[dict(row) for row in LINES],
+            contingency_pct=deal.contingency_pct,
+        )
         self.assertEqual(out["subtotal"], deal.quote_subtotal)
         self.assertEqual(out["total"], deal.quote_total)
         self.assertEqual(out["margin"], deal.quote_margin)

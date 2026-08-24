@@ -245,15 +245,57 @@ class TestDealQuote(FrappeTestCase):
 
     # -- immutability --
 
-    def test_published_totals_cannot_be_edited(self):
+    # #35 moved this line. A version freezes when it can have reached a
+    # client - sent, confirmed or opened - not when it is published. The
+    # pain that produced the ticket was being forced to issue a v2 over a
+    # spelling mistake nobody had seen, so "published" alone is still a
+    # draft. Both halves are asserted: the draft that yields and the
+    # record that refuses. Asserting only the refusal is what let the
+    # rule change underneath these tests without anybody noticing.
+
+    def test_an_unsent_versions_totals_are_still_the_founders_to_fix(self):
         quote = publish(make_quotable_deal().name)
+        quote.total = 1
+        quote.save()
+
+        self.assertEqual(frappe.db.get_value("Deal Quote", quote.name, "total"), 1)
+
+    def test_an_unsent_versions_packages_are_still_editable(self):
+        quote = publish(make_quotable_deal().name)
+        quote.packages[0].price = 1
+        quote.save()
+
+        self.assertEqual(
+            frappe.get_doc("Deal Quote", quote.name).packages[0].price, 1
+        )
+
+    def test_a_sent_versions_totals_cannot_be_edited(self):
+        quote = publish(make_quotable_deal().name)
+        quote.mark_sent()
+
+        quote = frappe.get_doc("Deal Quote", quote.name)
         quote.total = 1
         with self.assertRaises(frappe.ValidationError):
             quote.save()
 
-    def test_published_packages_cannot_be_edited(self):
+    def test_a_sent_versions_packages_cannot_be_edited(self):
         quote = publish(make_quotable_deal().name)
+        quote.mark_sent()
+
+        quote = frappe.get_doc("Deal Quote", quote.name)
         quote.packages[0].price = 1
+        with self.assertRaises(frappe.ValidationError):
+            quote.save()
+
+    def test_an_opened_version_refuses_even_though_nobody_marked_it_sent(self):
+        """The log outranks the checkbox - `has_hardened`'s whole point."""
+        quote = publish(make_quotable_deal().name)
+        frappe.get_doc(
+            {"doctype": "Deal Quote Open", "quote": quote.name, "via": "PDF"}
+        ).insert(ignore_permissions=True)
+
+        quote = frappe.get_doc("Deal Quote", quote.name)
+        quote.total = 1
         with self.assertRaises(frappe.ValidationError):
             quote.save()
 
@@ -607,9 +649,13 @@ class TestQuoteDetailLevels(FrappeTestCase):
         # One line or many, the client is offered the same money.
         self.assertEqual(quote.total, deal.quote_total)
 
-    def test_frozen_lines_are_immutable(self):
+    def test_frozen_lines_are_immutable_once_the_version_has_hardened(self):
+        """Same #35 line as the totals: sent is what freezes them."""
         deal = make_quotable_deal(quote_detail_level="Line by line")
         quote = publish(deal.name)
+        quote.mark_sent()
+
+        quote = frappe.get_doc("Deal Quote", quote.name)
         quote.lines[0].quote_price = 1
         with self.assertRaises(frappe.ValidationError):
             quote.save()
