@@ -175,9 +175,12 @@ class JobTask(Document):
             self.status = DEFAULT_STATUS
 
     def validate(self):
+        # The crew guard runs first on purpose: a session that may not
+        # touch a field at all should be told that, not handed a
+        # complaint about the value it was refused permission to set.
+        self.guard_crew_edit()
         self.validate_title()
         self.validate_dates()
-        self.guard_crew_edit()
 
     def validate_title(self):
         self.title = (self.title or "").strip()
