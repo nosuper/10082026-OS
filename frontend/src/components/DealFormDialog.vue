@@ -1,7 +1,5 @@
 <template>
-  <!-- A stray click outside must not close a half-filled card. It also
-       must not close it when the click lands on the mention popup, which
-       tippy appends to the body and is therefore "outside". -->
+  <!-- A stray click outside must not throw away a half-filled card. -->
   <Dialog
     :modelValue="modelValue"
     @update:modelValue="$emit('update:modelValue', $event)"

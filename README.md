@@ -115,6 +115,13 @@ screenshot. Two rules hold it together, and both are seam-tested in
   a browser, so `auraos/lib/comments.py` reads them off the markup and
   the API keeps only the operating seats that may read the deal.
 
+The `@` trigger is ours (`frontend/src/components/mention.js`) rather
+than frappe-ui's: its suggestion renderer only mounts the popup when
+the list already has entries, and @tiptap/suggestion v3 always starts
+empty and fills in afterwards, so the popup was built detached and
+never shown. Posting a comment does not notify the seats named in it -
+inserting a Comment is where core already does that.
+
 A pasted image is an ordinary deal attachment - uploaded private, so it
 renders for exactly the seats that may read the deal. `/aura/files`
 lists every attachment across every deal; renaming and deleting there

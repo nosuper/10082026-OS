@@ -67,7 +67,7 @@
           <div class="rounded-md border border-gray-300 bg-white">
             <TextEditor
               :content="draft"
-              :mentions="mentionSource"
+              :extensions="mentionExtensions"
               :upload-args="uploadArgs"
               editor-class="prose-sm max-w-none px-3 py-2 focus:outline-none"
               placeholder="Write a comment"
@@ -101,7 +101,7 @@
         <TextEditor
           :key="composerKey"
           :content="newComment"
-          :mentions="mentionSource"
+          :extensions="mentionExtensions"
           :upload-args="uploadArgs"
           editor-class="prose-sm max-w-none px-3 py-2 focus:outline-none"
           placeholder="Write a comment"
@@ -123,6 +123,26 @@
       </div>
     </div>
 
+    <!-- The @ list, drawn here rather than in a popup layer: the card
+         dialog treats anything outside its own DOM as an outside click,
+         and closing the card to pick a name would be absurd. Fixed
+         position so the thread's own scrolling never clips it. -->
+    <div
+      v-if="suggestion?.items?.length"
+      class="mention-suggestions fixed z-50 max-h-56 min-w-44 overflow-y-auto rounded-lg border bg-white p-1 shadow-lg"
+      :style="suggestionStyle"
+    >
+      <button
+        v-for="(item, index) in suggestion.items"
+        :key="item.id"
+        class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm"
+        :class="index === suggestion.index ? 'bg-gray-100 text-gray-900' : 'text-gray-700'"
+        @mousedown.prevent="suggestion.command(item)"
+      >
+        {{ item.label }}
+      </button>
+    </div>
+
     <ErrorMessage class="mt-1" :message="error" />
   </div>
 </template>
@@ -132,6 +152,7 @@ import { computed, ref, watch } from "vue"
 import { Button, ErrorMessage, TextEditor, createResource } from "frappe-ui"
 import { frappeErrorMessage } from "../utils/frappeError"
 import { currentUser } from "../utils/user"
+import { MentionNode, mentionSuggestion } from "./mention"
 
 const props = defineProps({
   // The deal whose thread this is - always an existing one.
@@ -157,12 +178,28 @@ const mentionable = computed(() =>
     .map((user) => ({ id: user.name, label: user.full_name || user.name }))
 )
 
-// A getter, not the list: the editor freezes whatever it is configured
-// with at mount, and the seats are still being fetched when a card
-// opens - handed the array, the @ popup would come up empty for good.
-// The plain object survives the template's ref unwrapping, which a
-// `{ mentions: mentionable }` literal would not.
-const mentionSource = { mentions: () => mentionable.value }
+// Read through a function, not handed over as a list: the editor keeps
+// whatever extensions it was built with, and the seats are still being
+// fetched when a card opens.
+const suggestion = ref(null)
+const mentionExtensions = [
+  MentionNode,
+  mentionSuggestion({
+    items: (query) =>
+      mentionable.value.filter((user) =>
+        user.label.toLowerCase().includes((query || "").toLowerCase())
+      ),
+    render: (state) => {
+      suggestion.value = state
+    },
+  }),
+]
+
+const suggestionStyle = computed(() => {
+  const rect = suggestion.value?.rect
+  if (!rect) return { display: "none" }
+  return { left: `${rect.left}px`, top: `${rect.bottom + 6}px` }
+})
 
 // Comment images are ordinary deal attachments: uploaded private and
 // readable by exactly the seats that may read the deal, which is what

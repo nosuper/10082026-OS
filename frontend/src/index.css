@@ -28,3 +28,15 @@
   font-weight: 600;
   color: #1d4ed8;
 }
+
+/* A mention inside the editor, and the word being typed before one is
+   picked. The comment thread styles the stored version separately. */
+#aura-frontend-root .ProseMirror .mention {
+  font-weight: 600;
+  color: #1d4ed8;
+}
+#aura-frontend-root .ProseMirror .mention-typing {
+  border-radius: 0.25rem;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}

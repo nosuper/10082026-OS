@@ -62,13 +62,9 @@ test("typing @ offers the other seat and names them in the thread", async ({
   const thread = await openCard(page)
 
   await writeInto(thread, "@Play")
-  // tippy appends the popup to the body, outside the dialog - and the
-  // dialog marks everything outside itself aria-hidden, so this is a
-  // CSS locator rather than a role one. Enter picks the highlighted
-  // name, which is how the popup is actually used.
-  const suggestion = page.locator("[data-tippy-root]")
+  const suggestion = thread.locator(".mention-suggestions")
   await expect(suggestion).toContainText(producerName)
-  await page.keyboard.press("Enter")
+  await suggestion.getByRole("button", { name: producerName }).click()
 
   await thread.getByRole("button", { name: "Comment", exact: true }).click()
   await expect(thread.getByText(`@${producerName}`)).toBeVisible()
