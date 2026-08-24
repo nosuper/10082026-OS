@@ -94,6 +94,15 @@ read a founder-only DocType via the document API, list API, or global
 search. Any future founder-only DocType (overhead, commission fields)
 should copy that test pattern before real data enters it.
 
+`auraos/auraos/doctype/job_task/test_job_task_crew_access.py` applies
+the same three paths to the third kind of user (T7.1): a **Crew**
+session - a designer, an editor - holds no permission on Job at all, so
+the whole money surface of a job is unreachable rather than hidden
+field by field. What they read instead is `Job Task`, gated by a
+`has_permission` hook and a permission query condition to the jobs they
+hold a task on, plus the money-free `auraos.api.crew_job`. The same
+file proves the one write they may make: the status of their own card.
+
 ### Attachments
 
 Core File permissions let any System User create a File and point it at

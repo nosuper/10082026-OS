@@ -87,6 +87,26 @@ _Avoid_: extra, overage, out of scope
 The shared folder a job's material lives in, named after the job code.
 _Avoid_: path, directory, drive, storage
 
+**Job task**:
+One piece of work on a job - a title, a craft, the person doing it, a start and a due date, and a status. Pure scheduling: a task never carries an amount, which is what lets someone outside the two operating roles read one.
+_Avoid_: todo, ticket, item, activity
+
+**Craft**:
+The trade a job task belongs to - editing, design, colour. A founder-expandable vocabulary, and a label on the work rather than a permission: everyone who works a craft holds the same crew role.
+_Avoid_: discipline, department, skill, role
+
+**Crew**:
+Someone who works on a job without seeing what it is worth - a designer, an editor, a colourist. Their whole reach is the jobs they hold a task on, and on those they read the plan and nothing priced. Distinct from a freelancer, which is a party role on a contact.
+_Avoid_: staff, team, member, freelancer
+
+**Task board**:
+The kanban of one job's tasks, in columns by status. Distinct from the jobs board, which is a kanban of production stages across every job.
+_Avoid_: kanban (unqualified), board (unqualified), sprint
+
+**Task timeline**:
+The gantt of one job's tasks: a bar per dated task against a calendar, with today marked. A task nobody has dated yet has no bar and is listed beside it rather than hidden.
+_Avoid_: gantt chart, schedule, roadmap
+
 ## Money out
 
 **Advance**:
