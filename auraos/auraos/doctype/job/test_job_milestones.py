@@ -67,12 +67,19 @@ def fell_due(job_name, milestone, days_ago):
     )
 
 
+# A second producer, with no connection to the job under test. Only
+# ADR-0003's assertion needs one - see test_job_money.py, where the
+# same decision is pinned on the expense endpoints.
+OTHER_PRODUCER = "producer2@test.auraos.local"
+
+
 class MilestoneTestCase(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         make_test_user(FOUNDER, "Founder")
         make_test_user(PRODUCER, "Producer")
+        make_test_user(OTHER_PRODUCER, "Producer")
         make_test_user(OUTSIDER)
 
     def setUp(self):
@@ -203,6 +210,27 @@ class TestMilestonePlan(MilestoneTestCase):
             save_job_milestones(
                 job.name, [{"title": "Đặt cọc", "pct": 50, "trigger_stage": "Đi nhậu"}]
             )
+
+    def test_any_producer_may_replan_any_jobs_money_in(self):
+        """ADR-0003: the plan behind the flow is open too.
+
+        `set_milestone_status` walks a milestone along and
+        `save_job_milestones` decides what the milestones are - both
+        write a child table of Job, so both ride on Job write. A gate
+        that covered the flow and left the plan open would let a
+        stranger re-cut the shares instead of moving one along, which
+        is the larger of the two acts.
+        """
+        job = make_job()
+
+        frappe.set_user(OTHER_PRODUCER)
+        save_job_milestones(
+            job.name, [{"title": "Đặt cọc", "pct": 40, "trigger_stage": "Pre-production"}]
+        )
+
+        (row,) = job_milestones(job.name)["milestones"]
+        self.assertEqual(row["title"], "Đặt cọc")
+        self.assertEqual(row["pct"], 40)
 
     def test_the_producer_may_plan_the_money_in_too(self):
         """The producer runs the stages that make a payment due; the
@@ -352,6 +380,21 @@ class TestCollectionFlow(MilestoneTestCase):
         asked = set_milestone_status(self.job.name, self.milestone, "Requested")
         paid = set_milestone_status(self.job.name, self.milestone, "Paid")
         self.assertEqual(paid["requested_on"], asked["requested_on"])
+
+    def test_any_producer_may_walk_any_jobs_money_along(self):
+        """ADR-0003: collection status is inside the decided width.
+
+        `set_milestone_status` writes a child table of Job, so it rides
+        on Job write and has no per-job boundary either. The day the
+        assignee model lands it has to cover this endpoint with the
+        three in test_job_money.py, not just those - which is what this
+        test is here to make impossible to forget.
+        """
+        frappe.set_user(OTHER_PRODUCER)
+
+        row = set_milestone_status(self.job.name, self.milestone, "Requested")
+
+        self.assertEqual(row["status"], "Requested")
 
     def test_a_status_set_by_accident_can_be_walked_back(self):
         """The T6 lesson: no one-way doors."""

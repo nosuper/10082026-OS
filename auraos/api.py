@@ -346,6 +346,12 @@ def _check_job_permission(job, ptype):
 
     Without the existence check a bad name reads as a permission
     failure, which tells the caller the wrong thing.
+
+    **This is the whole per-job authorization surface**, and today it
+    answers the same for every job: no role has a per-job boundary, by
+    the founder's ruling on #143. ADR-0003 records that decision and the
+    assignee model it becomes - when that lands it lands here, once, for
+    every endpoint that calls this, rather than on any one of them.
     """
     if not frappe.db.exists("Job", job):
         frappe.throw(_("Job {0} not found").format(job), frappe.DoesNotExistError)
