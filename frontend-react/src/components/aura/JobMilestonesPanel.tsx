@@ -125,10 +125,34 @@ function planOf(row: {
  * away by the refetch the status change itself triggers. Marking a milestone
  * invoiced is what opens the field, so the refetch was always racing the
  * typing it had just invited, and it won often enough to be the normal case.
+ *
+ * #140: the row is the right thing to read *here* - this asks what is on the
+ * screen - and the wrong thing to read when deciding what to save. What was
+ * typed lives in `typedInvoiceNos`, out of reach of the payload that replaces
+ * the row.
  */
 function typedOf(row: { invoice_no: string | null }) {
   return row.invoice_no ?? "";
 }
+
+/**
+ * What the saver did the last time an invoice field was blurred, per milestone.
+ * Rendered onto the field as `data-invoice-save` and read by nothing else.
+ *
+ * #140: the saver is allowed to decide not to send - the same number typed
+ * twice is a write that changes nothing - but the only evidence of that
+ * decision used to be the absence of a request, which is also what a lost edit
+ * looks like. A named outcome makes "it had nothing to send" and "it had
+ * something and dropped it" tellable apart from the outside.
+ *
+ *   closed    - the field is not open for typing: no server row, or a status
+ *               that holds no invoice.
+ *   untouched - nothing has been typed since the server last took a number.
+ *   unchanged - what was typed is already what is stored. Nothing sent, and
+ *               nothing lost.
+ *   sent      - a write went out carrying the typed number.
+ */
+type InvoiceSave = "idle" | "closed" | "untouched" | "unchanged" | "sent";
 
 export function JobMilestonesPanel({ job }: { job: string }) {
   const milestones = useMethod<MilestonesPayload>("auraos.api.job_milestones", { job });
@@ -138,6 +162,22 @@ export function JobMilestonesPanel({ job }: { job: string }) {
   const [copied, setCopied] = useState(false);
   const nextKey = useRef(0);
   const seeded = useRef<MilestonesPayload | null>(null);
+  const [invoiceSaves, setInvoiceSaves] = useState<Record<string, InvoiceSave>>({});
+
+  /**
+   * Invoice numbers that have been typed and that the server has not confirmed
+   * yet, keyed by milestone name. Emptied for a milestone the moment a write
+   * carrying its number comes back.
+   *
+   * Kept here rather than read back off the row, because the row is the one
+   * thing a refetch replaces. #140: the saver compared `row.invoice_no` against
+   * the server's copy, so a re-seed landing between the typing and the blur
+   * emptied both sides at once - they matched, the no-op guard fired, and the
+   * number went nowhere without a request, an error or a word. A ref is a value
+   * no payload can reach, which is what keeps "empty because nobody typed" and
+   * "empty because it was overwritten" two different answers.
+   */
+  const typedInvoiceNos = useRef(new Map<string, string>());
 
   const stored = milestones.data?.milestones ?? [];
   const dirty = JSON.stringify(rows.map(planOf)) !== JSON.stringify(stored.map(planOf));
@@ -153,7 +193,16 @@ export function JobMilestonesPanel({ job }: { job: string }) {
     if (seeded.current !== null && edited) return;
     seeded.current = data;
     setRows(
-      data.milestones.map((row) => ({ ...row, key: row.name ?? `new-${nextKey.current++}` })),
+      data.milestones.map((row) => {
+        // A number typed and not yet taken by the server outlives the payload
+        // that would otherwise wipe it off the screen. See typedInvoiceNos.
+        const pending = row.name ? typedInvoiceNos.current.get(row.name) : undefined;
+        return {
+          ...row,
+          key: row.name ?? `new-${nextKey.current++}`,
+          invoice_no: pending ?? row.invoice_no,
+        };
+      }),
     );
   }, [milestones.data, edited]);
 
@@ -174,7 +223,18 @@ export function JobMilestonesPanel({ job }: { job: string }) {
   // founder retype it to find out they were nearly right.
   const statusSetter = useMethodMutation<Milestone, Record<string, unknown>>(
     "auraos.api.set_milestone_status",
-    { invalidate },
+    {
+      invalidate,
+      // A typed number stops being pending only once the server has taken it.
+      // Until then it is what the field shows, whatever a refetch says - and a
+      // refused write leaves it pending on purpose, so the founder still has
+      // what they typed in front of them.
+      onSuccess: (_result, args) => {
+        if (args["invoice_no"] === undefined) return;
+        const name = args["milestone"];
+        if (typeof name === "string") typedInvoiceNos.current.delete(name);
+      },
+    },
   );
 
   const invoiceRequest = useMethodMutation<InvoiceText, Record<string, unknown>>(
@@ -231,6 +291,9 @@ export function JobMilestonesPanel({ job }: { job: string }) {
     const invoice = keepsInvoice(status)
       ? {}
       : { invoice_no: null, invoice_vat_pct: null, invoiced_on: null };
+    // Including anything typed and not yet sent: the row is dropping the
+    // number, so a later blur must not post it back.
+    if (!keepsInvoice(status) && row.name) typedInvoiceNos.current.delete(row.name);
     setRows((current) =>
       current.map((one) => (one.key === row.key ? { ...one, status, ...invoice } : one)),
     );
@@ -251,11 +314,29 @@ export function JobMilestonesPanel({ job }: { job: string }) {
    * for the status instead.
    */
   function saveInvoiceNo(row: PlanRow) {
-    if (!row.name || row.status !== INVOICED) return;
-    const typed = (row.invoice_no ?? "").trim();
-    const savedRow = stored.find((one) => one.name === row.name);
-    if (savedRow && (savedRow.invoice_no ?? "") === typed) return;
-    statusSetter.mutate({ job, milestone: row.name, status: INVOICED, invoice_no: typed });
+    const name = row.name;
+    if (!name) return;
+    const record = (outcome: InvoiceSave) =>
+      setInvoiceSaves((current) => ({ ...current, [name]: outcome }));
+
+    if (row.status !== INVOICED) return record("closed");
+
+    // What was typed, not what the row is holding: the same value until a
+    // refetch replaces the row, and the whole defect lived in that gap.
+    const pending = typedInvoiceNos.current.get(name);
+    if (pending === undefined) return record("untouched");
+
+    const typed = pending.trim();
+    const savedRow = stored.find((one) => one.name === name);
+    if (savedRow && (savedRow.invoice_no ?? "") === typed) {
+      // A real no-op: the server already holds this number. Say so, rather
+      // than just not sending, which is what a lost edit also looks like.
+      typedInvoiceNos.current.delete(name);
+      return record("unchanged");
+    }
+
+    record("sent");
+    statusSetter.mutate({ job, milestone: name, status: INVOICED, invoice_no: typed });
   }
 
   function savePlan() {
@@ -426,15 +507,16 @@ export function JobMilestonesPanel({ job }: { job: string }) {
                                 ? "The number the accountant sent back. Retyping it corrects the number without moving the issue date."
                                 : `An invoice number belongs to a milestone marked ${INVOICED} - set the status first.`
                             }
-                            onChange={(event) =>
+                            data-invoice-save={(row.name && invoiceSaves[row.name]) || "idle"}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              if (row.name) typedInvoiceNos.current.set(row.name, value);
                               setRows((current) =>
                                 current.map((one) =>
-                                  one.key === row.key
-                                    ? { ...one, invoice_no: event.target.value }
-                                    : one,
+                                  one.key === row.key ? { ...one, invoice_no: value } : one,
                                 ),
-                              )
-                            }
+                              );
+                            }}
                             onBlur={() => saveInvoiceNo(row)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter") event.currentTarget.blur();

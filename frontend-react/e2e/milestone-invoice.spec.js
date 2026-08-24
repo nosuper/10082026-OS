@@ -60,6 +60,21 @@ async function moneyTab(page) {
 // `saving` hangs here, and a hang is not self-explaining.
 const SET_STATUS = "auraos.api.set_milestone_status";
 
+// #140. The field carries what the saver decided on the last blur, because
+// "nothing was sent" is the same silence whether the saver had nothing to send
+// or had something and dropped it. Asserted rather than inferred from an empty
+// network log: an absent request is evidence of neither on its own.
+const SAVE_STATE = "data-invoice-save";
+
+/** Every set_milestone_status POST from now on, for asserting none was sent. */
+function watchWrites(page) {
+  const sent = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes(SET_STATUS)) sent.push(request.url());
+  });
+  return sent;
+}
+
 test("an invoice number belongs to an invoiced milestone and nowhere else", async ({ page }) => {
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
@@ -74,6 +89,10 @@ test("an invoice number belongs to an invoiced milestone and nowhere else", asyn
   await expect(statusOf(panel)).toHaveValue("Not requested");
   await expect(invoiceOf(panel)).toBeDisabled();
   await expect(invoiceOf(panel)).toHaveValue("");
+  // Nothing has been blurred, so the saver has not decided anything yet. The
+  // starting value matters: the assertions below are only worth anything if
+  // "sent" and "unchanged" cannot be left over from an earlier interaction.
+  await expect(invoiceOf(panel)).toHaveAttribute(SAVE_STATE, "idle");
   // The field says why it is closed, which is the difference between a
   // disabled control and a broken one.
   await expect(invoiceOf(panel)).toHaveAttribute("title", /set the status first/i);
@@ -93,6 +112,7 @@ test("marking a milestone invoiced opens the field, and the number is kept", asy
   // by a button, so a test that only fills the box asserts nothing.
   await invoiceOf(panel).fill("PW-E2E-0126");
   await saving(page, SET_STATUS, () => invoiceOf(panel).blur());
+  await expect(invoiceOf(panel)).toHaveAttribute(SAVE_STATE, "sent");
 
   // Read back from the server rather than from React's state. Without the
   // reload a green would only prove the input holds what was typed into it.
@@ -104,6 +124,30 @@ test("marking a milestone invoiced opens the field, and the number is kept", asy
   await page.reload();
   const reloaded = await moneyTab(page);
   await expect(statusOf(reloaded)).toHaveValue("Invoiced");
+  await expect(invoiceOf(reloaded)).toHaveValue("PW-E2E-0126");
+
+  // #140, the other half of the same sentence. The saver is *allowed* to send
+  // nothing - re-blurring a number the server already holds is a write that
+  // would change nothing - and what was wrong was that this looked exactly
+  // like the number being thrown away. Two no-ops, each named:
+  const sent = watchWrites(page);
+
+  //   nothing typed since the server took the number,
+  await invoiceOf(reloaded).focus();
+  await invoiceOf(reloaded).blur();
+  await expect(invoiceOf(reloaded)).toHaveAttribute(SAVE_STATE, "untouched");
+
+  //   and typed back exactly as stored. Cleared first, so this is a field
+  //   somebody demonstrably typed into and not a fill the browser optimised
+  //   into nothing.
+  await invoiceOf(reloaded).fill("");
+  await invoiceOf(reloaded).fill("PW-E2E-0126");
+  await invoiceOf(reloaded).blur();
+  await expect(invoiceOf(reloaded)).toHaveAttribute(SAVE_STATE, "unchanged");
+
+  // Both decisions, and no request behind either - which is the point: the
+  // silence is the same, and the field is what tells them apart.
+  expect(sent).toEqual([]);
   await expect(invoiceOf(reloaded)).toHaveValue("PW-E2E-0126");
   expect(failures).toEqual([]);
 });

@@ -51,8 +51,11 @@
  *      panel calls a different endpoint than you assumed. `waitForResponse`
  *      cannot tell "no such response yet" from "no such response ever".
  *   2. **The handler returned early without mutating.** Several here do when
- *      the value has not changed - `saveInvoiceNo` compares against the stored
- *      row - so saving the same value twice waits for a request nobody sent.
+ *      the value has not changed - `saveInvoiceNo` compares what was typed
+ *      against the stored row - so saving the same value twice waits for a
+ *      request nobody sent. That one at least says so: it writes its decision
+ *      to the field's `data-invoice-save`, so read the attribute before
+ *      concluding the write was lost (#140).
  *   3. **The action did not trigger the write at all** - a blur that did not
  *      fire because focus was already elsewhere, a select set to the value it
  *      already had.
