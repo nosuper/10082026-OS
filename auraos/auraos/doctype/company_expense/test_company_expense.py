@@ -35,6 +35,16 @@ from auraos.tests.utils import make_test_user
 
 CATEGORY = "Chi phí tiếp khách"
 
+# Somewhere for the money to have come out of. Without it these tests
+# assert against a site that has never said where it keeps its money,
+# and `ledger.posting` answers that by posting nothing at all - money
+# moved, no account is known, so nothing is written and nothing already
+# written is disturbed. That is the documented behaviour and not a bug,
+# which is exactly why the fixture has to be here: an expense posts a
+# movement *once the company has an account*, and a test that never
+# makes one is asserting the wrong half of the rule.
+ACCOUNT = "Tài khoản ngân hàng"
+
 
 class CompanyExpenseTestCase(FrappeTestCase):
     @classmethod
@@ -45,6 +55,13 @@ class CompanyExpenseTestCase(FrappeTestCase):
         if not frappe.db.exists("Company Expense Category", CATEGORY):
             frappe.get_doc(
                 {"doctype": "Company Expense Category", "category_name": CATEGORY}
+            ).insert(ignore_permissions=True)
+        if not frappe.db.exists("Cash Account", ACCOUNT):
+            # CashAccount.after_insert adopts the first account as the
+            # company's default, so this is the whole of the setup - the
+            # expenses below name no account and fall back to it.
+            frappe.get_doc(
+                {"doctype": "Cash Account", "account_name": ACCOUNT}
             ).insert(ignore_permissions=True)
 
     def tearDown(self):
