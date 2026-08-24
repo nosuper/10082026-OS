@@ -50,7 +50,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from auraos.lib.finance import as_date, month_key
+from auraos.lib.finance import as_date, month_key, month_keys
 from auraos.lib.milestones import invoice_split
 from auraos.lib.money import round_vnd
 
@@ -210,11 +210,31 @@ def overheads(expenses: Iterable[Row], date_from: Any, date_to: Any) -> dict:
     wants to hold the accountant's return beside this and check it line
     by line; an invisible subtraction cannot be checked against
     anything.
+
+    **Broken out by month as well as by category, because break-even is
+    a monthly question.** A tax return reads a period whole; #14 asks
+    whether *this month's* work covered *this month's* upkeep, and a
+    range total cannot answer that. The two views are folds of one pass
+    over one set of rows, which is what keeps them from disagreeing -
+    `sum(month["total"] for month in by_month)` is `paid_total` by
+    construction rather than by luck, and the same holds for the flagged
+    side.
+
+    **A month the range touches is a month here, even if nothing was
+    paid in it.** The caller cannot know which months are missing
+    without the range, and a break-even chart with an empty August
+    quietly absent reads as a shorter year rather than a month that took
+    nothing - the rule `finance.month_keys` already owns for income
+    against expense.
     """
     start, end = as_date(date_from), as_date(date_to)
     deductible: dict[Any, dict] = {}
     flagged = []
     paid_total = 0
+    months = {
+        key: {"month": key, "total": 0, "count": 0, "flagged_total": 0}
+        for key in month_keys(date_from, date_to)
+    }
     for row in expenses:
         paid = as_date(row.get("spent_on"))
         if not paid or start is None or end is None:
@@ -230,10 +250,20 @@ def overheads(expenses: Iterable[Row], date_from: Any, date_to: Any) -> dict:
             "description": row.get("description") or None,
             "amount": amount,
         }
+        # A row inside the window is inside one of the window's months by
+        # definition; the setdefault is here so a caller passing a
+        # half-open range cannot make this raise instead of answering.
+        month = months.setdefault(
+            line["month"],
+            {"month": line["month"], "total": 0, "count": 0, "flagged_total": 0},
+        )
         if row.get("for_depreciation"):
             flagged.append(line)
+            month["flagged_total"] += amount
             continue
         paid_total += amount
+        month["total"] += amount
+        month["count"] += 1
         bucket = deductible.setdefault(
             line["category"], {"category": line["category"], "total": 0, "count": 0}
         )
@@ -245,6 +275,10 @@ def overheads(expenses: Iterable[Row], date_from: Any, date_to: Any) -> dict:
         "basis": OVERHEAD_BASIS,
         "paid_total": paid_total,
         "count": sum(bucket["count"] for bucket in deductible.values()),
+        # In reading order, unlike by_category: months are a sequence and
+        # sorting them by size would turn a run of the company's upkeep
+        # into a league table.
+        "by_month": [months[key] for key in sorted(months)],
         # Biggest first: a founder checking a return reads down from the
         # line most likely to be wrong about real money.
         "by_category": sorted(

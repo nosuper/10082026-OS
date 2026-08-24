@@ -138,6 +138,36 @@ _Avoid_: grace period, credit terms, net days
 The Vietnamese text handed to the external accountant on Zalo asking them to issue an invoice - client tax details and the amount split out of its VAT. Generating it changes nothing; marking the milestone Requested is a separate act.
 _Avoid_: invoice, billing request, hoá đơn (unqualified)
 
+## Overhead
+
+**Overhead**:
+One payment the company made on itself rather than on a shoot - rent, a salary, the accountant's fee, a printer. It belongs to no job, and that is not a job link left blank: an unattributed shoot cost is a different thing, recorded a different way and posted to the ledger under a different flow.
+_Avoid_: cost, expense (unqualified), fixed cost, opex
+
+**Standing cost**:
+A recurring overhead written down once - what it is, what it usually costs, which day of the month it falls - so the founder confirms rent twelve times a year instead of typing it. A template, never a payment: nothing is posted until the founder says the month happened.
+_Avoid_: recurring expense, subscription, schedule, template (unqualified)
+
+**Due**:
+A month a standing cost ran in, that has started, with no payment recorded against it. A claim about what has been typed, not about what the bank has paid - the system cannot know whether the landlord is waiting.
+_Avoid_: overdue, unpaid, outstanding, owing
+
+**Commitment**:
+What the standing costs oblige the company to over a stretch of months, whether or not those months have been recorded. Distinct from the backlog of due months, which is only what has not been written down yet.
+_Avoid_: budget, run cost, forecast, plan
+
+**Contribution**:
+What a job leaves behind after its own direct costs, available to pay for the company's upkeep. A job's whole-life margin, counted in the month the job was booked. Not profit, which is what remains after the upkeep and has the founder's commission chain in it.
+_Avoid_: profit, gross profit, earnings, gross margin
+
+**Break-even line**:
+A month's contribution against its overhead. Positive is a surplus, negative a shortfall, and it is one signed number rather than two fields. It shows; it never proposes a margin floor.
+_Avoid_: target, threshold, runway, burn
+
+**Final**:
+Said of a contribution that cannot move any more, because the job that earned it has finished spending. An open job's margin is provisional and can only fall, so the two are totalled apart and never quietly added.
+_Avoid_: actual, confirmed, closed, realised
+
 ## Paperwork
 
 **Paperwork template**:

@@ -18,6 +18,9 @@
   "column_break_invoice",
   "supplier",
   "photo",
+  "recurring_section",
+  "recurring",
+  "recurring_month",
   "treatment_section",
   "for_depreciation"
  ],
@@ -104,6 +107,27 @@
    "fieldname": "invoice_date",
    "fieldtype": "Date",
    "label": "Invoice Date"
+  },
+  {
+   "fieldname": "recurring_section",
+   "fieldtype": "Section Break",
+   "label": "Where it came from",
+   "depends_on": "eval:doc.recurring"
+  },
+  {
+   "description": "The standing cost this payment was recorded from. Set when the founder confirms a month's recurring overheads and never afterwards - it is what stops the same month being recorded twice.",
+   "fieldname": "recurring",
+   "fieldtype": "Link",
+   "label": "Recurring Overhead",
+   "options": "Recurring Overhead",
+   "read_only": 1
+  },
+  {
+   "description": "The month this payment covers, as 2026-08. The month a standing cost is owed for, which is not always the month the money left - rent paid late still covers its own month.",
+   "fieldname": "recurring_month",
+   "fieldtype": "Data",
+   "label": "Month Covered",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
