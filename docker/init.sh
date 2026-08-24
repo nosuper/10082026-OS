@@ -33,6 +33,22 @@ sed -i '/redis/d' ./Procfile
 # without this, git (and therefore bench get-app) refuses to read it.
 git config --global --add safe.directory '*'
 
+# Cloned once, and never updated after that - which has two consequences
+# worth knowing before trusting anything this bench says about the code.
+#
+# It drifts. The clone stays at whatever commit it was created or last
+# pulled to, so `bench run-tests` here answers for that commit and not
+# for the branch you happen to be reading. CI builds a fresh site per
+# branch and is the authority (ADR-0001).
+#
+# It also accumulates. A file copied in by hand to be run, or one that
+# was tracked when the clone was made and deleted upstream afterwards,
+# stays on disk as an untracked file and silently joins every later
+# `run-tests --app auraos`. Two of those - deleted upstream in a18f9a2
+# and b6c9d8b - were adding 18 failures to every full-suite run on this
+# box until 2026-08-24, against product code that no longer exists.
+# `git status` in apps/auraos is the whole check: a dirty tree means the
+# numbers are not about any commit at all.
 if [ ! -d "apps/auraos" ]; then
     bench get-app auraos /workspace/repo
 fi
