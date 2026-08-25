@@ -213,11 +213,11 @@ A small editable list behind one of a deal's Link fields - deal sources, project
 _Avoid_: dropdown, lookup, enum, master data
 
 **Migrating rename**:
-Renaming a managed vocabulary value so every deal already on it follows across, which is the only rename this app offers - renaming onto a value already in the list would merge two answers and is refused (ADR-0003).
+Renaming a managed vocabulary value so every deal already on it follows across, which is the only rename this app offers - renaming onto a value already in the list would merge two answers and is refused (ADR-0005).
 _Avoid_: merge, remap, bulk edit
 
 **Value in use**:
-A managed vocabulary value some deal still holds. It cannot be removed - the count is shown beside it, and the way out is a migrating rename or clearing the field on those deals (ADR-0003).
+A managed vocabulary value some deal still holds. It cannot be removed - the count is shown beside it, and the way out is a migrating rename or clearing the field on those deals (ADR-0005).
 _Avoid_: referenced, locked, orphan
 
 ## Environments

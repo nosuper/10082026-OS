@@ -34,6 +34,35 @@ jobs:
           fi
           echo "frontend/ is empty, as it should be."
 
+  # Two branches each took ADR 0003 independently on 2026-08-25 and both
+  # landed, so the repository carried two different decisions under one
+  # number and CONTEXT.md cited it twice without saying which. Renumbering
+  # was the fix; this is what stops the next pair.
+  #
+  # It rides in the same job as the frontend guard because both are the same
+  # kind of check - a fact about the tree that should be impossible to break
+  # rather than a thing to remember - and a second three-second job would be
+  # more YAML than test.
+  adr-numbers:
+    name: ADR numbers are unique
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse two ADRs with the same number
+        run: |
+          # The number is the filename's leading digits. Sorted, counted, and
+          # anything seen twice is printed with the files that claim it.
+          dupes=$(ls docs/adr/ | grep -oE '^[0-9]+' | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "::error::Two ADRs share a number. Renumber the newer one."
+            for n in $dupes; do
+              echo "  $n is claimed by:"
+              ls docs/adr/ | grep "^$n" | sed 's/^/    /'
+            done
+            exit 1
+          fi
+          echo "Every ADR has its own number."
+
   pure-tests:
     name: Pure pytest (pricing seam)
     runs-on: ubuntu-latest
