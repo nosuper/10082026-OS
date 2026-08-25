@@ -34,6 +34,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { DealComments } from "@/components/aura/DealComments";
 import { DIALOG_BUTTON, Modal } from "@/components/aura/Modal";
 import { RichText } from "@/components/aura/RichText";
 import { Card, Money, Pill } from "@/components/aura/primitives";
@@ -1130,58 +1131,14 @@ function DealPage() {
               subtitle={
                 comments.data?.length
                   ? countLabel(comments.data.length, "comment")
-                  : "Anything the fields cannot say."
+                  : "Anything the fields cannot say. Type @ to name someone."
               }
             >
-              <div className="space-y-2 p-4">
-                {(comments.data ?? []).map((row) => (
-                  <div
-                    key={row.name}
-                    className="rounded-lg border border-border bg-secondary/40 px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-baseline gap-2 text-xs">
-                      <span className="font-medium">{row.comment_by || row.comment_email}</span>
-                      <span className="num text-muted-foreground">
-                        {formatDateTime(row.creation)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 text-sm whitespace-pre-line">
-                      {stripHtml(row.content)}
-                    </div>
-                  </div>
-                ))}
-                {comments.isError ? (
-                  <ErrorState error={comments.error} onRetry={() => void comments.refetch()} />
-                ) : null}
-                {comments.isSuccess && comments.data.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">Nothing said yet.</div>
-                ) : null}
-
-                <div className="flex gap-1.5 pt-1">
-                  <input
-                    value={commentDraft}
-                    onChange={(event) => setCommentDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      comment();
-                    }}
-                    placeholder="Write a comment"
-                    aria-label="Write a comment"
-                    className={inputClass}
-                  />
-                  <button
-                    type="button"
-                    onClick={comment}
-                    disabled={postComment.isPending || !commentDraft.trim()}
-                    className={`${ghostButton} disabled:opacity-40`}
-                  >
-                    {postComment.isPending ? "Posting..." : "Comment"}
-                  </button>
-                </div>
-                {postComment.isError ? (
-                  <div className="text-xs text-ember">{postComment.error.messages.join(" ")}</div>
-                ) : null}
+              {/* The thread owns itself now (#28): mentions, editing, deleting
+                  and pasted pictures all live in one component, because they
+                  are one surface and were four inline blocks. */}
+              <div className="p-4">
+                <DealComments deal={dealCode} />
               </div>
             </Card>
           </div>

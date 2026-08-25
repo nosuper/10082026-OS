@@ -220,6 +220,27 @@ _Avoid_: merge, remap, bulk edit
 A managed vocabulary value some deal still holds. It cannot be removed - the count is shown beside it, and the way out is a migrating rename or clearing the field on those deals (ADR-0003).
 _Avoid_: referenced, locked, orphan
 
+## Collaboration
+
+**Mention**:
+Naming one of the two operating seats inside a comment, which notifies
+them and links them back to the deal they were called into. A name that
+belongs to nobody who may read the deal names nobody.
+_Avoid_: tag, ping, at-reply, callout
+
+**Attachment**:
+A file hanging on a deal - including a picture pasted into a comment,
+which is an attachment like any other. Private by default: the link
+opens for the seats that may read the deal and for nobody else.
+_Avoid_: upload, document, asset, media
+
+**File manager**:
+The page listing every attachment across every deal, with the deal each
+one hangs on. What a deal card cannot answer - "we have that brief
+somewhere, which deal was it on?" - and where an attachment is renamed
+or removed.
+_Avoid_: drive, library, file browser, documents page
+
 ## Environments
 
 **Preview stack**:
