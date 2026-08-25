@@ -213,7 +213,23 @@ if [ "$BUILT_EPOCH" -gt "$COMMIT_EPOCH" ]; then
   ok "built page is newer than the commit - nothing to rebuild"
 else
   if change "build the frontend in $CONTAINER"; then
-    inside "cd $APP_DIR/frontend-react && npm install --no-audit --no-fund && npm run build" \
+    # **`npm ci`, not `npm install`.** `npm install` rewrites
+    # package-lock.json whenever npm's resolution metadata differs from
+    # what is committed, and it writes it *inside the app clone* - which
+    # the Working tree step above then refuses, because a deploy will not
+    # discard changes it cannot know the origin of. So a deploy that used
+    # `npm install` armed the check that blocks the next one. That is not
+    # a hypothesis: the first dry run against aura-prod stopped on exactly
+    # this, a `frontend/package-lock.json` left behind by an earlier build
+    # of the Vue app.
+    #
+    # `npm ci` installs from the lockfile and never writes to it, which is
+    # also the reproducible install a deploy wants - the same command CI
+    # already uses. It refuses outright when package.json and the lockfile
+    # disagree, and that refusal is wanted here too: a lockfile out of step
+    # with its manifest is a thing to fix in a commit, not to paper over on
+    # a production box.
+    inside "cd $APP_DIR/frontend-react && npm ci --no-audit --no-fund && npm run build" \
       || die "the frontend build failed - the stack is still serving the previous page"
   fi
   # The check that catches a build which ran and produced nothing: the
