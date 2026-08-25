@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ExpenseRouteImport } from './routes/expense'
 import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as MyWorkRouteImport } from './routes/my-work'
 import { Route as QuotationsRouteImport } from './routes/quotations'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ContactsCompaniesRouteImport } from './routes/contacts.companies'
@@ -32,6 +33,8 @@ import { Route as FinanceReceivablesRouteImport } from './routes/finance.receiva
 import { Route as FinanceReportsRouteImport } from './routes/finance.reports'
 import { Route as JobsIndexRouteImport } from './routes/jobs.index'
 import { Route as JobsJobIdRouteImport } from './routes/jobs.$jobId'
+import { Route as MyWorkIndexRouteImport } from './routes/my-work.index'
+import { Route as MyWorkJobIdRouteImport } from './routes/my-work.$jobId'
 import { Route as QuotationsIndexRouteImport } from './routes/quotations.index'
 import { Route as QuotationsQuoteRefRouteImport } from './routes/quotations.$quoteRef'
 import { Route as DealsDealCodeIndexRouteImport } from './routes/deals.$dealCode.index'
@@ -56,6 +59,11 @@ const ExpenseRoute = ExpenseRouteImport.update({
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyWorkRoute = MyWorkRouteImport.update({
+  id: '/my-work',
+  path: '/my-work',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuotationsRoute = QuotationsRouteImport.update({
@@ -153,6 +161,16 @@ const JobsJobIdRoute = JobsJobIdRouteImport.update({
   path: '/jobs/$jobId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MyWorkIndexRoute = MyWorkIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MyWorkRoute,
+} as any)
+const MyWorkJobIdRoute = MyWorkJobIdRouteImport.update({
+  id: '/$jobId',
+  path: '/$jobId',
+  getParentRoute: () => MyWorkRoute,
+} as any)
 const QuotationsIndexRoute = QuotationsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -184,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/documents': typeof DocumentsRouteWithChildren
   '/expense': typeof ExpenseRoute
   '/finance': typeof FinanceRouteWithChildren
+  '/my-work': typeof MyWorkRouteWithChildren
   '/quotations': typeof QuotationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
@@ -200,10 +219,12 @@ export interface FileRoutesByFullPath {
   '/finance/receivables': typeof FinanceReceivablesRoute
   '/finance/reports': typeof FinanceReportsRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
+  '/my-work/$jobId': typeof MyWorkJobIdRoute
   '/quotations/$quoteRef': typeof QuotationsQuoteRefRoute
   '/deals/': typeof DealsIndexRoute
   '/finance/': typeof FinanceIndexRoute
   '/jobs/': typeof JobsIndexRoute
+  '/my-work/': typeof MyWorkIndexRoute
   '/quotations/': typeof QuotationsIndexRoute
   '/deals/$dealCode/quote': typeof DealsDealCodeQuoteRoute
   '/documents/library/$docName': typeof DocumentsLibraryDocNameRoute
@@ -227,10 +248,12 @@ export interface FileRoutesByTo {
   '/finance/receivables': typeof FinanceReceivablesRoute
   '/finance/reports': typeof FinanceReportsRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
+  '/my-work/$jobId': typeof MyWorkJobIdRoute
   '/quotations/$quoteRef': typeof QuotationsQuoteRefRoute
   '/deals': typeof DealsIndexRoute
   '/finance': typeof FinanceIndexRoute
   '/jobs': typeof JobsIndexRoute
+  '/my-work': typeof MyWorkIndexRoute
   '/quotations': typeof QuotationsIndexRoute
   '/deals/$dealCode/quote': typeof DealsDealCodeQuoteRoute
   '/documents/library/$docName': typeof DocumentsLibraryDocNameRoute
@@ -242,6 +265,7 @@ export interface FileRoutesById {
   '/documents': typeof DocumentsRouteWithChildren
   '/expense': typeof ExpenseRoute
   '/finance': typeof FinanceRouteWithChildren
+  '/my-work': typeof MyWorkRouteWithChildren
   '/quotations': typeof QuotationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
@@ -258,10 +282,12 @@ export interface FileRoutesById {
   '/finance/receivables': typeof FinanceReceivablesRoute
   '/finance/reports': typeof FinanceReportsRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
+  '/my-work/$jobId': typeof MyWorkJobIdRoute
   '/quotations/$quoteRef': typeof QuotationsQuoteRefRoute
   '/deals/': typeof DealsIndexRoute
   '/finance/': typeof FinanceIndexRoute
   '/jobs/': typeof JobsIndexRoute
+  '/my-work/': typeof MyWorkIndexRoute
   '/quotations/': typeof QuotationsIndexRoute
   '/deals/$dealCode/quote': typeof DealsDealCodeQuoteRoute
   '/documents/library/$docName': typeof DocumentsLibraryDocNameRoute
@@ -274,6 +300,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/expense'
     | '/finance'
+    | '/my-work'
     | '/quotations'
     | '/settings'
     | '/contacts/companies'
@@ -290,10 +317,12 @@ export interface FileRouteTypes {
     | '/finance/receivables'
     | '/finance/reports'
     | '/jobs/$jobId'
+    | '/my-work/$jobId'
     | '/quotations/$quoteRef'
     | '/deals/'
     | '/finance/'
     | '/jobs/'
+    | '/my-work/'
     | '/quotations/'
     | '/deals/$dealCode/quote'
     | '/documents/library/$docName'
@@ -317,10 +346,12 @@ export interface FileRouteTypes {
     | '/finance/receivables'
     | '/finance/reports'
     | '/jobs/$jobId'
+    | '/my-work/$jobId'
     | '/quotations/$quoteRef'
     | '/deals'
     | '/finance'
     | '/jobs'
+    | '/my-work'
     | '/quotations'
     | '/deals/$dealCode/quote'
     | '/documents/library/$docName'
@@ -331,6 +362,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/expense'
     | '/finance'
+    | '/my-work'
     | '/quotations'
     | '/settings'
     | '/contacts/companies'
@@ -347,10 +379,12 @@ export interface FileRouteTypes {
     | '/finance/receivables'
     | '/finance/reports'
     | '/jobs/$jobId'
+    | '/my-work/$jobId'
     | '/quotations/$quoteRef'
     | '/deals/'
     | '/finance/'
     | '/jobs/'
+    | '/my-work/'
     | '/quotations/'
     | '/deals/$dealCode/quote'
     | '/documents/library/$docName'
@@ -362,6 +396,7 @@ export interface RootRouteChildren {
   DocumentsRoute: typeof DocumentsRouteWithChildren
   ExpenseRoute: typeof ExpenseRoute
   FinanceRoute: typeof FinanceRouteWithChildren
+  MyWorkRoute: typeof MyWorkRouteWithChildren
   QuotationsRoute: typeof QuotationsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   ContactsCompaniesRoute: typeof ContactsCompaniesRoute
@@ -400,6 +435,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance'
       preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-work': {
+      id: '/my-work'
+      path: '/my-work'
+      fullPath: '/my-work'
+      preLoaderRoute: typeof MyWorkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quotations': {
@@ -535,6 +577,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JobsJobIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my-work/': {
+      id: '/my-work/'
+      path: '/'
+      fullPath: '/my-work/'
+      preLoaderRoute: typeof MyWorkIndexRouteImport
+      parentRoute: typeof MyWorkRoute
+    }
+    '/my-work/$jobId': {
+      id: '/my-work/$jobId'
+      path: '/$jobId'
+      fullPath: '/my-work/$jobId'
+      preLoaderRoute: typeof MyWorkJobIdRouteImport
+      parentRoute: typeof MyWorkRoute
+    }
     '/quotations/': {
       id: '/quotations/'
       path: '/'
@@ -625,6 +681,19 @@ const FinanceRouteChildren: FinanceRouteChildren = {
 const FinanceRouteWithChildren =
   FinanceRoute._addFileChildren(FinanceRouteChildren)
 
+interface MyWorkRouteChildren {
+  MyWorkJobIdRoute: typeof MyWorkJobIdRoute
+  MyWorkIndexRoute: typeof MyWorkIndexRoute
+}
+
+const MyWorkRouteChildren: MyWorkRouteChildren = {
+  MyWorkJobIdRoute: MyWorkJobIdRoute,
+  MyWorkIndexRoute: MyWorkIndexRoute,
+}
+
+const MyWorkRouteWithChildren =
+  MyWorkRoute._addFileChildren(MyWorkRouteChildren)
+
 interface QuotationsRouteChildren {
   QuotationsQuoteRefRoute: typeof QuotationsQuoteRefRoute
   QuotationsIndexRoute: typeof QuotationsIndexRoute
@@ -658,6 +727,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsRoute: DocumentsRouteWithChildren,
   ExpenseRoute: ExpenseRoute,
   FinanceRoute: FinanceRouteWithChildren,
+  MyWorkRoute: MyWorkRouteWithChildren,
   QuotationsRoute: QuotationsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   ContactsCompaniesRoute: ContactsCompaniesRoute,
