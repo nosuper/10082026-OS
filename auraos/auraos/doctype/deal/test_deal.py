@@ -395,18 +395,32 @@ class TestDealDetailsFields(FrappeTestCase):
 
     def test_founder_can_expand_sources(self):
         # Founder decision on issue #21: the source list must stay
-        # expandable - a new expo or channel is a Desk entry, not code.
+        # expandable - a new expo or channel is added from the Settings
+        # screen (T3.5, issue #29), not in code.
         frappe.set_user(FOUNDER)
         source = frappe.get_doc(
             {"doctype": "Deal Source", "source_name": "TikTok"}
         ).insert()
         self.assertTrue(frappe.db.exists("Deal Source", source.name))
 
-    def test_producer_cannot_expand_sources(self):
+    def test_producer_can_expand_sources(self):
+        # T3.5 (issue #29) supersedes T3.2's founder-only source guard:
+        # the walkthrough answer of 2026-08-10 gave the producer the
+        # source list too, because the producer takes the calls. The
+        # endpoint-level proof is in auraos/tests/test_vocabulary_api.py.
+        frappe.set_user(PRODUCER)
+        source = frappe.get_doc(
+            {"doctype": "Deal Source", "source_name": "Cold call"}
+        ).insert()
+        self.assertTrue(frappe.db.exists("Deal Source", source.name))
+
+    def test_producer_cannot_expand_project_types(self):
+        # The half T3.5 left alone: the type list still drifts at the
+        # founder's pace.
         frappe.set_user(PRODUCER)
         with self.assertRaises(frappe.PermissionError):
             frappe.get_doc(
-                {"doctype": "Deal Source", "source_name": "Cold call"}
+                {"doctype": "Project Type", "type_name": "Feature film"}
             ).insert()
 
     def test_both_operating_roles_can_create_tags(self):

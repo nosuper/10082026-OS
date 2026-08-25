@@ -13,9 +13,10 @@ from auraos.auraos.doctype.job.job import STAGES as JOB_STAGES
 from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
+from auraos.auraos.doctype.job_task import job_task
 from auraos.auraos.doctype.paperwork_template import paperwork_template
 from auraos import statements
-from auraos.lib import acceptance, breakdown, breakeven, contracts, exposure, finance, library, paper_status, paperwork, recurring, settlement, tax
+from auraos.lib import acceptance, breakdown, breakeven, contracts, exposure, finance, library, paper_status, paperwork, recurring, settlement, tax, vocabulary
 from auraos.lib import reporting
 from auraos.lib import statement
 # Imported by name: `milestones` is a parameter of save_job_milestones.
@@ -3997,3 +3998,441 @@ def break_even(date_from, date_to):
     # in is not a cheap month.
     payload["committed"] = recurring.schedule(_recurring_rows(), start, end)
     return payload
+
+
+# -- job tasks, and the crew door onto a job (T7.1, issue #41) --
+
+# What a planner may set on a task. The same narrow-surface rule as the
+# deals table: an endpoint that could write any field on Job Task would
+# be one bug away from moving a task onto another job.
+TASK_EDITABLE_FIELDS = (
+    "title",
+    "craft",
+    "assigned_to",
+    "start_date",
+    "end_date",
+    "status",
+    "notes",
+)
+
+# Everything a crew session is told about the job itself. Chosen by what
+# it is *not*: no carried breakdown, no packages, no quote totals, no
+# commission, no milestones, and no deal to follow back to the pricing.
+# The client's company is named because a designer needs to know whose
+# brand they are cutting; the contact's phone number is not theirs.
+CREW_JOB_FIELDS = ("name", "title", "stage", "files_location", "job_owner")
+
+
+def _people_named(emails):
+    """{email: full name} for a set of users, however short the set."""
+    wanted = sorted({email for email in emails if email})
+    if not wanted:
+        return {}
+    return {
+        row.name: row.full_name
+        for row in frappe.get_all(
+            "User",
+            filters={"name": ["in", wanted]},
+            fields=["name", "full_name"],
+        )
+    }
+
+
+def _client_named(job):
+    """The client's company name - who a designer is cutting for.
+
+    Read through the Job rather than handed the link value: crew cannot
+    read Party Company either, and a name is not a number.
+    """
+    company = frappe.db.get_value("Job", job, "company")
+    if not company:
+        return None
+    return frappe.db.get_value("Party Company", company, "company_name")
+
+
+def _check_task_read(job):
+    """Gate a task endpoint on the right to see this job's plan.
+
+    Two different rights lead here - an operating role's read on the Job,
+    or a crew member's task on it - so the check cannot be the ordinary
+    Job permission call.
+    """
+    if not frappe.db.exists("Job", job):
+        frappe.throw(_("Job {0} not found").format(job), frappe.DoesNotExistError)
+    if not job_task.may_read_job_tasks(job):
+        frappe.throw(_("You are not on job {0}").format(job), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def job_tasks(job):
+    """The task plan of a job: every task, whoever is asking.
+
+    Crew see the whole plan of a job they are on, not only their own
+    row - a board showing one card is not a board, and knowing who else
+    is on the job is not knowing what anyone is paid.
+    """
+    _check_task_read(job)
+    tasks = job_task.tasks_for_job(job)
+    return {
+        "tasks": tasks,
+        "statuses": list(job_task.STATUSES),
+        # The names of the people on this job, so a card reads "Minh"
+        # rather than an email address. Crew cannot list the User
+        # doctype, and who else is on the job is not a number.
+        "people": _people_named(row.assigned_to for row in tasks),
+        # Whether this session may plan, as opposed to only moving its
+        # own card. The screen asks instead of guessing from a role.
+        "can_plan": bool(frappe.has_permission("Job", "write", doc=job)),
+        "user": frappe.session.user,
+    }
+
+
+@frappe.whitelist()
+def save_job_task(job, values):
+    """Create or update one task on a job. Planning, so: operating roles.
+
+    Gated on write to the *Job*, not to Job Task: the plan belongs to
+    whoever is running the job, and crew hold no permission on Job at
+    all, which is what closes this endpoint to them.
+    """
+    _check_job_permission(job, "write")
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("A task must be an object"), frappe.ValidationError)
+    unknown = set(values) - set(TASK_EDITABLE_FIELDS) - {"name"}
+    if unknown:
+        frappe.throw(
+            _("Not a field of a task: {0}").format(", ".join(sorted(unknown))),
+            frappe.ValidationError,
+        )
+
+    name = values.get("name")
+    if name:
+        doc = frappe.get_doc("Job Task", name)
+        if doc.job != job:
+            frappe.throw(
+                _("Task {0} is not on job {1}").format(name, job),
+                frappe.ValidationError,
+            )
+    else:
+        doc = frappe.new_doc("Job Task")
+        doc.job = job
+
+    for field in TASK_EDITABLE_FIELDS:
+        if field in values:
+            doc.set(field, values[field] or None)
+    doc.save()
+    return doc.as_dict()
+
+
+@frappe.whitelist()
+def delete_job_task(task):
+    """Drop a task from the plan. Planning, so: operating roles."""
+    job = frappe.db.get_value("Job Task", task, "job")
+    if not job:
+        frappe.throw(_("Task {0} not found").format(task), frappe.DoesNotExistError)
+    _check_job_permission(job, "write")
+    frappe.delete_doc("Job Task", task)
+    return {"name": task, "job": job}
+
+
+@frappe.whitelist()
+def set_job_task_status(task, status):
+    """Move one task's card. The one write a crew session may make.
+
+    Permission is the doctype's own: the `has_permission` hook lets a
+    crew member write the task assigned to them and no other, and the
+    controller holds them to the status and the note.
+    """
+    if not frappe.db.exists("Job Task", task):
+        frappe.throw(_("Task {0} not found").format(task), frappe.DoesNotExistError)
+    frappe.has_permission("Job Task", "write", doc=task, throw=True)
+    doc = frappe.get_doc("Job Task", task)
+    doc.status = status
+    doc.save()
+    return {"name": doc.name, "status": doc.status, "job": doc.job}
+
+
+@frappe.whitelist()
+def set_job_task_note(task, note=None):
+    """Write the note on one task - the other half of a crew card.
+
+    Same gate as the status: the doctype's own permission, which lets a
+    crew member write the task assigned to them and no other. An editor
+    saying "waiting on the client's logo" is the whole point of letting
+    them onto the job at all.
+    """
+    if not frappe.db.exists("Job Task", task):
+        frappe.throw(_("Task {0} not found").format(task), frappe.DoesNotExistError)
+    frappe.has_permission("Job Task", "write", doc=task, throw=True)
+    doc = frappe.get_doc("Job Task", task)
+    doc.notes = (note or "").strip() or None
+    doc.save()
+    return {"name": doc.name, "notes": doc.notes}
+
+
+@frappe.whitelist()
+def my_jobs():
+    """The jobs this session holds a task on - a crew member's whole list.
+
+    Money-free by construction: it is built from the tasks, and reads
+    only the job fields a crew session is allowed.
+    """
+    names = job_task.crew_job_names()
+    if not names:
+        return []
+    jobs = frappe.get_all(
+        "Job",
+        filters={"name": ["in", names]},
+        fields=list(CREW_JOB_FIELDS),
+        order_by="modified desc",
+        limit_page_length=0,
+    )
+    tasks = frappe.get_all(
+        "Job Task",
+        filters={"job": ["in", names]},
+        fields=["job", "status", "assigned_to"],
+        limit_page_length=0,
+    )
+    for row in jobs:
+        row["company_name"] = _client_named(row.name)
+        on_job = [task for task in tasks if task.job == row.name]
+        row["task_count"] = len(on_job)
+        row["open_tasks"] = len(
+            [
+                task
+                for task in on_job
+                if task.assigned_to == frappe.session.user
+                and task.status != job_task.DONE
+            ]
+        )
+    return jobs
+
+
+@frappe.whitelist()
+def crew_job(job):
+    """One job as a crew member sees it: nothing priced.
+
+    The whole money surface of a job is absent because it was never
+    fetched - this reads a named list of fields rather than a document
+    with the numbers stripped out afterwards. The plan itself comes from
+    `job_tasks`, which answers the same way to both kinds of user.
+    """
+    _check_task_read(job)
+    row = frappe.db.get_value("Job", job, list(CREW_JOB_FIELDS), as_dict=True)
+    row["company_name"] = _client_named(job)
+    row["links"] = frappe.get_all(
+        "Deal Link",
+        filters={"parent": job, "parenttype": "Job"},
+        fields=["label", "url"],
+        order_by="idx asc",
+        limit_page_length=0,
+    )
+    return row
+
+
+@frappe.whitelist()
+def task_crafts():
+    """The craft vocabulary, for the planner's dropdown."""
+    frappe.has_permission("Craft", "read", throw=True)
+    return frappe.get_all("Craft", pluck="name", order_by="name asc")
+
+
+@frappe.whitelist()
+def assignable_users():
+    """Who a task may be given to: the operating roles, plus crew.
+
+    Producer sessions cannot list the User doctype, so the dropdown is
+    served from here the same way the deal owner list is.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    roles = [*OPERATING_ROLES, job_task.CREW_ROLE]
+    holders = frappe.get_all(
+        "Has Role",
+        filters={"role": ["in", roles], "parenttype": "User"},
+        pluck="parent",
+    )
+    return frappe.get_all(
+        "User",
+        filters={"name": ["in", list(set(holders))], "enabled": 1},
+        fields=["name", "full_name"],
+        order_by="full_name asc",
+    )
+
+
+@frappe.whitelist()
+def session_scope():
+    """Which of the app's screens this session is for.
+
+    The SPA needs it to draw its navigation: a crew session has no deals
+    board and no jobs list to offer, and a nav bar full of links that
+    answer with a permission error is worse than no nav bar at all.
+    """
+    user = frappe.session.user
+    roles = frappe.get_roles()
+    return {
+        "user": user,
+        "crew_only": job_task.is_crew_only(user),
+        "can_read_jobs": bool(frappe.has_permission("Job", "read")),
+        "can_read_deals": bool(frappe.has_permission("Deal", "read")),
+        # T3.5: Settings is no longer a founder-only door. A producer
+        # manages deal sources there, so the nav needs the link even
+        # though the margin floor on that page stays out of reach.
+        "can_read_settings": bool(frappe.has_permission("AuraOS Settings", "read")),
+        "manages_vocabularies": list(vocabulary.manageable_keys(roles)),
+    }
+
+
+# -- managed vocabularies on the Settings screen (T3.5, issue #29) --
+#
+# A thin adapter over auraos.lib.vocabulary, which owns every rule: who
+# manages which list, what a rename does to the deals already on a value,
+# and why a value in use cannot be removed. Two gates, not one: the seam
+# decides, and the write still goes through the DocType's own permissions,
+# so opening a list to a role takes agreeing edits in both places.
+
+
+def _vocabulary(kind):
+    """The managed list a request names, or a refusal by name."""
+    try:
+        return vocabulary.vocabulary(kind)
+    except vocabulary.UnknownVocabulary:
+        frappe.throw(_("No such list: {0}").format(kind), frappe.ValidationError)
+
+
+def _managed_vocabulary(kind):
+    """The list a request names, once this session may manage it."""
+    vocab = _vocabulary(kind)
+    if not vocabulary.may_manage(vocab.key, frappe.get_roles()):
+        frappe.throw(
+            _("Your role cannot manage {0}").format(vocab.label),
+            frappe.PermissionError,
+        )
+    return vocab
+
+
+def _clean(raw):
+    try:
+        return vocabulary.clean_value(raw)
+    except ValueError as exc:
+        frappe.throw(_(str(exc)), frappe.ValidationError)
+
+
+def _in_use_counts(vocab):
+    """{value: how many records hold it} across every Link into the list.
+
+    Counted rather than merely tested, because the refusal a founder
+    reads when a removal is blocked names the number.
+    """
+    counts = {}
+    for doctype, fieldname in vocab.used_by:
+        rows = frappe.get_all(
+            doctype,
+            filters={fieldname: ["is", "set"]},
+            fields=[f"{fieldname} as value", "count(name) as total"],
+            group_by=fieldname,
+        )
+        for row in rows:
+            counts[row.value] = counts.get(row.value, 0) + row.total
+    return counts
+
+
+def _vocabulary_view(vocab):
+    counts = _in_use_counts(vocab)
+    return {
+        "key": vocab.key,
+        "label": vocab.label,
+        "can_manage": vocabulary.may_manage(vocab.key, frappe.get_roles()),
+        "values": [
+            {"name": name, "in_use": counts.get(name, 0)}
+            for name in frappe.get_all(
+                vocab.doctype, pluck="name", order_by="name asc", limit_page_length=0
+            )
+        ],
+    }
+
+
+@frappe.whitelist()
+def get_vocabularies():
+    """Every managed list, its values, their use counts and who may edit.
+
+    Readable by anyone who can read a deal - the values themselves are
+    already on the deal form. `can_manage` is what the Settings screen
+    draws its sections from, so a producer is offered the sources
+    section and no project-type section at all.
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    return [_vocabulary_view(vocab) for vocab in vocabulary.VOCABULARIES.values()]
+
+
+@frappe.whitelist()
+def add_vocabulary_value(kind, value):
+    vocab = _managed_vocabulary(kind)
+    value = _clean(value)
+    if frappe.db.exists(vocab.doctype, value):
+        frappe.throw(
+            _("{0} is already in {1}").format(value, vocab.label.lower()),
+            frappe.DuplicateEntryError,
+        )
+    frappe.get_doc({"doctype": vocab.doctype, vocab.value_field: value}).insert()
+    return get_vocabularies()
+
+
+@frappe.whitelist()
+def rename_vocabulary_value(kind, value, new_value):
+    """Rename a value and carry every record on it across.
+
+    The migrating half of the T3.5 decision (see auraos.lib.vocabulary):
+    `rename_doc` rewrites the Link on every deal already on the old
+    value, so nothing is left holding a name that no longer exists.
+    """
+    vocab = _managed_vocabulary(kind)
+    new_value = _clean(new_value)
+    if not frappe.db.exists(vocab.doctype, value):
+        frappe.throw(
+            _("{0} is not in {1}").format(value, vocab.label.lower()),
+            frappe.DoesNotExistError,
+        )
+    if new_value == value:
+        return get_vocabularies()
+    refusal = vocabulary.rename_refusal(
+        vocab,
+        value,
+        new_value,
+        frappe.get_all(vocab.doctype, pluck="name", limit_page_length=0),
+    )
+    if refusal:
+        frappe.throw(_(refusal), frappe.ValidationError)
+    frappe.rename_doc(vocab.doctype, value, new_value)
+    # These lists are named by their own field (`autoname: field:...`),
+    # so the field has to end up saying what the row is now called -
+    # otherwise it reads "Expo" while being called "Trade show"
+    # everywhere else. Written flat rather than through the document,
+    # which would only invite the naming machinery to run a second time.
+    frappe.db.set_value(
+        vocab.doctype, new_value, vocab.value_field, new_value, update_modified=False
+    )
+    return get_vocabularies()
+
+
+@frappe.whitelist()
+def remove_vocabulary_value(kind, value):
+    """Remove a value, unless records still hold it.
+
+    The refusing half of the T3.5 decision: a value on even one deal
+    stays, because deleting it could only blank that deal or dangle its
+    link, and both throw away the answer the field is kept for.
+    """
+    vocab = _managed_vocabulary(kind)
+    if not frappe.db.exists(vocab.doctype, value):
+        frappe.throw(
+            _("{0} is not in {1}").format(value, vocab.label.lower()),
+            frappe.DoesNotExistError,
+        )
+    refusal = vocabulary.removal_refusal(
+        vocab, value, _in_use_counts(vocab).get(value, 0)
+    )
+    if refusal:
+        frappe.throw(_(refusal), frappe.ValidationError)
+    frappe.delete_doc(vocab.doctype, value)
+    return get_vocabularies()

@@ -1103,10 +1103,119 @@ def seed_14_overhead_and_break_even(deal_name):
         ).insert(ignore_permissions=True)
 
 
+# T7.1: the job's own plan, and the two people who may see it and
+# nothing else. Dates hang off today so the timeline always has a bar
+# either side of the "today" line, whenever the stack boots.
+CREW = [
+    {
+        "email": "editor@aura.local",
+        "first_name": "Minh",
+        "last_name": "Dựng",
+    },
+    {
+        "email": "designer@aura.local",
+        "first_name": "Lan",
+        "last_name": "Thiết kế",
+    },
+]
+
+# The password every seeded crew account gets on a preview stack. A
+# walkthrough of the crew view needs someone to log in *as*, and a
+# preview stack is disposable by definition - nothing here is real and
+# none of it is preserved.
+CREW_PASSWORD = "auraos-crew-preview"
+
+# Shoot to delivery, offset in days from today: enough of the plan
+# behind us to show finished work, enough ahead to show a deadline.
+TASKS = [
+    {"title": "Tiền kỳ - dựng shotlist", "craft": "Producing",
+     "start": -12, "end": -9, "status": "Done"},
+    {"title": "Quay ngày 1", "craft": "Camera",
+     "start": -8, "end": -7, "status": "Done"},
+    {"title": "Quay ngày 2", "craft": "Camera",
+     "start": -6, "end": -6, "status": "Done"},
+    {"title": "Dựng bản 1", "craft": "Editing", "crew": 0,
+     "start": -5, "end": -1, "status": "In review"},
+    # Yesterday's deadline, still open: the overdue badge has to be
+    # visible on the board the moment the stack boots.
+    {"title": "Key visual cho poster", "craft": "Design", "crew": 1,
+     "start": -4, "end": -1, "status": "In progress"},
+    {"title": "Dựng bản 2 theo feedback", "craft": "Editing", "crew": 0,
+     "start": 1, "end": 4, "status": "To do"},
+    {"title": "Grade", "craft": "Colour", "start": 5, "end": 6, "status": "To do"},
+    {"title": "Mix âm thanh", "craft": "Sound", "start": 5, "end": 7,
+     "status": "Blocked"},
+    {"title": "Giao file cho khách", "craft": "Producing",
+     "start": 8, "end": 8, "status": "To do"},
+    # Undated on purpose: work written down before it is scheduled has
+    # to have somewhere to live on all three views.
+    {"title": "Cắt bản dọc cho social", "craft": "Editing", "crew": 0},
+]
+
+
+def ensure_crew():
+    """The crew accounts, with the Crew role and a preview password."""
+    emails = []
+    for person in CREW:
+        email = person["email"]
+        if not frappe.db.exists("User", email):
+            frappe.get_doc(
+                {
+                    "doctype": "User",
+                    "user_type": "System User",
+                    "send_welcome_email": 0,
+                    **person,
+                }
+            ).insert(ignore_permissions=True)
+        user = frappe.get_doc("User", email)
+        user.append_roles("Crew")
+        user.new_password = CREW_PASSWORD
+        user.save(ignore_permissions=True)
+        emails.append(email)
+    return emails
+
+
+def seed_t7_1_job_tasks(deal_name):
+    """T7.1: a task plan on the job in production, and crew to read it.
+
+    Hung off the T7 job rather than a job of its own: the point of the
+    ticket is that the *same* job reads two ways - everything to the
+    producer, no money at all to the editor.
+    """
+    crew = ensure_crew()
+    job = frappe.db.get_value("Job", {"title": WON_DEAL})
+    if not job or frappe.db.exists("Job Task", {"job": job}):
+        return
+
+    for task in TASKS:
+        assigned = task.get("crew")
+        frappe.get_doc(
+            {
+                "doctype": "Job Task",
+                "job": job,
+                "title": task["title"],
+                "craft": task["craft"],
+                "status": task.get("status", "To do"),
+                "assigned_to": crew[assigned] if assigned is not None else founder(),
+                "start_date": (
+                    frappe.utils.add_days(frappe.utils.today(), task["start"])
+                    if "start" in task
+                    else None
+                ),
+                "end_date": (
+                    frappe.utils.add_days(frappe.utils.today(), task["end"])
+                    if "end" in task
+                    else None
+                ),
+            }
+        ).insert(ignore_permissions=True)
+
+
 FEATURE_SEEDS = {
     "T6 quote delivery": seed_t6_quote_delivery,
     "T6.1a company identity": seed_t6_1a_company_identity,
     "T7 job in production": seed_t7_job_in_production,
+    "T7.1 job tasks and crew": seed_t7_1_job_tasks,
     "T8 money out": seed_t8_money_out,
     "T10 payment milestones": seed_t10_payment_milestones,
     "T11 paperwork templates": seed_t11_paperwork,
