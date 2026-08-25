@@ -78,13 +78,13 @@ type CashAccountEntries = {
 export const Route = createFileRoute("/finance/accounts")({
   head: () => ({
     meta: [
-      { title: "Cash accounts - what the company holds | AuraOS" },
+      { title: "Accounts - what the company holds | AuraOS" },
       {
         name: "description",
         content:
           "Every cash account with its balance, summed from the ledger rather than typed in, and the movements behind each figure.",
       },
-      { property: "og:title", content: "Cash accounts - AuraOS" },
+      { property: "og:title", content: "Accounts - AuraOS" },
       {
         property: "og:description",
         content: "Balances derived from the cash ledger, per account and in total.",
@@ -119,7 +119,7 @@ function CashAccountsPage() {
 
   return (
     <AppShell
-      title="Cash accounts"
+      title="Accounts"
       meta="What the company holds, summed from the ledger"
       actions={<Pill tone="ink">Derived</Pill>}
     >

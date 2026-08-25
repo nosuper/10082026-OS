@@ -65,7 +65,7 @@
 :root {
   --radius: 0.75rem;
 
-  /* canvas #fbfbfa / ink #1a1a1a / muted #6b6b6b / border #e8e8e7 / ember #e85d3a */
+  /* canvas #fbfbfa / ink #1a1a1a / muted #6b6b6b / border #e8e8e7 / ember #c83f00 */
   --background: oklch(0.988 0.002 90);
   --foreground: oklch(0.205 0 0);
   --card: oklch(1 0 0);
@@ -80,9 +80,9 @@
   --muted-foreground: oklch(0.52 0 0);
   --accent: oklch(0.958 0.003 90);
   --accent-foreground: oklch(0.205 0 0);
-  --ember: oklch(0.653 0.183 39);
+  --ember: oklch(0.56 0.183 39);
   --ember-foreground: oklch(0.995 0 0);
-  --ember-soft: oklch(0.958 0.032 45);
+  --ember-soft: oklch(0.975 0.028 45);
   --positive: oklch(0.55 0.12 155);
   --warning: oklch(0.72 0.14 75);
   --destructive: oklch(0.55 0.2 27);
@@ -90,8 +90,8 @@
   --border: oklch(0.925 0.002 90);
   --border-strong: oklch(0.88 0.002 90);
   --input: oklch(0.925 0.002 90);
-  --ring: oklch(0.653 0.183 39);
-  --chart-1: oklch(0.653 0.183 39);
+  --ring: oklch(0.56 0.183 39);
+  --chart-1: oklch(0.56 0.183 39);
   --chart-2: oklch(0.205 0 0);
   --chart-3: oklch(0.52 0 0);
   --chart-4: oklch(0.72 0.14 75);
@@ -103,7 +103,7 @@
   --sidebar-accent: oklch(0.968 0.002 90);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.925 0.002 90);
-  --sidebar-ring: oklch(0.653 0.183 39);
+  --sidebar-ring: oklch(0.56 0.183 39);
 }
 
 .dark {
@@ -220,3 +220,23 @@
   vertical-align: top;
 }
 .aura-rich th { font-weight: 600; background: var(--color-secondary); }
+
+/* The focus ring. Deliberately **unlayered**.
+ *
+ * `outline-none` appears 63 times across 23 files, and in Tailwind v4 that
+ * utility lives in `@layer utilities` — which beats `@layer base` no matter
+ * what order the two are written in. A base-layer rule here would look right
+ * in the file and do nothing in the browser. Unlayered styles win over every
+ * layered one, so this is the one placement that actually lands.
+ *
+ * `:where()` holds specificity at zero, so a component that wants its own
+ * focus treatment still only needs an ordinary rule to take over.
+ *
+ * `--ring` was already defined and, until now, used by nothing the app mounts.
+ * Closes WCAG 2.2 SC 2.4.7 (Level A).
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 2px);
+}

@@ -95,7 +95,7 @@ function FinanceDashboard() {
 
   return (
     <AppShell
-      title="Finance"
+      title="Dashboard"
       meta={`Cash basis · ${rangeLabel(range)}`}
       actions={
         <Link

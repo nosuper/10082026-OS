@@ -1044,6 +1044,9 @@ function BreakdownPage() {
 
   return (
     <AppShell
+      // The cost table is genuinely two-dimensional and already fights for
+      // horizontal room; capping it here would make it worse, not better.
+      wide
       title={serverDoc?.title || deal.data?.title || dealCode}
       meta={
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

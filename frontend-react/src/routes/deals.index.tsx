@@ -541,6 +541,9 @@ function DealsPage() {
     <AppShell
       title="Deals"
       meta={meta}
+      // The board is the two-dimensional case Atlassian's grid reserves fluid
+      // width for; the table is not, so it stays capped with everything else.
+      wide={prefs.view === "kanban"}
       actions={
         <button
           onClick={() => setNewOpen(true)}
@@ -551,26 +554,31 @@ function DealsPage() {
       }
     >
       <div className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          {OPEN_STAGES.map((stage) => {
-            const items = byStage.get(stage) ?? [];
-            return (
-              <div key={stage} className="rounded-xl border border-border bg-card p-4">
-                <div className="label-caps">{stage}</div>
-                <div className="mt-1.5 flex items-baseline gap-2">
-                  <span className="num text-lg font-semibold">{items.length}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {items.length === 1 ? "deal" : "deals"}
-                  </span>
+        {/* Only in table view. The board's own column headers already carry
+            this count and this sum, sixty pixels below - so in kanban, which
+            is the default, every number here was being read twice. */}
+        {prefs.view === "table" ? (
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            {OPEN_STAGES.map((stage) => {
+              const items = byStage.get(stage) ?? [];
+              return (
+                <div key={stage} className="rounded-xl border border-border bg-card p-4">
+                  <div className="label-caps">{stage}</div>
+                  <div className="mt-1.5 flex items-baseline gap-2">
+                    <span className="num text-lg font-semibold">{items.length}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {items.length === 1 ? "deal" : "deals"}
+                    </span>
+                  </div>
+                  <Money
+                    value={sum(items.map((item) => item.estimated_budget))}
+                    className="mt-1 block text-xs text-muted-foreground"
+                  />
                 </div>
-                <Money
-                  value={sum(items.map((item) => item.estimated_budget))}
-                  className="mt-1 block text-xs text-muted-foreground"
-                />
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : null}
 
         <Card
           title="All deals"
