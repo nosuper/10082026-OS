@@ -1735,16 +1735,84 @@ for a studio of this size:
 > creates chaos as teams scale.**"
 > — [linear.app/method/introduction](https://linear.app/method/introduction)
 
-**Jira sits between them** and is the most instructive for AuraOS, because Jira
-solves "same data, several surfaces" explicitly: a board, a backlog, an issue
-navigator and a dashboard are four presentations of the same issues, each
-answering a different question, and Atlassian is clear that you switch
-presentation rather than duplicate data
-([support.atlassian.com](https://support.atlassian.com/jira-service-management-cloud/docs/switch-between-views-for-different-ways-to-visualize-your-work-items/)).
-Its record-page rule is the transplantable one already quoted in §6.17:
+**Jira sits between them and is the most instructive for AuraOS**, because it
+answers the "should this be its own screen?" question in writing, more than once.
+
+*A terminology note before the quotes:* current Jira Cloud docs have renamed
+**project → space** and **issue → work item**. Data Center docs still say
+project and issue. Quotes below keep whichever word the cited page uses.
+
+The container-versus-view distinction, stated three times on one page
+([atlassian.com/software/jira/guides/boards/overview](https://www.atlassian.com/software/jira/guides/boards/overview)):
+
+> "A Jira space houses all work items needed to achieve a particular goal. A Jira
+> board, on the other hand, is the tool used to manage those work items as they
+> move from creation to completion."
+> "In short, the space holds the work, and the board is how you visualize and
+> move it."
+> **"The space is the container; the board is the view."**
+
+And the single most useful sentence in this whole document for §9's question,
+from the same page:
+
+> "**Because every view draws on the same underlying work items, you can move
+> between them without duplicating anything and pick the one that best answers
+> the question in front of you.**"
+
+That page enumerates five surfaces over one set of work items — board ("a
+shared, at-a-glance view of what is being worked on and where it stands"),
+backlog ("holds and prioritizes upcoming work"), list ("a spreadsheet-style view
+of work items and their fields"), timeline, calendar — plus dashboards
+elsewhere, which aggregate the same items again through saved filters: a filter
+can *"Display the search results in a dashboard gadget"*
+([support.atlassian.com](https://support.atlassian.com/jira-software-cloud/docs/save-your-search-as-a-filter/)).
+
+**Atlassian's answer to "make a new page?" is documented and it is "no — make a
+view."** The boards guide lists three cases where a team wants more separation —
+*"Different work streams within a single space"*, *"Multiple teams working on a
+single project"*, *"Lengthy processes with various stakeholders"* — and the
+prescribed answer to every one of them is **another board over a filter, not
+another project**. Cross-space boards handle the rest: *"A cross-space board can
+surface the right work items while keeping other spaces private."*
+
+Jira also names its navigation levels, which ADS does not do publicly
+([atlassian.com/software/jira/guides/navigation/overview](https://www.atlassian.com/software/jira/guides/navigation/overview)):
+
+> "**The top navigation or top bar**: ...actions that affect your entire site."
+> "**The side navigation or sidebar**: Navigation in Jira starts from the
+> sidebar, where you can work across multiple projects..."
+> "**The horizontal project navigation** in Jira offers different views... While
+> the sidebar lets you seamlessly navigate between different Jira projects, the
+> project navigation allows you to change between different views..."
+
+— which is exactly AuraOS's shape: a sidebar for objects, a horizontal strip
+for views of one object. And Atlassian's advice about that strip is the same as
+§6.3's and §9.5 B's:
+
+> "If you're a project admin, you can customize the project navigation to suit
+> your team's needs and **reduce clutter**." / "**prioritize the views your team
+> uses the most for a cleaner, focused tab layout** that helps reduce confusion
+> and keeps everyone aligned."
+
+Jira's record-page rule is the transplantable one already quoted in §6.17:
 description fields where people look first, context fields to the side, and
 **hide-when-empty** below a divider
 ([support.atlassian.com](https://support.atlassian.com/jira-software-cloud/docs/configure-field-layout-in-the-work-item/)).
+
+**Two things Atlassian does *not* publish**, checked and worth knowing so nobody
+goes looking: there is no first-party page giving criteria for *when to create a
+new project versus a component or a label* — the widely-quoted line about
+"different project-specific settings" is from `community.atlassian.com`, a user
+forum, and is not cited here. And there is no public ADS page enumerating the
+navigation levels; `atlassian.design/components/navigation-system` says the
+fuller guidance is *"(Atlassians only)"*. The closest first-party structural
+advice is the honest one:
+
+> "**There is no one-size fits all approach to structuring a project in Jira.**
+> However, it may be helpful to recognize that **Jira projects are not intended
+> to be bespoke or unique to a single outcome. Rather, they capture ongoing
+> efforts.**"
+> — [atlassian.com/software/jira/guides/projects/tutorials](https://www.atlassian.com/software/jira/guides/projects/tutorials)
 
 Atlassian's own navigation guidance points the same direction as Linear's
 count — *"**Keep nested navigation levels to a minimum. If you need to use a
@@ -1801,6 +1869,19 @@ their own server-side search box, and the one affordance that would cross
 objects — the `⌘K` chip in the header — does nothing (§6.12). So when a screen
 prints a record's name without linking it, the recovery is: read it, remember
 it, go to the right list, search it again.
+
+There are also no breadcrumbs anywhere in the app. The detail screens partly
+substitute with a back-link in `AppShell`'s `meta` slot — `jobs.$jobId.tsx:153`
+renders `‹ Jobs`, and the quote and deal pages do the same — which is the right
+instinct. Atlassian's rule is that breadcrumbs *"are a useful addition to, but
+shouldn't replace, the main navigation on a page"*, and are for *"large websites
+and complex apps that have hierarchically arranged pages, so that users who land
+on the page can quickly know where they are"*
+([atlassian.design](https://atlassian.design/components/breadcrumbs/usage)).
+**Judgement: AuraOS is not deep enough to need breadcrumbs** — two levels at
+most — and the existing back-links do the job. This is listed so that
+"add breadcrumbs" does not get proposed as the fix for §9.3's dead ends. It is
+not; the fix is making the names into links.
 
 ### 9.3 The five flows, traced from the code
 
@@ -2090,9 +2171,20 @@ backend says so:
 A deal has many versions. `/deals` is one row per deal; `/quotations` is one row
 per version. You cannot filter one into the other. **Keep both.**
 
-But `/quotations` is a filtered, searchable view over one doctype with three
-summary tiles — which is a *view*, not a section. That is fine; Linear's sidebar
-is largely views. What is not fine is that it is **read-only** (§9.3 Flow A).
+In Atlassian's vocabulary the Deal is the container and both lists are views of
+it — *"The space is the container; the board is the view"*, and *"because every
+view draws on the same underlying work items, you can move between them without
+duplicating anything and pick the one that best answers the question in front of
+you"*
+([atlassian.com](https://www.atlassian.com/software/jira/guides/boards/overview)).
+`/quotations` is a filtered, searchable view over one doctype with three summary
+tiles. That is a view, not a section, and having it is right; Linear's sidebar is
+largely views and Jira's documented answer to "should this be a new page?" is
+"make another board over a filter."
+
+What is not fine is that **this view is read-only** (§9.3 Flow A). Every other
+product's views act on the objects they show — that is what makes them views
+rather than reports. AuraOS's Quotations view is a report.
 
 **Proposal.**
 1. Put `Mark sent` and `Mark confirmed` on the `/quotations` row, behind the
@@ -2384,7 +2476,11 @@ rather than "therefore nine tabs is right", which does not follow.
 [components/spinner/usage](https://atlassian.design/components/spinner/usage),
 [components/panel/usage](https://atlassian.design/components/panel/usage),
 [components/progress-indicator/usage](https://atlassian.design/components/progress-indicator/usage),
+[components/navigation-system](https://atlassian.design/components/navigation-system),
 [components/navigation-system/layout](https://atlassian.design/components/navigation-system/layout),
+[components/navigation-system/top-nav-items](https://atlassian.design/components/navigation-system/top-nav-items),
+[components/breadcrumbs/usage](https://atlassian.design/components/breadcrumbs/usage),
+[components/page-header/examples](https://atlassian.design/components/page-header/examples),
 [components/side-navigation/usage](https://atlassian.design/components/side-navigation/usage) (deprecated),
 [components/page-layout/usage](https://atlassian.design/components/page-layout/usage) (deprecated).
 
@@ -2396,7 +2492,19 @@ rather than "therefore nine tabs is right", which does not follow.
 [add and customize gadgets](https://support.atlassian.com/jira-software-cloud/docs/add-and-customize-gadgets/),
 [create and edit dashboards](https://support.atlassian.com/jira-software-cloud/docs/create-and-edit-dashboards/),
 [permissions overview](https://support.atlassian.com/jira/kb/jira-permissions-general-overview/),
-[configure issue security schemes](https://support.atlassian.com/jira-cloud-administration/docs/configure-issue-security-schemes/).
+[configure issue security schemes](https://support.atlassian.com/jira-cloud-administration/docs/configure-issue-security-schemes/),
+[boards guide](https://www.atlassian.com/software/jira/guides/boards/overview),
+[navigation guide](https://www.atlassian.com/software/jira/guides/navigation/overview),
+[projects tutorials](https://www.atlassian.com/software/jira/guides/projects/tutorials),
+[what is a Jira space](https://support.atlassian.com/jira-software-cloud/docs/what-is-a-jira-software-project/),
+[what is a board](https://support.atlassian.com/jira-software-cloud/docs/what-is-a-jira-software-board/),
+[use your Scrum backlog](https://support.atlassian.com/jira-software-cloud/docs/use-your-scrum-backlog/),
+[save your search as a filter](https://support.atlassian.com/jira-software-cloud/docs/save-your-search-as-a-filter/),
+[configure filters](https://support.atlassian.com/jira-software-cloud/docs/configure-filters/),
+[create a board based on filters](https://support.atlassian.com/jira-software-cloud/docs/create-a-board-based-on-filters/),
+[what is a Jira dashboard](https://support.atlassian.com/jira-software-cloud/docs/what-is-a-jira-dashboard/),
+[work item hierarchy](https://www.atlassian.com/software/jira/guides/issues/overview),
+[defining a project (DC)](https://confluence.atlassian.com/adminjiraserver/defining-a-project-938847066.html).
 
 **ClickUp** —
 [Intro to the Hierarchy](https://help.clickup.com/hc/en-us/articles/13856392825367-Intro-to-the-Hierarchy),
@@ -2492,6 +2600,39 @@ Listed so that nobody re-introduces them from memory:
     making elements, actions, and options visible"*
     ([nngroup.com](https://www.nngroup.com/articles/ten-usability-heuristics/)),
     and are labelled as judgement where they go further than that.
+
+15. **Any first-party Atlassian criteria for "new project versus component
+    versus label".** No such page exists on `support.atlassian.com` or the Jira
+    guides. The line that circulates as Atlassian guidance — *"The time to
+    create a new project is when you need a different set of project-specific
+    settings"* — is from `community.atlassian.com`, a user forum, and is
+    deliberately not cited here. The closest first-party statement is
+    *"**There is no one-size fits all approach to structuring a project in
+    Jira**"*
+    ([atlassian.com](https://www.atlassian.com/software/jira/guides/projects/tutorials)).
+16. **A public ADS page enumerating navigation levels.**
+    `atlassian.design/components/navigation-system` states the fuller guidance is
+    *"(Atlassians only)"*. What ADS publishes is layout *areas* (banner, top nav,
+    side nav, main, panel) with pixel defaults. Jira's own navigation guide names
+    three levels and is cited instead. `atlassian.design/patterns` redirects;
+    `components/atlassian-navigation/usage` is a 404.
+17. **Jira guidance on when to split a project.** None found. Confluence Data
+    Center publishes a governance analogue — an 8,000-space soft ceiling and
+    *"Set up space rules, including when to create new spaces"*
+    ([confluence.atlassian.com](https://confluence.atlassian.com/enterprise/managing-the-number-of-spaces-in-confluence-data-center-1607598774.html))
+    — which is about instance performance, not IA, and is not used above.
+
+**A terminology caveat.** Current Jira Cloud docs have renamed **project →
+space** and **issue → work item**; Data Center docs still use the old words.
+Quotations in this document preserve whichever term the cited page uses, which
+is why §6.17 says "work item" and §9.1 says both. That is inconsistency in the
+source, not in the citation.
+
+**A sourcing caveat.** `atlassian.design` is a client-rendered SPA: plain fetches
+return a ~640KB shell whose article bodies are empty, and there is no
+`page-data.json` escape hatch. Every `atlassian.design` quote here was read from
+a rendered page in a browser. `support.atlassian.com`, `www.atlassian.com` and
+`confluence.atlassian.com` are server-rendered and fetch normally.
 
 **One more caveat specific to §9.** Its flow traces are read off the routing
 and the `<Link>` graph, not observed over anyone's shoulder. They are an
