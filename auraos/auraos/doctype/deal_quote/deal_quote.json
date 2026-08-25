@@ -19,6 +19,9 @@
   "detail_level",
   "column_break_client",
   "notes",
+  "included_revision_rounds",
+  "assumptions",
+  "exclusions",
   "packages_section",
   "packages",
   "lines",
@@ -131,6 +134,28 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "included_revision_rounds",
+   "fieldtype": "Int",
+   "label": "Included Revision Rounds",
+   "default": "2",
+   "description": "Frozen at publish (#35 lock-on-send). Số vòng revision miễn phí, in thẳng lên báo giá (playbook 3.1.7). Job kế thừa đúng con số này khi deal thắng, nên cái đã hứa và cái hệ thống tính tiền là một.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assumptions",
+   "fieldtype": "Small Text",
+   "label": "Assumptions",
+   "description": "Frozen at publish (#35 lock-on-send). Báo giá này dựa trên giả định gì: số ngày quay, số location, phạm vi usage. Mỗi dòng một ý. Client đổi scope thì chỉ vào đây.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exclusions",
+   "fieldtype": "Small Text",
+   "label": "Exclusions",
+   "description": "Frozen at publish (#35 lock-on-send). KHÔNG bao gồm gì: ngày quay thêm, KOL fee, music license mở rộng, phát sóng TV. Mỗi dòng một ý.",
    "read_only": 1
   },
   {

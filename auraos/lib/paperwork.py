@@ -40,7 +40,9 @@ from io import BytesIO
 from typing import Any, Iterable, Mapping, Sequence
 from xml.sax.saxutils import escape, unescape
 
+from auraos.lib.contracts import freelancer_fee
 from auraos.lib.money import format_vnd
+from auraos.lib.vietnamese import in_words
 
 # What a placeholder looks like in the founder's template. Narrow on
 # purpose - a brace around prose, an unclosed pair or anything with a
@@ -102,14 +104,26 @@ class _Report:
 # -- reading a template --
 
 
+NOT_A_DOCX = (
+    "That file is not a docx - Word documents saved as .doc or "
+    "exported as PDF cannot be used as templates."
+)
+
+
 def _archive(data: bytes) -> zipfile.ZipFile:
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        # A caller reading an upload can be handed text rather than
+        # bytes: a file store that decodes what it reads gives back a
+        # string for any file whose bytes happen to be valid UTF-8,
+        # which a tiny PDF or a renamed .txt often is. A docx is a zip
+        # and never decodes, so text arriving here is the same mistake
+        # as any other wrong file and has to read like one, rather than
+        # as a TypeError from inside the zip reader.
+        raise ValueError(NOT_A_DOCX)
     try:
         return zipfile.ZipFile(BytesIO(data))
     except zipfile.BadZipFile:
-        raise ValueError(
-            "That file is not a docx - Word documents saved as .doc or "
-            "exported as PDF cannot be used as templates."
-        ) from None
+        raise ValueError(NOT_A_DOCX) from None
 
 
 def placeholders_in_docx(data: bytes) -> list[str]:
@@ -282,10 +296,15 @@ COMPANY_FIELDS = (
 )
 PERSON_FIELDS = (
     "full_name",
+    # Chức vụ, for the signature block (#147).
+    "title",
     "company",
     "phone",
     "email",
     "id_number",
+    # Ngày cấp / nơi cấp, which freelancer contracts print (#148).
+    "id_issued_on",
+    "id_issued_at",
     "date_of_birth",
     "tax_code",
     "permanent_address",
@@ -307,6 +326,30 @@ MONEY_FIELDS = {
     "vat_amount": "quote_vat_amount",
     "total": "quote_total",
 }
+# The deposit and final halves of the payment plan (#146). Percentages
+# and amounts are formatted differently, so they are listed apart.
+PLAN_PCT_FIELDS = ("deposit_pct", "final_pct")
+PLAN_MONEY_FIELDS = ("deposit_amount", "final_amount")
+
+# The acceptance table's shape, mirrored from lib/acceptance.py so a
+# template can name any cell of it: acceptance.total_remaining and so on.
+ACCEPTANCE_BANDS = ("pre_vat", "vat", "total")
+ACCEPTANCE_COLUMNS = ("contracted", "settled", "difference", "collected", "remaining")
+
+# The day counts, which read as bare numbers rather than as money.
+TERM_DAY_FIELDS = ("deposit_days", "final_days")
+
+# The freelancer fee is typed at generation like the other terms: it is
+# what we agreed to pay this person for this job, and no record holds it.
+
+# Entered at generation, held by no record. See document_values.
+TERM_FIELDS = (
+    "signed_on",
+    "deposit_days",
+    "final_days",
+    "service_start",
+    "service_end",
+)
 PCT_FIELDS = {"mf_pct": "quote_mf_pct", "vat_pct": "vat_pct"}
 
 
@@ -317,6 +360,11 @@ def document_values(
     vendor: Mapping[str, Any] | None = None,
     freelancer: Mapping[str, Any] | None = None,
     today: date | None = None,
+    contract_number: str | None = None,
+    parent_number: str | None = None,
+    terms: Mapping[str, Any] | None = None,
+    plan: Mapping[str, Any] | None = None,
+    acceptance_table: Mapping[str, Any] | None = None,
 ) -> dict[str, str | None]:
     """Every placeholder a template may use, filled from plain records.
 
@@ -339,6 +387,74 @@ def document_values(
     """
     values: dict[str, str | None] = {}
     job = job or {}
+
+    # The number this paper is issued under (#139). Passed in rather
+    # than derived here: it is frozen on the Generated Paper at
+    # generation, and a template must print the number the record
+    # carries rather than the number the rule would produce now.
+    values["contract.number"] = _text(contract_number)
+    # The contract this paper is written *about*, when it is written
+    # about one (#148). Distinct from contract.number: a payment request
+    # has an identity of its own AND references the agreement it
+    # collects under, and the template asks for both in two sentences.
+    values["contract.parent_number"] = _text(parent_number)
+
+    # What the founder types at generation because no record holds it
+    # (#139): when the contract was signed, the payment terms in days,
+    # and the service window. Offered as its own namespace rather than
+    # folded into `job` - `job.*` is what the record says, and a reader
+    # who cannot tell the two apart will eventually look for these on
+    # the Job and not find them. Absent stays absent: a term nobody
+    # entered reports as missing data rather than as a plausible zero.
+    terms = terms or {}
+    for name in TERM_FIELDS:
+        values[f"terms.{name}"] = _text(terms.get(name))
+
+    # The two halves a contract describes (#146). Absent rather than
+    # zero when the plan cannot say them: a contract whose final
+    # instalment reads 0% is worse than one with a visible gap, because
+    # only one of the two stops somebody signing it.
+    # Every money value a contract states also has to be readable in
+    # words, because on a Vietnamese contract the words are the
+    # authoritative figure (#145). Derived here rather than asked for,
+    # so the two can never disagree.
+    values["quote.total_in_words"] = in_words(job.get("quote_total")) or None
+    for name in TERM_DAY_FIELDS:
+        values[f"terms.{name}_in_words"] = in_words(terms.get(name), currency=False) or None
+
+    # A freelancer contract states three figures for one fee (#148):
+    # the gross it is written as, the PIT withheld from it, and what
+    # actually reaches the freelancer. Derived from the net through the
+    # company's own pricing convention rather than restated here.
+    fee = freelancer_fee(terms.get("freelancer_fee"))
+    for name in ("gross", "tax", "net"):
+        values[f"fee.{name}"] = _money(fee[name]) if fee else None
+        values[f"fee.{name}_in_words"] = in_words(fee[name]) if fee else None
+
+    # The acceptance document's summary table (#153). Namespaced
+    # `acceptance` rather than `settlement`, because lib/settlement.py
+    # is this codebase's producer-float module and the collision is the
+    # kind that reads fine until somebody wires the wrong one.
+    for band_name in ACCEPTANCE_BANDS:
+        row = (acceptance_table or {}).get(band_name) or {}
+        for column in ACCEPTANCE_COLUMNS:
+            values[f"acceptance.{band_name}_{column}"] = (
+                _money(row.get(column)) if row.get(column) is not None else None
+            )
+    values["acceptance.total_remaining_in_words"] = (
+        in_words((acceptance_table or {}).get("total", {}).get("remaining"))
+        if ((acceptance_table or {}).get("total") or {}).get("remaining") is not None
+        else None
+    )
+
+    plan = plan or {}
+    for name in PLAN_PCT_FIELDS:
+        values[f"plan.{name}"] = _pct(plan.get(name)) if plan.get(name) is not None else None
+    for name in PLAN_MONEY_FIELDS:
+        values[f"plan.{name}"] = _money(plan.get(name)) if plan.get(name) is not None else None
+        values[f"plan.{name}_in_words"] = (
+            in_words(plan.get(name)) if plan.get(name) is not None else None
+        )
 
     for name, fieldname in JOB_FIELDS.items():
         values[f"job.{name}"] = _text(job.get(fieldname))

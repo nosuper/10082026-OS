@@ -9,6 +9,7 @@
   "company_name",
   "role_tags",
   "column_break_main",
+  "short_code",
   "tax_code",
   "address",
   "contact_section",
@@ -44,6 +45,12 @@
   {
    "fieldname": "column_break_main",
    "fieldtype": "Column Break"
+  },
+  {
+   "description": "Used in contract numbers as AURA-{code}. Suggested from the name; edit it if the client is known by something else. May be left blank - generation asks for it when it is missing.",
+   "fieldname": "short_code",
+   "fieldtype": "Data",
+   "label": "Short Code"
   },
   {
    "fieldname": "tax_code",

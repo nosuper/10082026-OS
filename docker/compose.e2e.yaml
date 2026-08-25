@@ -6,9 +6,13 @@ services:
   frappe:
     environment: *e2e-producer
 
-  playwright:
+  # The runner for the React app. There was a second one alongside it for the
+  # Vue app until #103 retired that app; they differed only in working
+  # directory and node_modules volume, because the two were separate npm
+  # projects.
+  playwright-react:
     image: mcr.microsoft.com/playwright:v1.55.0-noble
-    working_dir: /workspace/repo/frontend
+    working_dir: /workspace/repo/frontend-react
     environment:
       <<: *e2e-producer
       E2E_BASE_URL: http://frappe:8000
@@ -20,10 +24,10 @@ services:
       E2E_AUTH_DIR: /tmp/playwright-auth
     volumes:
       - ..:/workspace/repo
-      - playwright-node-modules:/workspace/repo/frontend/node_modules
+      - playwright-react-node-modules:/workspace/repo/frontend-react/node_modules
       - ../.e2e-npm-cache:/root/.npm
     depends_on:
       - frappe
 
 volumes:
-  playwright-node-modules:
+  playwright-react-node-modules:

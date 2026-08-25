@@ -11,9 +11,15 @@
   "column_break_head",
   "vendor",
   "freelancer",
+  "contract_number",
   "file_section",
   "file_name",
-  "file_url"
+  "file_url",
+  "signing_section",
+  "status",
+  "column_break_signing",
+  "status_changed_by",
+  "status_changed_on"
  ],
  "fields": [
   {
@@ -63,6 +69,13 @@
    "read_only": 1
   },
   {
+   "description": "The number this paper was issued under. Written once at generation and never re-derived.",
+   "fieldname": "contract_number",
+   "fieldtype": "Data",
+   "label": "Contract Number",
+   "read_only": 1
+  },
+  {
    "fieldname": "file_section",
    "fieldtype": "Section Break",
    "label": "File"
@@ -79,11 +92,45 @@
    "fieldtype": "Data",
    "label": "File URL",
    "read_only": 1
+  },
+  {
+   "fieldname": "signing_section",
+   "fieldtype": "Section Break",
+   "label": "Signing"
+  },
+  {
+   "default": "Draft",
+   "description": "Draft when the paper has just been generated, Awaiting signature once it has gone out to whoever must sign, Signed once it comes back. Nothing enforces the order - a paper can go back to Draft, because a real document sometimes has to be redone",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nAwaiting signature\nSigned",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_signing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Written by the controller whenever the status moves - who told us this was signed",
+   "fieldname": "status_changed_by",
+   "fieldtype": "Link",
+   "label": "Status Changed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_changed_on",
+   "fieldtype": "Datetime",
+   "label": "Status Changed On",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-13 00:00:00.000000",
+ "modified": "2026-08-19 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "AuraOS",
  "name": "Generated Paper",
@@ -109,7 +156,8 @@
    "read": 1,
    "report": 1,
    "role": "Producer",
-   "share": 1
+   "share": 1,
+   "write": 1
   },
   {
    "create": 1,

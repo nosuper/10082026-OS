@@ -7,6 +7,7 @@
   "margin_floor_pct",
   "quote_silence_days",
   "payment_terms_days",
+  "default_cash_account",
   "tier2_threshold",
   "tier3_threshold",
   "positioning_cash_pct",
@@ -28,7 +29,9 @@
   "bank_account_name",
   "signature_section",
   "signatory_name",
-  "signatory_title"
+  "signatory_title",
+  "forecast_section",
+  "stage_forecast"
  ],
  "fields": [
   {
@@ -145,6 +148,13 @@
    "non_negative": 1
   },
   {
+   "description": "Where a collected payment lands when nobody names an account. Set to the first cash account created; nothing posts to the ledger while it is empty, and collection carries on regardless.",
+   "fieldname": "default_cash_account",
+   "fieldtype": "Link",
+   "label": "Default Cash Account",
+   "options": "Cash Account"
+  },
+  {
    "description": "A deal whose estimated budget reaches this is suggested Tier 2 (playbook \u00a72.2). Unset falls back to 50.000.000.",
    "fieldname": "tier2_threshold",
    "fieldtype": "Currency",
@@ -176,12 +186,25 @@
    "fieldtype": "Int",
    "label": "Brand Work Target %",
    "non_negative": 1
+  },
+  {
+   "description": "Per-stage dials for the cash forecast (#102). A stage with no row falls back to the house default in auraos/lib/forecast.py and is shown as such - an absent row is the only thing that can mean \"not configured\", because Lost is legitimately 0% and a stored 0 reads exactly like a field nobody ever wrote.",
+   "fieldname": "forecast_section",
+   "fieldtype": "Section Break",
+   "label": "Cash Forecast"
+  },
+  {
+   "description": "Win probability and lead time per deal stage. Read live on every forecast: nothing is cached and no weighted figure is stored anywhere, so a probability changed here changes the forecast on the next read.",
+   "fieldname": "stage_forecast",
+   "fieldtype": "Table",
+   "label": "Stage Forecast Rules",
+   "options": "Deal Stage Forecast"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-11 00:00:00.000000",
+ "modified": "2026-08-19 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "AuraOS",
  "name": "AuraOS Settings",

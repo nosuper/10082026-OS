@@ -89,6 +89,15 @@ class DealParams:
     quote_mf_rate: Amount = Decimal("0.10")
     vat_rate: Amount = Decimal("0.08")
     commission_rate: Amount = Decimal("0.05")
+    # Contingency (playbook §3.1.4) defaults to ZERO here, unlike its
+    # siblings, and the exception is deliberate. The company's standing
+    # practice is ~10%, but this engine also recomputes deals that were
+    # quoted before contingency existed - Deal.compute_breakdown runs on
+    # every save. A non-zero default would reprice every one of them the
+    # next time anybody touched them, silently and by 10%. The standing
+    # practice belongs on the Deal doctype's field default, where it
+    # applies to new deals only; an unset rate here has to be an identity.
+    contingency_rate: Amount = 0
 
 
 @dataclass(frozen=True)
@@ -142,25 +151,45 @@ def compute_line(line: CostLine, params: DealParams) -> ComputedLine:
     quote_mf_rate = _d(params.quote_mf_rate)
     vat_rate = _d(params.vat_rate)
     commission_rate = _d(params.commission_rate)
+    contingency = 1 + _d(params.contingency_rate)
     tax = line.tax_type
 
     subtotal = qty1 * qty2 * unit_price
     cost_after_mf = subtotal * (1 + vendor_mf_rate)
 
+    # Input VAT and PIT are computed BEFORE contingency and stay off it.
+    # A contingency is money not yet spent: there is no supplier invoice
+    # behind it to reclaim VAT against, and no freelancer has been paid
+    # PIT on it. Scaling these with it would inflate reclaimable input
+    # VAT and understate `vat_payable` - an error in the direction that
+    # costs money at an audit.
     input_vat = cost_after_mf * VAT_RATE_BY_TAX_TYPE.get(tax, Decimal(0))
     if tax is TaxType.CA_NHAN:
         # Freelancer quotes a net figure; the company bears 10% PIT on the
         # gross, so true cost = net ÷ 0.9 and the tax itself = net ÷ 9.
         vat_pit = cost_after_mf / 9
-        profit_cost_basis = cost_after_mf / Decimal("0.9")
-        grossed_unit_price = unit_price / Decimal("0.9")
+        true_cost = cost_after_mf / Decimal("0.9")
+        base_unit_price = unit_price / Decimal("0.9")
     else:
         vat_pit = input_vat
-        profit_cost_basis = cost_after_mf
-        grossed_unit_price = unit_price
+        true_cost = cost_after_mf
+        base_unit_price = unit_price
 
-    # Markup starts from the (grossed-up) unit price, not cost-after-MF:
-    # the markup is expected to cover any vendor MF.
+    # Contingency (§3.1.4): "nằm TRONG cost, trước markup - là chi phí dự
+    # phòng thật, không phải lợi nhuận." So it has to move BOTH numbers.
+    # Inflating the cost basis alone would collapse the margin; inflating
+    # the price alone would turn a reserve into profit, which is the one
+    # thing the playbook says it is not. Scaling both by the same factor
+    # leaves margin *percentage* untouched, which is what "not profit"
+    # means arithmetically.
+    #
+    # For a freelancer line the reserve is taken on the grossed cost,
+    # because the grossed figure is what the company actually bears.
+    profit_cost_basis = true_cost * contingency
+    grossed_unit_price = base_unit_price * contingency
+
+    # Markup starts from the (grossed-up, contingency-loaded) unit price,
+    # not cost-after-MF: the markup is expected to cover any vendor MF.
     markup_unit_price = grossed_unit_price * (1 + markup_rate)
     line_total = markup_unit_price * qty1 * qty2
 

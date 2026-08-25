@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "template_name",
+  "kind",
   "template_file",
   "template_source",
   "disabled",
@@ -16,7 +17,7 @@
  ],
  "fields": [
   {
-   "description": "What the founder calls this paper - H\u1ee3p \u0111\u1ed3ng d\u1ecbch v\u1ee5, Bi\u00ean b\u1ea3n nghi\u1ec7m thu, Ph\u1ee5 l\u1ee5c",
+   "description": "What the founder calls this paper - Hợp đồng dịch vụ, Biên bản nghiệm thu, Phụ lục",
    "fieldname": "template_name",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -24,6 +25,13 @@
    "label": "Template Name",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "description": "Which numbered document this is. HDDV is the client contract, HDCC the vendor one; both mint their own number. BBNT and DNTT carry their parent contract's. Blank means it is not a numbered contract - the phu luc, and anything else that carries none.",
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "\nHDDV\nHDCC\nBBNT\nDNTT"
   },
   {
    "description": "The .docx as designed in Word, with {{client.tax_code}} typed where a value belongs",

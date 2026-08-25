@@ -314,6 +314,75 @@ class TestFloorBreach:
         assert is_floor_breached(None, D("0.30")) is True
 
 
+class TestContingency:
+    """§3.1.4: contingency is inside cost and before markup.
+
+    The playbook's sentence is "chi phí dự phòng thật, không phải lợi
+    nhuận" - a real reserve, not profit - and each test here pins one
+    half of what that has to mean arithmetically. The one that matters
+    most is test_margin_percentage_is_untouched: it is the difference
+    between a reserve and a hidden price rise, and it is the assertion
+    that fails if someone later "simplifies" this into an uplift on the
+    price alone.
+    """
+
+    def test_default_is_an_identity(self):
+        # Every deal quoted before contingency existed recomputes on every
+        # save. An unset rate has to leave those figures exactly alone.
+        priced = line(unit_price=1_000_000, markup_rate=D("0.2"))
+        assert compute_line(priced, DealParams()) == compute_line(
+            priced, DealParams(contingency_rate=0)
+        )
+
+    def test_it_is_inside_the_cost_basis(self):
+        priced = line(unit_price=1_000_000, tax_type=TaxType.KHONG_HOA_DON)
+        plain = compute_line(priced, DealParams())
+        with_reserve = compute_line(priced, DealParams(contingency_rate=D("0.1")))
+        assert with_reserve.profit_cost_basis == plain.profit_cost_basis * D("1.1")
+
+    def test_markup_applies_after_it(self):
+        # Not a second markup line: the reserve enters the base the markup
+        # is taken on, so the price moves by the reserve times the markup.
+        priced = line(
+            unit_price=1_000_000, markup_rate=D("0.2"), tax_type=TaxType.KHONG_HOA_DON
+        )
+        plain = compute_line(priced, DealParams())
+        with_reserve = compute_line(priced, DealParams(contingency_rate=D("0.1")))
+        assert with_reserve.budget == plain.budget * D("1.1")
+
+    def test_margin_percentage_is_untouched(self):
+        # The whole claim. Cost and price scale together, so the reserve
+        # cannot show up as profit - which is what the playbook forbids.
+        priced = line(
+            unit_price=1_000_000, markup_rate=D("0.25"), tax_type=TaxType.CONG_TY
+        )
+        plain = compute_line(priced, DealParams())
+        with_reserve = compute_line(priced, DealParams(contingency_rate=D("0.1")))
+        assert with_reserve.margin_pct == plain.margin_pct
+        assert with_reserve.margin > plain.margin
+
+    def test_no_input_vat_on_money_not_yet_spent(self):
+        # There is no supplier invoice behind a reserve, so there is
+        # nothing to reclaim against. Scaling input VAT with it would
+        # understate VAT phải nộp, which is the direction that costs money
+        # at an audit.
+        priced = line(unit_price=1_000_000, tax_type=TaxType.CONG_TY)
+        plain = compute_line(priced, DealParams())
+        with_reserve = compute_line(priced, DealParams(contingency_rate=D("0.1")))
+        assert with_reserve.input_vat == plain.input_vat
+
+    def test_a_freelancer_reserve_is_taken_on_the_grossed_cost(self):
+        # Cá nhân costs the company net ÷ 0.9, and that grossed figure is
+        # what it actually bears - so the reserve is 10% of it, not of the
+        # net the freelancer quoted. PIT itself stays off the reserve for
+        # the same reason input VAT does: nobody has been paid it.
+        priced = line(unit_price=900_000, tax_type=TaxType.CA_NHAN)
+        plain = compute_line(priced, DealParams())
+        with_reserve = compute_line(priced, DealParams(contingency_rate=D("0.1")))
+        assert with_reserve.profit_cost_basis == plain.profit_cost_basis * D("1.1")
+        assert with_reserve.vat_pit == plain.vat_pit
+
+
 class TestPurity:
     def test_module_never_imports_frappe(self):
         assert "auraos.lib.pricing" in sys.modules

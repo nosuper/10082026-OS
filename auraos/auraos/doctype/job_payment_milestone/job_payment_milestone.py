@@ -15,7 +15,11 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from auraos.auraos.doctype.cash_account.cash_account import default_account
+from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+from auraos.lib import ledger
 from auraos.lib.milestones import (
+    INVOICE_FIELDS,
     NOT_REQUESTED,
     STATUS_FLOW,
     allocated_pct,
@@ -27,6 +31,7 @@ from auraos.lib.milestones import (
     milestone_amounts,
     stage_reached,
     stamps_for,
+    vat_basis,
 )
 from auraos.settings import setting
 
@@ -91,7 +96,11 @@ def apply_to(job, stages):
             status=row.status,
             now=now,
         )
-        stamps = stamps_for(row.status or NOT_REQUESTED, row.as_dict(), now)
+        # job.vat_pct is only ever taken by a milestone being invoiced
+        # for the first time; stamps_for keeps a rate already recorded.
+        stamps = stamps_for(
+            row.status or NOT_REQUESTED, row.as_dict(), now, vat_pct=job.vat_pct
+        )
         for field, value in stamps.items():
             row.set(field, value)
 
@@ -125,6 +134,36 @@ def validate_plan(rows, stages):
         )
 
 
+def post_collections(job):
+    """Record where each collected milestone's money landed (#99).
+
+    Hung off the job's save rather than off the endpoint that marks a
+    milestone paid, for the same reason the stamps are: the status is
+    written by whoever saves the Job, and an endpoint is only the door we
+    happen to have built. A posting that lives in the endpoint is a
+    posting the Desk form walks straight past.
+
+    Saving twice is not paying twice. Every save asks the same question
+    of every milestone - what should the ledger say about this money -
+    and auraos.lib.ledger.posting answers "nothing" as soon as the ledger
+    already says it. That is also what makes the walk back work: a
+    milestone dragged out of đã thanh toán takes its entry with it.
+
+    The account is chosen per collection and falls back to the company's
+    default. An entry already on file keeps the account it was posted to;
+    only a movement being recorded for the first time uses this one.
+    """
+    account = job.flags.get("cash_account") or default_account()
+    for row in job.get("payment_milestones") or []:
+        values = row.as_dict()
+        cash_ledger_entry.sync(
+            flow=ledger.CLIENT_PAYMENT,
+            source_name=row.name,
+            wanted=ledger.client_payment(values, account, job=job.name),
+            moved=ledger.collected(values),
+        )
+
+
 # What a milestone row carries onto a screen. The lateness verdict is
 # added by milestone_view, never stored.
 VIEW_FIELDS = (
@@ -139,6 +178,9 @@ VIEW_FIELDS = (
     "requested_on",
     "invoiced_on",
     "paid_on",
+    # The invoice, on the row it bills: its number and the rate it was
+    # written on, so the screen reads the basis instead of assuming one.
+    *INVOICE_FIELDS,
 )
 
 
@@ -155,6 +197,12 @@ def milestone_view(row, terms_days=None, now=None):
     due_on = frappe.utils.get_datetime(row.due_on) if row.due_on else None
     return {
         **{field: row.get(field) for field in VIEW_FIELDS},
+        # There is an invoice exactly when there is an issue date. A
+        # stored rate of 0 on a milestone nobody invoiced would read as
+        # a VAT-free invoice, and an empty Data column would make the
+        # screen test for two kinds of nothing.
+        "invoice_no": (row.get("invoice_no") or None) if row.get("invoiced_on") else None,
+        "invoice_vat_pct": row.get("invoice_vat_pct") if row.get("invoiced_on") else None,
         "overdue": is_overdue(
             status=row.status, due_on=due_on, now=now, terms_days=terms_days
         ),
@@ -247,5 +295,15 @@ def request_text(job, row):
         client=client,
         milestone={"title": row.title, "pct": row.pct, "amount": row.amount},
         job_title=job.title,
-        vat_pct=job.vat_pct,
+        vat_pct=invoice_vat_pct(job, row),
     )
+
+
+def invoice_vat_pct(job, row):
+    """The rate this milestone's invoice is read at.
+
+    Its own, once it has one. Asking for the text again a quarter after
+    the company moved to 10% must reproduce the 8% invoice the client
+    holds, not a second version of it.
+    """
+    return vat_basis(row.get("invoiced_on"), row.get("invoice_vat_pct"), job.vat_pct)

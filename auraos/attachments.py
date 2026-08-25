@@ -13,7 +13,7 @@ import frappe
 # Attaching to any of these requires write permission on the document
 # itself. A doctype absent from this set falls back to core Frappe's
 # permissions, which is only safe where the doctype is not sensitive.
-GUARDED = ("Deal", "Job")
+GUARDED = ("Deal", "Job", "Library Document")
 
 
 def check_attachment_permission(doc, method=None):
