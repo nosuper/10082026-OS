@@ -176,6 +176,20 @@ _Avoid_: default, fallback, empty value, placeholder (unqualified)
 A paperwork template filled for one job and attached to it - printed, signed by hand and sealed. Generating one never changes the template it came from.
 _Avoid_: output, export, contract (unqualified), attachment
 
+## Vocabularies
+
+**Managed vocabulary**:
+A small editable list behind one of a deal's Link fields - deal sources, project types - grown from the SPA Settings screen rather than from code. Sources are managed by the founder, the admin seat and the producer; project types by the founder and the admin seat. Distinct from a tag, which needs no list because anyone editing a deal invents one.
+_Avoid_: dropdown, lookup, enum, master data
+
+**Migrating rename**:
+Renaming a managed vocabulary value so every deal already on it follows across, which is the only rename this app offers - renaming onto a value already in the list would merge two answers and is refused (ADR-0003).
+_Avoid_: merge, remap, bulk edit
+
+**Value in use**:
+A managed vocabulary value some deal still holds. It cannot be removed - the count is shown beside it, and the way out is a migrating rename or clearing the field on those deals (ADR-0003).
+_Avoid_: referenced, locked, orphan
+
 ## Environments
 
 **Preview stack**:
