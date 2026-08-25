@@ -118,10 +118,20 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
 test("a mention leaves the markup the server reads", async ({ page }) => {
   const deal = await openDeal(page);
 
+  // Who the picker can actually offer: the operating seats, less whoever is
+  // signed in - naming yourself notifies nobody.
+  //
+  // **Measured, not assumed.** The first version skipped on
+  // `seats.length < 2`, which takes it for granted that the session is one of
+  // the seats. It is not: this suite signs in as Administrator, who holds
+  // every role implicitly and therefore has no `Has Role` row, so
+  // `operating_users` never returns them. One seeded producer meant one seat,
+  // the guard read that as "nobody to name", and the test skipped every run
+  // while the picker would have worked perfectly.
+  const me = (await callAs(page, "frappe.auth.get_logged_user")).body.message;
   const seats = (await callAs(page, "auraos.api.operating_users")).body.message ?? [];
-  // Naming yourself notifies nobody, so the picker offers the other seat. With
-  // only one seat on the site there is nobody to name and nothing to assert.
-  test.skip(seats.length < 2, "this site has only one operating seat");
+  const offerable = seats.filter((seat) => seat.name !== me);
+  test.skip(offerable.length === 0, "this site has nobody the signed-in seat could name");
 
   const written = [];
   try {
