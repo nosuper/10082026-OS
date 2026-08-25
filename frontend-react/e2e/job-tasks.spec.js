@@ -83,8 +83,11 @@ test("a task written through the screen appears on all three views", async ({ pa
 
     const panel = await openJobTab(page, job, "Tasks");
 
-    // List: the row is there, and so is the count above it.
-    await expect(panel.getByText(title, { exact: true }).first()).toBeVisible();
+    // List: the row is there. Read as an input value rather than as text,
+    // because a session that may plan gets an editable title - `getByText`
+    // finds nothing in a textbox, which is what this assertion learned the
+    // hard way. The label is the stable handle either way.
+    await expect(panel.getByLabel(`Title of ${title}`)).toHaveValue(title);
 
     // Board: every column the server named is drawn, even the empty ones -
     // a kanban missing its empty columns is a different board.
@@ -93,7 +96,9 @@ test("a task written through the screen appears on all three views", async ({ pa
       await expect(panel.getByText(status, { exact: true }).first()).toBeVisible();
     }
 
-    // Timeline: the task has both dates, so it has a bar.
+    // Timeline: the task has both dates, so it has a bar. Text here, not a
+    // value: the timeline is a reading of the plan and never an editor of it,
+    // whoever is looking.
     await panel.getByRole("tab", { name: "Timeline" }).click();
     await expect(panel.getByText(title, { exact: true }).first()).toBeVisible();
 
