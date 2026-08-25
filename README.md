@@ -3,8 +3,14 @@
 One shared place for a small video production house: deal pipeline,
 cost breakdowns and quotes, jobs, money tracking, paperwork and a
 founder-only overhead view. A single custom [Frappe](https://frappeframework.com)
-app (`auraos/`) with [frappe-ui](https://github.com/frappe/frappe-ui)
-pages for daily screens (`frontend/`).
+app (`auraos/`) serving a React single-page app for the daily screens
+(`frontend-react/`), with Frappe as a headless API behind it.
+
+There was a second frontend, `frontend/`, built on
+[frappe-ui](https://github.com/frappe/frappe-ui). It was retired once the
+React app served every screen it did (#103) and the sources were deleted;
+CI refuses any new file under that path so the retirement cannot quietly
+reopen. It is in git history if anyone needs to read it.
 
 Spec and tickets live as GitHub issues - see
 [the spec](https://github.com/nosuper/10082026-OS/issues/2) and
@@ -23,8 +29,12 @@ install, frontend build). Watch it with `docker compose logs -f frappe`.
 Then:
 
 - Site: <http://localhost:8000> - login `Administrator` / `admin`
-- frappe-ui app (Contacts): <http://localhost:8000/aura>
+- The app: <http://localhost:8000/aura-next/>
 - A published quote: `http://localhost:8000/quote/<token>` - no login
+
+Signing in lands on the app rather than on Frappe's profile page: the
+`role_home_page` hook sends every operating role to `aura-next`, and a
+guest still gets the login page.
 
 The repo is mounted into the container; the bench lives in a named
 volume, so `docker compose down` keeps the site and `docker compose up`
@@ -33,14 +43,18 @@ resumes it. To rebuild from nothing: `docker compose down -v`.
 ## Frontend development
 
 ```bash
-cd frontend
-npm install
-npm run dev    # vite on :8080, proxying /api and /assets to :8000
-npm run build  # emits auraos/public/aura + auraos/www/aura.html
+cd frontend-react
+npm ci         # `ci`, not `install`: it installs from the lockfile and
+               # never rewrites it, which is what a deploy needs too
+npm run dev    # vite, proxying /api and /assets to :8000
+npm run build  # emits auraos/public/aura-next + auraos/www/aura-next.html
 ```
 
-The built page is what Frappe serves at `/aura`; the dev server is for
-hot reload while the Docker site runs.
+The built page is what Frappe serves at `/aura-next`; the dev server is
+for hot reload while the Docker site runs. The shell is Jinja-rendered so
+it can carry a per-session CSRF token, and it is marked `no_cache` for
+exactly that reason - a cached copy would hand one visitor's token to the
+next.
 
 ## Tests
 
@@ -65,7 +79,7 @@ bench --site test_site set-config allow_tests true
 bench --site test_site run-tests --app auraos
 ```
 
-**Browser tests** (`frontend/e2e/`) - authenticated Chromium scenarios
+**Browser tests** (`frontend-react/e2e/`) - authenticated Chromium scenarios
 against a fresh, disposable Docker site. Docker with Compose is the only
 local prerequisite; the version-pinned Playwright container carries its
 own browser and system dependencies. From the repo root:
@@ -78,13 +92,20 @@ The command uses an isolated Compose project on port 18000, waits for
 Frappe's HTTP readiness endpoint, seeds only disposable records, and removes
 the site volumes and browser authentication state when it finishes. Downloaded
 npm packages are retained in `.e2e-npm-cache/` to speed up repeat runs. A failed
-run leaves screenshots, traces and the HTML report under `frontend/test-results/`
-and `frontend/playwright-report/`. Password entry and authentication state files
+run leaves screenshots, traces and the HTML report under
+`frontend-react/test-results/` and `frontend-react/playwright-report/`. Password entry and authentication state files
 are not recorded in or uploaded with those artifacts. Traces keep the action
 timeline but disable network/DOM snapshots so session headers are not captured.
 
 CI (`.github/workflows/ci.yml`) runs all three harnesses plus the frontend
-build on every push.
+build on every push, and refuses any new file under the retired
+`frontend/`.
+
+The suites can also be run by hand on the box - see
+`docs/adr/0004-verification-moves-off-github-actions-onto-the-box.md`,
+which is worth reading for one trap it records: the box's `test_site`
+persists, so it needs `bench migrate` before a run, where CI builds a
+fresh site every time and never meets a stale one.
 
 ### The permission proof
 
@@ -179,3 +200,20 @@ pinned by `tests/test_settlement.py`; the doctypes and API are adapters.
   move; `docker compose logs -f frappe` tells you why.
 - Production deployment (Proxmox, backups to Synology) is ticket T13 -
   this compose file is for development only.
+
+## Built with
+
+This codebase was written by AI agents working from issues on this
+tracker, reviewed and directed by the founder.
+
+- **[Claude Code](https://claude.com/claude-code)** - the agent that wrote
+  most of the app, its tests and these docs. Individual commits name the
+  model in a `Co-Authored-By` trailer, so `git log` says which one wrote
+  what rather than leaving it to this paragraph.
+- **[Antigravity](https://antigravity.google)** - the agent workspace the
+  sessions ran in.
+
+Neither holds write access to this repository. Every change arrived
+through a pull request opened by the founder's account, and the
+attribution is here because the work should say who did it, not because
+anything is delegated to them.

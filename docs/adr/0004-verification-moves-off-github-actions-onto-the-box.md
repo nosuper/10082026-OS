@@ -1,5 +1,17 @@
 # Verification moves off GitHub Actions onto the box
 
+> **Reversed on 2026-08-25, hours after it was written.** The repository was
+> made public, which makes GitHub Actions free, so the `CI` workflow is
+> **enabled again and is the authority once more**. ADR-0001's original
+> sentence stands after all.
+>
+> This file is kept rather than deleted, for two reasons. The commands below
+> still work and are the way to run a suite without pushing. And the trap it
+> records - the box's `test_site` persists, so it needs `bench migrate` before
+> a run - is a fact about the box that outlived the decision that found it.
+>
+> Read the rest as history: it is what was true while the workflow was off.
+
 The `CI` workflow is **disabled**. The test suites still run, and they still
 gate a merge — they run on LXC 102, by hand, against the benches already
 there. Nothing is skipped; the authority moved.
