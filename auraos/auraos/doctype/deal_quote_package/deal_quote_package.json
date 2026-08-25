@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "phase",
   "description",
   "price"
  ],
@@ -30,6 +31,13 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Price",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen with the version, like the title beside it.",
+   "fieldname": "phase",
+   "fieldtype": "Data",
+   "label": "Phase",
    "read_only": 1
   }
  ],

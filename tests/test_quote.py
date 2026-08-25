@@ -19,8 +19,10 @@ import pytest
 
 from auraos.lib.quote import (
     CLIENT_PACKAGE_FIELDS,
+    CLIENT_PHASE_FIELDS,
     CLIENT_QUOTE_FIELDS,
     client_entries,
+    phase_groups,
     client_view,
     delivery_state,
     needs_nudge,
@@ -86,9 +88,30 @@ def quote(**overrides):
 
 def test_client_view_keeps_only_whitelisted_quote_fields():
     view = client_view(quote())
-    # `sections` is derived presentation, built only from whitelisted
-    # package and line fields - no new data crosses the boundary.
-    assert set(view) == set(CLIENT_QUOTE_FIELDS) | {"packages", "sections"}
+    # `sections`, `phase_groups` and `line_phase_groups` are derived
+    # presentation, built only from whitelisted package, line and phase
+    # fields - no new data crosses the boundary. `phases` is the frozen
+    # phase rows, themselves whitelisted by CLIENT_PHASE_FIELDS and
+    # asserted below.
+    assert set(view) == set(CLIENT_QUOTE_FIELDS) | {
+        "packages",
+        "sections",
+        "phases",
+        "phase_groups",
+        "line_phase_groups",
+    }
+
+
+def test_client_view_keeps_only_whitelisted_phase_fields():
+    """The same guard the packages get, for the same reason: adding a
+    field to Deal Quote Phase must not publish it by accident."""
+    view = client_view(
+        quote(phases=[{"title": "Tiền kỳ", "blurb": "Chuẩn bị", "idx": 1,
+                       "parent": "DQ-0001", "owner": "founder@auraos.test"}])
+    )
+
+    assert [set(one) for one in view["phases"]] == [set(CLIENT_PHASE_FIELDS)]
+    assert view["phases"][0]["title"] == "Tiền kỳ"
 
 
 def test_client_view_keeps_only_whitelisted_package_fields():
@@ -496,3 +519,165 @@ def test_a_standalone_entry_and_its_frozen_line_print_once():
     )
     assert [s["title"] for s in sections] == ["Crew", "Flycam"]
     assert sections[1]["price"] == 6_900_000
+
+
+# -- phases: how a client reads a job split into parts (#43) --
+#
+# The arithmetic is a sum. What these pin is **which group an entry lands
+# in and in what order the groups print** - the four ways a phased quote
+# misleads while looking tidy:
+#
+# - Unphased entries buried at the end, where the items outside the plan
+#   are exactly the ones a client should meet first.
+# - An empty phase printed as a heading with a zero under it, which reads
+#   as a defect in the document.
+# - A package whose phase was renamed underneath it quietly vanishing -
+#   money the client is being asked for, gone to keep a layout tidy.
+# - Subtotals that are not the sum of the rows above them.
+
+
+def a_phase(title, blurb=None):
+    return {"title": title, "blurb": blurb}
+
+
+def an_entry(title, price, phase=None):
+    return {"title": title, "description": None, "price": price, "phase": phase}
+
+
+PRE = "Tiền kỳ"
+PRODUCTION = "Sản xuất"
+
+
+def test_unphased_entries_come_first_and_carry_no_heading():
+    """The founder prices a reshoot day outside the shape of the job.
+
+    Naming a phase "Other" for it would be naming something on the
+    client's behalf; putting it last would bury the items that sit
+    outside the plan.
+    """
+    groups = phase_groups(
+        [a_phase(PRE), a_phase(PRODUCTION)],
+        [
+            an_entry("Kịch bản", 10_000_000, PRE),
+            an_entry("Quay bổ sung", 5_000_000),
+            an_entry("Quay chính", 40_000_000, PRODUCTION),
+        ],
+    )
+
+    assert [group["title"] for group in groups] == [None, PRE, PRODUCTION]
+    assert [one["title"] for one in groups[0]["entries"]] == ["Quay bổ sung"]
+    assert groups[0]["blurb"] is None
+
+
+def test_phases_print_in_the_order_they_were_declared():
+    """Not alphabetical, and not the order packages happen to be in:
+    pre-production comes before post because the founder said so."""
+    groups = phase_groups(
+        [a_phase(PRODUCTION), a_phase(PRE)],
+        [an_entry("Kịch bản", 1, PRE), an_entry("Quay chính", 2, PRODUCTION)],
+    )
+
+    assert [group["title"] for group in groups] == [PRODUCTION, PRE]
+
+
+def test_a_phase_carries_its_own_blurb():
+    groups = phase_groups(
+        [a_phase(PRE, "Chuẩn bị trước khi bấm máy")],
+        [an_entry("Kịch bản", 1, PRE)],
+    )
+
+    assert groups[0]["blurb"] == "Chuẩn bị trước khi bấm máy"
+
+
+def test_an_empty_phase_is_not_printed():
+    """A heading with no rows and a zero under it reads as a mistake in
+    the document rather than as a phase nobody filled.
+
+    The founder can see it is empty in the editor, where it still
+    exists. The client gets the offer, not the shape of the form.
+    """
+    groups = phase_groups(
+        [a_phase(PRE), a_phase(PRODUCTION)],
+        [an_entry("Kịch bản", 1, PRE)],
+    )
+
+    assert [group["title"] for group in groups] == [PRE]
+
+
+def test_a_quote_with_no_unphased_entries_opens_on_its_first_phase():
+    """The unphased group is dropped when empty like any other."""
+    groups = phase_groups(
+        [a_phase(PRE)], [an_entry("Kịch bản", 1, PRE)]
+    )
+
+    assert [group["title"] for group in groups] == [PRE]
+
+
+def test_an_entry_naming_an_undeclared_phase_is_kept_and_put_last():
+    """A package whose phase was renamed underneath it must not vanish.
+
+    Money the client is being asked for is never the thing that
+    disappears to keep a layout tidy. Last, in the order first met, so
+    the founder sees it is adrift without the client losing the line.
+    """
+    groups = phase_groups(
+        [a_phase(PRE)],
+        [
+            an_entry("Kịch bản", 1, PRE),
+            an_entry("Hậu kỳ", 2, "Hậu kỳ"),
+            an_entry("Grade", 3, "Hậu kỳ"),
+        ],
+    )
+
+    assert [group["title"] for group in groups] == [PRE, "Hậu kỳ"]
+    assert [one["title"] for one in groups[-1]["entries"]] == ["Hậu kỳ", "Grade"]
+
+
+def test_a_subtotal_is_the_sum_of_the_rows_printed_above_it():
+    groups = phase_groups(
+        [a_phase(PRE)],
+        [
+            an_entry("Kịch bản", 10_000_000, PRE),
+            an_entry("Casting", 2_500_000, PRE),
+            an_entry("Quay bổ sung", 5_000_000),
+        ],
+    )
+
+    for group in groups:
+        assert group["subtotal"] == sum(one["price"] for one in group["entries"])
+    assert groups[0]["subtotal"] == 5_000_000
+    assert groups[1]["subtotal"] == 12_500_000
+
+
+def test_every_entry_lands_in_exactly_one_group():
+    """The groups account for the whole quote, which is what lets a
+    reader add the subtotals up and reach the quote's own subtotal."""
+    entries = [
+        an_entry("Kịch bản", 10_000_000, PRE),
+        an_entry("Quay chính", 40_000_000, PRODUCTION),
+        an_entry("Quay bổ sung", 5_000_000),
+        an_entry("Grade", 7_000_000, "Chưa khai báo"),
+    ]
+
+    groups = phase_groups([a_phase(PRE), a_phase(PRODUCTION)], entries)
+
+    placed = [one for group in groups for one in group["entries"]]
+    assert len(placed) == len(entries)
+    assert sum(group["subtotal"] for group in groups) == sum(
+        one["price"] for one in entries
+    )
+
+
+def test_a_quote_with_no_phases_at_all_is_one_unlabelled_group():
+    """Every quote sent before #43 existed, and every quote the founder
+    never split. The page must read exactly as it did."""
+    groups = phase_groups(
+        [], [an_entry("Trọn gói", 50_000_000)]
+    )
+
+    assert [group["title"] for group in groups] == [None]
+    assert groups[0]["subtotal"] == 50_000_000
+
+
+def test_no_phases_and_no_entries_is_no_groups():
+    assert phase_groups([], []) == []

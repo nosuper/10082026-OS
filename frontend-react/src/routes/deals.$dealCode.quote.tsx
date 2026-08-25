@@ -156,6 +156,7 @@ type Line = LineFields & { key: string };
 type PackageRow = {
   title: string | null;
   description: string | null;
+  phase: string | null;
   price_override: number | null;
   has_price_override: number | null;
 };
@@ -169,7 +170,23 @@ type PackageRow = {
  * real price and quotes the package free of charge. Collapsing the two would
  * silently give away work.
  */
-type PackageFields = { title: string; description: string; override: number | null };
+type PackageFields = {
+  title: string;
+  description: string;
+  override: number | null;
+  /** Which phase this package is quoted under. "" is quoted on its own. */
+  phase: string;
+};
+
+/**
+ * A phase: an ordered, named group of packages with its own blurb and its own
+ * subtotal (#43). Not a Package - that is what it groups - and not a
+ * production stage, which is where a job sits once we are making it.
+ * CONTEXT.md keeps the three apart.
+ */
+type PhaseFields = { title: string; blurb: string };
+type Phase = PhaseFields & { key: string };
+type PhaseRow = { title: string | null; blurb: string | null };
 
 type Package = PackageFields & { key: string };
 
@@ -188,6 +205,7 @@ type DealDoc = {
   commission_pct: number | null;
   cost_lines: Partial<LineFields>[] | null;
   packages: PackageRow[] | null;
+  phases: PhaseRow[] | null;
 };
 
 /** What auraos.api.compute_breakdown returns for one line. */
@@ -369,13 +387,23 @@ function toPackage(row: PackageRow): Package {
     title: text(row.title),
     description: text(row.description),
     override: row.has_price_override ? num(row.price_override) : null,
+    phase: text(row.phase),
   };
+}
+
+function toPhase(row: PhaseRow): Phase {
+  return { key: nextKey(), title: text(row.title), blurb: text(row.blurb) };
+}
+
+function wirePhase(phase: Phase): Record<string, string | null> {
+  return { title: phase.title.trim(), blurb: blank(phase.blurb) };
 }
 
 /** What "unsaved" is measured against: the editable state, and nothing else. */
 function snapshotOf(
   lines: Line[],
   packages: Package[],
+  phases: Phase[],
   terms: Terms,
   quoteTerms: QuoteTerms,
   commission: number | null,
@@ -383,6 +411,11 @@ function snapshotOf(
   return JSON.stringify({
     lines: lines.map(wireLine),
     packages: packages.map(wirePackage),
+    // In the snapshot for the reason the assumptions below are: without it,
+    // renaming a phase or reordering two of them would never mark the form
+    // dirty, and the change would be lost on the next reload with nothing
+    // saying so.
+    phases: phases.map(wirePhase),
     terms,
     // In the snapshot because `dirty` is what enables Save. Left out, an
     // assumption typed into the box would never mark the form dirty and
@@ -427,6 +460,9 @@ function wirePackage(pkg: Package): Record<string, string | number | null> {
     description: blank(pkg.description),
     has_price_override: pkg.override === null ? 0 : 1,
     price_override: pkg.override ?? 0,
+    // Trimmed, and blank rather than null: the server matches a package to a
+    // phase by this name, so " Tiền kỳ" and "Tiền kỳ" must not be two phases.
+    phase: pkg.phase.trim(),
   };
 }
 
@@ -494,6 +530,7 @@ function BreakdownPage() {
   const [serverDoc, setServerDoc] = useState<DealDoc | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
+  const [phases, setPhases] = useState<Phase[]>([]);
   const [terms, setTerms] = useState<Terms>({
     mfPct: 0,
     vatPct: 0,
@@ -527,6 +564,8 @@ function BreakdownPage() {
     seeded.current = data.name;
     const seededLines = (data.cost_lines ?? []).map(toLine);
     const seededPackages = (data.packages ?? []).map(toPackage);
+    const seededPhases = (data.phases ?? []).map(toPhase);
+    setPhases(seededPhases);
     const seededTerms: Terms = {
       mfPct: data.quote_mf_pct ?? 0,
       vatPct: data.vat_pct ?? 0,
@@ -550,6 +589,7 @@ function BreakdownPage() {
       snapshotOf(
         seededLines,
         seededPackages,
+        seededPhases,
         seededTerms,
         {
           assumptions: data.assumptions ?? "",
@@ -564,8 +604,8 @@ function BreakdownPage() {
   const wireLines = useMemo(() => JSON.stringify(lines.map(wireLine)), [lines]);
   const wirePackages = useMemo(() => JSON.stringify(packages.map(wirePackage)), [packages]);
   const snapshot = useMemo(
-    () => snapshotOf(lines, packages, terms, quoteTerms, commission),
-    [lines, packages, terms, quoteTerms, commission],
+    () => snapshotOf(lines, packages, phases, terms, quoteTerms, commission),
+    [lines, packages, phases, terms, quoteTerms, commission],
   );
 
   const dirty = Boolean(baseline) && snapshot !== baseline;
@@ -573,7 +613,9 @@ function BreakdownPage() {
   // title: the save would only bounce off the server's own validation, and the
   // row says why in the border.
   const complete =
-    lines.every((line) => line.description.trim()) && packages.every((pkg) => pkg.title.trim());
+    lines.every((line) => line.description.trim()) &&
+    packages.every((pkg) => pkg.title.trim()) &&
+    phases.every((phase) => phase.title.trim());
 
   // -- the engine -----------------------------------------------------------
   //
@@ -674,6 +716,7 @@ function BreakdownPage() {
       doctype: "Deal",
       cost_lines: lines.map((line) => ({ ...wireLine(line), doctype: "Deal Cost Line" })),
       packages: packages.map((pkg) => ({ ...wirePackage(pkg), doctype: "Deal Package" })),
+      phases: phases.map((phase) => ({ ...wirePhase(phase), doctype: "Deal Phase" })),
       quote_mf_pct: terms.mfPct,
       vat_pct: terms.vatPct,
       contingency_pct: terms.contingencyPct,
@@ -763,8 +806,75 @@ function BreakdownPage() {
   function addPackage() {
     setPackages((current) => [
       ...current,
-      { key: nextKey(), title: "", description: "", override: null },
+      { key: nextKey(), title: "", description: "", override: null, phase: "" },
     ]);
+  }
+
+  // -- phases (#43) ---------------------------------------------------------
+
+  function updatePhase(index: number, patch: Partial<PhaseFields>) {
+    setPhases((current) =>
+      current.map((phase, i) => (i === index ? { ...phase, ...patch } : phase)),
+    );
+  }
+
+  function addPhase() {
+    setPhases((current) => [...current, { key: nextKey(), title: "", blurb: "" }]);
+  }
+
+  /**
+   * Drop a phase, and let go of the packages that named it.
+   *
+   * The same rule `removePackage` follows for its lines: a package whose phase
+   * has gone falls back out of every phase and is quoted on its own, which is
+   * what the server does with a phase name it cannot match. Leaving the name
+   * on the package would keep it out of every printed group but still adrift -
+   * visible, but under a heading that no longer exists.
+   */
+  function removePhase(index: number) {
+    const gone = phases[index]?.title.trim();
+    setPhases((current) => current.filter((_, i) => i !== index));
+    if (gone) {
+      setPackages((current) =>
+        current.map((pkg) => (pkg.phase.trim() === gone ? { ...pkg, phase: "" } : pkg)),
+      );
+    }
+  }
+
+  /**
+   * Move a phase up or down. Order is the whole point of a phase - the client
+   * reads pre-production before post because the founder put it there - so it
+   * is editable rather than alphabetical or by creation.
+   */
+  function movePhase(index: number, delta: number) {
+    setPhases((current) => {
+      const target = index + delta;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      const [row] = next.splice(index, 1);
+      if (!row) return current;
+      next.splice(target, 0, row);
+      return next;
+    });
+  }
+
+  /**
+   * Renaming a phase carries its packages across.
+   *
+   * Without this a rename would orphan every package that named the old title:
+   * they would still print, at the bottom, under a heading the founder thought
+   * they had just edited. The same shape of decision as the vocabulary rename
+   * in T3.5 - the rename migrates rather than stranding what pointed at it.
+   */
+  function renamePhase(index: number, title: string) {
+    const before = phases[index]?.title.trim() ?? "";
+    updatePhase(index, { title });
+    const after = title.trim();
+    if (before && before !== after) {
+      setPackages((current) =>
+        current.map((pkg) => (pkg.phase.trim() === before ? { ...pkg, phase: after } : pkg)),
+      );
+    }
   }
 
   /**
@@ -854,6 +964,9 @@ function BreakdownPage() {
   // Straight off the editable packages, so a package added below is selectable
   // on a cost line above it without a round trip.
   const packageTitles = [...new Set(packages.map((pkg) => pkg.title.trim()).filter(Boolean))];
+  // Straight off the editable phases, so a phase added below is selectable on
+  // a package immediately - the same rule the package picker above follows.
+  const phaseTitles = [...new Set(phases.map((phase) => phase.title.trim()).filter(Boolean))];
 
   // A line may still name a package that is no longer in the table. Keep it in
   // the dropdown rather than showing the row as unassigned, which would be a
@@ -1430,6 +1543,102 @@ function BreakdownPage() {
 
         {/* -- the client-facing half ------------------------------------- */}
 
+        {/* Phases (#43), above the packages they group - the reading order
+            on the quote, and the order the founder builds in: name the parts
+            of the job, then say which part each package sits in. */}
+        <Card
+          title="Phases"
+          subtitle="How the client reads the job split into parts. Optional - a deal with no phases quotes exactly as it always has, and a package naming none is quoted on its own, ahead of the first phase."
+          action={
+            <button type="button" onClick={addPhase} disabled={!serverDoc} className={ghostButton}>
+              <Plus className="size-3" /> Add phase
+            </button>
+          }
+        >
+          <QueryStates queries={[deal]} loadingRows={2}>
+            {() =>
+              phases.length === 0 ? (
+                <p className="p-4 text-xs leading-relaxed text-muted-foreground">
+                  No phases. Every package is quoted on its own, in the order below - which is how
+                  this quote reads today and how it read before phases existed.
+                </p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {phases.map((phase, index) => {
+                    // Counted off the packages being edited, not off the server:
+                    // the founder needs to see a phase is empty *before* saving,
+                    // because an empty phase is dropped from the client's quote.
+                    const held = packages.filter(
+                      (pkg) => pkg.phase.trim() === phase.title.trim() && phase.title.trim(),
+                    ).length;
+                    return (
+                      <div key={phase.key} className="flex flex-wrap items-start gap-2 p-3">
+                        <div className="flex shrink-0 flex-col gap-0.5">
+                          <button
+                            type="button"
+                            aria-label={`Move phase ${index + 1} up`}
+                            disabled={index === 0}
+                            onClick={() => movePhase(index, -1)}
+                            className="rounded border border-border px-1 text-xs disabled:opacity-30"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Move phase ${index + 1} down`}
+                            disabled={index === phases.length - 1}
+                            onClick={() => movePhase(index, 1)}
+                            className="rounded border border-border px-1 text-xs disabled:opacity-30"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                        <input
+                          value={phase.title}
+                          onChange={(event) => renamePhase(index, event.target.value)}
+                          placeholder="Tiền kỳ"
+                          aria-label={`Phase title, phase ${index + 1}`}
+                          title="Renaming a phase carries its packages across."
+                          className={`w-44 ${cellInput} ${
+                            phase.title.trim() ? "" : "border-ember bg-ember-soft"
+                          }`}
+                        />
+                        <input
+                          value={phase.blurb}
+                          onChange={(event) => updatePhase(index, { blurb: event.target.value })}
+                          placeholder="The sentence under the heading (optional)"
+                          aria-label={`Phase blurb, phase ${index + 1}`}
+                          className={`min-w-48 flex-1 ${cellInput}`}
+                        />
+                        <span
+                          className="label-caps shrink-0 self-center"
+                          title={
+                            held === 0
+                              ? "An empty phase is not printed on the client's quote."
+                              : undefined
+                          }
+                        >
+                          {held === 0
+                            ? "empty · not printed"
+                            : `${held} package${held === 1 ? "" : "s"}`}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove phase ${index + 1}`}
+                          onClick={() => removePhase(index)}
+                          className="shrink-0 self-center rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-secondary hover:text-ember"
+                        >
+                          <X className="size-3.5" strokeWidth={1.75} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            }
+          </QueryStates>
+        </Card>
+
         <Card
           title="Packages"
           subtitle="What the client is offered. A package is priced at the sum of its lines unless it carries an override, and the variance is the engine's, not this browser's."
@@ -1462,6 +1671,7 @@ function BreakdownPage() {
                     <thead className="border-b border-border">
                       <tr>
                         <Th>Package</Th>
+                        <Th>Phase</Th>
                         <Th>What the client reads</Th>
                         <Th className="text-right">Member sum</Th>
                         <Th className="text-right">Override</Th>
@@ -1488,6 +1698,36 @@ function BreakdownPage() {
                                   pkg.title.trim() ? "" : "border-ember bg-ember-soft"
                                 }`}
                               />
+                            </Td>
+                            <Td>
+                              {/* Chosen from the declared phases, never typed:
+                                  a free-text phase would make a new one out of
+                                  a spelling mistake, and the client would read
+                                  two headings for one part of the job. Blank
+                                  is a real answer - quoted on its own, ahead
+                                  of the first phase. */}
+                              <select
+                                value={pkg.phase}
+                                onChange={(event) =>
+                                  updatePackage(index, { phase: event.target.value })
+                                }
+                                aria-label={`Phase, package ${index + 1}`}
+                                title="Which part of the job this package is quoted under. Leave blank to quote it on its own, ahead of the first phase."
+                                className={`w-full ${cellInput}`}
+                              >
+                                <option value="">On its own</option>
+                                {phaseTitles.map((title) => (
+                                  <option key={title} value={title}>
+                                    {title}
+                                  </option>
+                                ))}
+                                {/* A package still naming a phase that has gone
+                                    keeps its own option, so opening the deal
+                                    does not silently reassign it. */}
+                                {pkg.phase.trim() && !phaseTitles.includes(pkg.phase.trim()) ? (
+                                  <option value={pkg.phase}>{pkg.phase} (missing)</option>
+                                ) : null}
+                              </select>
                             </Td>
                             <Td>
                               <textarea

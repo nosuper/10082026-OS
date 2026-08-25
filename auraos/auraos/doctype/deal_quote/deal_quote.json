@@ -23,6 +23,7 @@
   "assumptions",
   "exclusions",
   "packages_section",
+  "phases",
   "packages",
   "lines",
   "totals_section",
@@ -249,6 +250,14 @@
    "fieldname": "confirmed_on",
    "fieldtype": "Datetime",
    "label": "Confirmed On",
+   "read_only": 1
+  },
+  {
+   "description": "The parts this version was quoted in, frozen with it. Empty on a version quoted without phases, and on every version published before phases existed - both read exactly as they always did.",
+   "fieldname": "phases",
+   "fieldtype": "Table",
+   "label": "Phases",
+   "options": "Deal Quote Phase",
    "read_only": 1
   }
  ],

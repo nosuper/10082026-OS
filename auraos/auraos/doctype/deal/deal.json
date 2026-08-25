@@ -28,6 +28,7 @@
   "deal_links",
   "breakdown_section",
   "cost_lines",
+  "phases",
   "packages",
   "params_section",
   "contingency_pct",
@@ -456,6 +457,13 @@
    "label": "Stage History",
    "options": "Deal Stage Log",
    "read_only": 1
+  },
+  {
+   "description": "The parts a client reads the job in - Tiền kỳ, Sản xuất, Hậu kỳ - in the order they are quoted. A package names one to sit under it; a package naming none is quoted on its own, ahead of the first phase. Leave this empty and the quote reads exactly as it did before phases existed.",
+   "fieldname": "phases",
+   "fieldtype": "Table",
+   "label": "Phases",
+   "options": "Deal Phase"
   }
  ],
  "index_web_pages_for_search": 0,
