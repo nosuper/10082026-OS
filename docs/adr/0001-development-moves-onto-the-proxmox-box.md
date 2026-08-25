@@ -20,6 +20,11 @@ Automated tests do not run on a preview stack. CI builds a fresh site per
 branch and is the authority on whether the suite passes; a stack is for a
 human to click through.
 
+> **Superseded in part by ADR-0004 (2026-08-25).** The `CI` workflow is
+> disabled and the suites now run on this box by hand. The first sentence
+> above still holds - a preview stack is for clicking through, not for
+> running tests. The claim that CI is the authority does not.
+
 ## Considered options
 
 - **The founder's Windows PC with WSL2 + Docker Desktop.** More free RAM
