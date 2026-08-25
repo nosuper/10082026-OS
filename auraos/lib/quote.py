@@ -60,7 +60,12 @@ CLIENT_QUOTE_FIELDS = (
 
 # ...and off each of its packages. Cost, variance and the override are
 # ours; the client sees an offer, not how we arrived at it.
-CLIENT_PACKAGE_FIELDS = ("title", "description", "price")
+CLIENT_PACKAGE_FIELDS = ("title", "description", "price", "phase")
+
+# A frozen phase, as the client reads it. Whitelisted like everything
+# else that crosses the guest boundary: adding a field to Deal Quote
+# Phase must not publish it by accident.
+CLIENT_PHASE_FIELDS = ("title", "blurb")
 
 # ...and off each frozen line on a line-by-line quote. quote_price is
 # the marked-up sell price; cost, markup and tax routing are never
@@ -167,7 +172,88 @@ def client_view(quote: Mapping[str, Any]) -> dict:
     view["sections"] = line_sections(
         view["packages"], quote.get("lines") or []
     )
+    # Grouped here rather than in the template, for the reason every
+    # finance screen gives about its own totals: a subtotal worked out
+    # in a rendering layer is a second opinion about money. The template
+    # prints what this decided.
+    view["phases"] = [
+        {field: phase.get(field) for field in CLIENT_PHASE_FIELDS}
+        for phase in (quote.get("phases") or [])
+    ]
+    view["phase_groups"] = phase_groups(view["phases"], view["packages"])
+    view["line_phase_groups"] = phase_groups(view["phases"], view["sections"])
     return view
+
+
+# The group an unphased entry belongs to. `None` rather than a label,
+# because the client is not shown a heading for it - see `phase_groups`.
+UNPHASED = None
+
+
+def phase_groups(phases, entries):
+    """Client entries gathered into phases, in reading order (#43).
+
+    A **phase** is an ordered, named group of packages carrying its own
+    blurb and its own subtotal - how a client reads a job split into
+    pre-production, production and post. It is not a Package (that is
+    what is being grouped) and not a production stage (that is where a
+    job sits once we are making it); `CONTEXT.md` keeps those three
+    apart and this module speaks its words.
+
+    **Unphased entries come first, under no heading at all.** The
+    founder prices some items outside the shape of the job - a reshoot
+    day, a storage rental - and they are quoted on their own. Inventing
+    a phase called "Other" for them would be naming something on the
+    client's behalf, and putting them last would bury the very items
+    that sit outside the plan. First and unlabelled is what `CONTEXT.md`
+    settled on.
+
+    **An empty phase is dropped from the client's reading.** A heading
+    with no rows under it and a subtotal of zero reads as a mistake in
+    the document rather than as a phase nobody filled - and the founder
+    is the one who can see it is empty, in the editor, where the phase
+    still appears. What the client gets is the offer, not the shape of
+    the form it was written on.
+
+    **A phase named on an entry but not declared is still a phase.** It
+    is put last, in the order first met, rather than dropped: a package
+    whose phase was renamed or removed underneath it must not vanish
+    from a quote silently. Money the client is being asked for is never
+    the thing that disappears to keep a layout tidy.
+
+    Subtotals are the sum of the entries the client actually sees in
+    that group, so every printed subtotal is the sum of the rows printed
+    above it, and the groups together account for every entry exactly
+    once.
+    """
+    declared = [dict(phase) for phase in (phases or [])]
+    order = {phase.get("title"): index for index, phase in enumerate(declared)}
+
+    buckets: dict[Any, list] = {UNPHASED: []}
+    extra: list = []
+    for entry in entries or []:
+        key = entry.get("phase") or UNPHASED
+        if key is not UNPHASED and key not in order and key not in extra:
+            extra.append(key)
+        buckets.setdefault(key, []).append(entry)
+
+    groups = []
+    for key in [UNPHASED, *order, *extra]:
+        members = buckets.get(key) or []
+        # The unphased group is dropped when empty like any other; a
+        # quote whose every package is phased opens on its first phase.
+        if not members:
+            continue
+        phase = declared[order[key]] if key in order else {}
+        groups.append(
+            {
+                "title": key,
+                "blurb": phase.get("blurb"),
+                "entries": members,
+                "subtotal": sum(round_vnd(one.get("price") or 0) for one in members),
+            }
+        )
+    return groups
 
 
 def quantity_display(qty1, unit1, qty2, unit2) -> str:
@@ -367,6 +453,11 @@ def client_entries(packages, lines):
             "title": package.get("title"),
             "description": package.get("description"),
             "price": package.get("price") or 0,
+            # Which part of the job this is quoted under (#43). None
+            # here is a real answer - it means quoted on its own, ahead
+            # of the first phase - so it travels rather than being
+            # dropped for being empty.
+            "phase": package.get("phase") or None,
         }
         for package in packages
     ]
@@ -375,6 +466,10 @@ def client_entries(packages, lines):
             "title": line.get("description") or f"Item {line.get('idx')}",
             "description": None,
             "price": line.get("quote_price") or 0,
+            # A cost line belonging to no package belongs to no phase
+            # either: it is priced outside the shape of the job, which
+            # is exactly what the unphased group is for.
+            "phase": None,
         }
         for line in lines
         if not line.get("package")

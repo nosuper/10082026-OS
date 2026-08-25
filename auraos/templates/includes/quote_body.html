@@ -30,6 +30,21 @@
   .aura-quote td.aura-amount, .aura-quote th.aura-amount { text-align: right;
     white-space: nowrap; }
   .aura-quote .aura-package-title { font-weight: 600; }
+  /* A phase heading (#43). Heavier than a package title and set apart
+     above it, because a phase is the part of the job a package sits
+     inside - if the two read at the same weight the client cannot tell
+     which is which, and a quote whose shape is ambiguous is a quote that
+     gets argued about. Uppercase and letter-spaced rather than larger,
+     so a phase never competes with the document's own headings. */
+  .aura-quote .aura-phase-row td { padding-top: 1.1rem; border-bottom: 2px solid #111827; }
+  .aura-quote .aura-phase-title { font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; font-size: .8125rem; }
+  .aura-quote .aura-phase-blurb { color: #4b5563; font-size: .8125rem;
+    margin-top: .15rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .aura-quote .aura-phase-amount { font-weight: 700; }
+  /* Indented only when it sits under a heading, so an unphased entry at
+     the top of the page is not indented under nothing. */
+  .aura-quote .aura-package-title.aura-in-phase { padding-left: .9rem; }
   .aura-quote .aura-package-desc { color: #4b5563; font-size: .875rem;
     margin-top: .25rem; white-space: pre-line; }
 
@@ -246,7 +261,21 @@
       </tr>
     </thead>
     <tbody>
-      {% for section in sections %}
+      {# Phases (#43). `line_phase_groups` is the server's grouping - the
+         subtotals were worked out in auraos.lib.quote, because a total
+         computed in a template is a second opinion about money. A group
+         with no title is the unphased one and prints no heading. #}
+      {% for group in line_phase_groups %}
+      {% if group.title %}
+      <tr class="aura-phase-row">
+        <td colspan="6">
+          <div class="aura-phase-title">{{ group.title }}</div>
+          {% if group.blurb %}<div class="aura-phase-blurb">{{ group.blurb }}</div>{% endif %}
+        </td>
+        <td class="aura-amount aura-phase-amount">{{ money(group.subtotal or 0) }}</td>
+      </tr>
+      {% endif %}
+      {% for section in group.entries %}
       <tr class="aura-section-row">
         <td colspan="6">
           <div class="aura-package-title">{{ section.title }}</div>
@@ -270,6 +299,7 @@
       </tr>
       {% endfor %}
       {% endfor %}
+      {% endfor %}
     </tbody>
   </table>
   {% else %}
@@ -281,16 +311,27 @@
       </tr>
     </thead>
     <tbody>
-      {% for package in packages %}
+      {% for group in phase_groups %}
+      {% if group.title %}
+      <tr class="aura-phase-row">
+        <td>
+          <div class="aura-phase-title">{{ group.title }}</div>
+          {% if group.blurb %}<div class="aura-phase-blurb">{{ group.blurb }}</div>{% endif %}
+        </td>
+        <td class="aura-amount aura-phase-amount">{{ money(group.subtotal or 0) }}</td>
+      </tr>
+      {% endif %}
+      {% for package in group.entries %}
       <tr>
         <td>
-          <div class="aura-package-title">{{ package.title }}</div>
+          <div class="aura-package-title{% if group.title %} aura-in-phase{% endif %}">{{ package.title }}</div>
           {% if package.description %}
           <div class="aura-package-desc">{{ package.description }}</div>
           {% endif %}
         </td>
         <td class="aura-amount">{{ money(package.price or 0) }}</td>
       </tr>
+      {% endfor %}
       {% endfor %}
     </tbody>
   </table>

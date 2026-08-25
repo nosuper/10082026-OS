@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "phase",
   "description",
   "has_price_override",
   "price_override",
@@ -62,6 +63,12 @@
    "in_list_view": 1,
    "label": "Variance",
    "read_only": 1
+  },
+  {
+   "description": "Which phase this package is quoted under. Matched to Deal Phase by name; a package naming no phase, or one that no longer exists, is still quoted - it is money the client is being asked for and never disappears to tidy a layout.",
+   "fieldname": "phase",
+   "fieldtype": "Data",
+   "label": "Phase"
   }
  ],
  "index_web_pages_for_search": 0,

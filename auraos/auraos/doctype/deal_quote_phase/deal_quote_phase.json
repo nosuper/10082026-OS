@@ -1,0 +1,42 @@
+{
+ "actions": [],
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "blurb"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phase",
+   "reqd": 1,
+   "description": "Frozen with the version. A quote handed to a client keeps the phase names it was handed with, whatever the deal calls them afterwards.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "blurb",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Blurb",
+   "description": "Frozen with the version, for the same reason as the name beside it.",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Deal Quote Phase",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

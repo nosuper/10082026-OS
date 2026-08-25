@@ -265,11 +265,41 @@ def publish(deal_name, notes=None):
             "vat_amount": round_vnd(totals.vat_amount),
             "total": round_vnd(totals.total),
             "packages": entries,
+            # Frozen with the version, like the assumptions above and for
+            # the same reason: a quote handed to a client keeps the shape
+            # it was handed in. Renaming a phase on the deal afterwards -
+            # or deleting one - restates nothing the client is holding.
+            #
+            # Only the phases this version's entries actually name are
+            # kept. A phase the founder created and put nothing in is not
+            # part of the offer, and freezing it would preserve an empty
+            # heading forever (`quote.phase_groups` drops it on the way
+            # out either way, so this only avoids storing the noise).
+            #
+            # Lump sum collapses the entries into one, which names no
+            # phase - so a lump-sum version freezes no phases and reads
+            # as it always has.
+            "phases": frozen_phases(deal, entries),
             "lines": lines,
         }
     )
     quote.insert()
     return quote
+
+
+def frozen_phases(deal, entries):
+    """The phases this version's offer actually uses, in the deal's order.
+
+    Order is the deal's, not the packages': the founder decides that
+    pre-production is read before post, and a phase keeps its place even
+    when the package that happens to sit in it was added last.
+    """
+    used = {entry.get("phase") for entry in entries if entry.get("phase")}
+    return [
+        {"title": phase.title, "blurb": phase.blurb}
+        for phase in deal.phases
+        if phase.title in used
+    ]
 
 
 def frozen_lines(deal):
