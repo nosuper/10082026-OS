@@ -20,10 +20,11 @@ Automated tests do not run on a preview stack. CI builds a fresh site per
 branch and is the authority on whether the suite passes; a stack is for a
 human to click through.
 
-> **Superseded in part by ADR-0004 (2026-08-25).** The `CI` workflow is
-> disabled and the suites now run on this box by hand. The first sentence
-> above still holds - a preview stack is for clicking through, not for
-> running tests. The claim that CI is the authority does not.
+> **Briefly superseded by ADR-0004 (2026-08-25), then restored the same
+> day.** The `CI` workflow was disabled over billing and the suites ran on
+> this box by hand; making the repository public made Actions free and the
+> workflow came back. Both sentences above hold again. ADR-0004 is kept for
+> the by-hand commands and for the `bench migrate` trap it found.
 
 ## Considered options
 
