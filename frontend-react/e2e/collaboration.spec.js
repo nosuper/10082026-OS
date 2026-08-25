@@ -32,6 +32,21 @@ async function openDeal(page) {
   return deal;
 }
 
+/**
+ * How many comments the server holds, polled rather than read once.
+ *
+ * The first version of this file read it straight after `.click()`, which is
+ * before the POST has landed - and the page-wide text assertion beside it
+ * passed anyway, because the composer still held a copy of what had just been
+ * typed. Two mistakes hiding each other: a race, and an assertion that could
+ * not tell a posted comment from an unsent draft.
+ */
+async function threadCount(page, deal) {
+  const answer = await callAs(page, THREAD, { deal });
+  expect(answer.status, `the thread was refused: ${JSON.stringify(answer.body)}`).toBe(200);
+  return answer.body.message.length;
+}
+
 /** The composer is a contentEditable, not a textarea - type into it as one. */
 async function writeComment(page, text) {
   const editor = page.getByRole("textbox", { name: "New comment" });
@@ -52,10 +67,14 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
   try {
     await writeComment(page, "khach muon quay truoc Tet");
     await page.getByRole("button", { name: "Comment", exact: true }).click();
-    await expect(page.getByText("khach muon quay truoc Tet")).toBeVisible();
 
+    // Scoped to the thread, never to the page: the composer holds a copy of
+    // this text until the post succeeds, so a page-wide match proves nothing.
+    const thread = page.getByRole("list", { name: "Comment thread" });
+    await expect(thread.getByText("khach muon quay truoc Tet")).toBeVisible();
+
+    await expect.poll(() => threadCount(page, deal)).toBe(before + 1);
     const posted = (await callAs(page, THREAD, { deal })).body.message;
-    expect(posted.length).toBe(before + 1);
     const mine = posted.find((row) => row.content?.includes("khach muon quay truoc Tet"));
     expect(mine, "the posted comment is not in the thread").toBeTruthy();
     written.push(mine.name);
@@ -72,15 +91,15 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
     await editor.pressSequentially("quay sau Tet");
     await page.getByRole("button", { name: "Save", exact: true }).click();
 
-    await expect(page.getByText("quay sau Tet")).toBeVisible();
-    await expect(page.getByText("khach muon quay truoc Tet")).toHaveCount(0);
-    await expect(page.getByText("edited", { exact: true })).toBeVisible();
+    await expect(thread.getByText("quay sau Tet")).toBeVisible();
+    await expect(thread.getByText("khach muon quay truoc Tet")).toHaveCount(0);
+    await expect(thread.getByText("edited", { exact: true })).toBeVisible();
 
     // Deleting asks first. A comment is speech, and speech that vanishes on a
     // stray click is worse than one click too many.
     await page.getByRole("button", { name: "Delete comment" }).first().click();
     await page.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page.getByText("quay sau Tet")).toHaveCount(0);
+    await expect.poll(() => threadCount(page, deal)).toBe(before);
     written.length = 0;
   } finally {
     for (const name of written) {
@@ -88,8 +107,7 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
     }
   }
 
-  const after = (await callAs(page, THREAD, { deal })).body.message.length;
-  expect(after).toBe(before);
+  expect(await threadCount(page, deal)).toBe(before);
   expect(failures).toEqual([]);
 });
 
@@ -103,14 +121,15 @@ test("a mention leaves the markup the server reads", async ({ page }) => {
 
   const written = [];
   try {
-    const editor = await writeComment(page, "@");
+    await writeComment(page, "@");
     // The picker opens on the caret, not on a keystroke count.
     const picker = page.getByRole("listbox", { name: "Mention someone" });
     await expect(picker).toBeVisible();
     await picker.getByRole("option").first().click();
 
+    const before = await threadCount(page, deal);
     await page.getByRole("button", { name: "Comment", exact: true }).click();
-    await expect(editor).toBeVisible();
+    await expect.poll(() => threadCount(page, deal)).toBe(before + 1);
 
     const posted = (await callAs(page, THREAD, { deal })).body.message;
     const mentioning = posted.find((row) => (row.content ?? "").includes('class="mention"'));

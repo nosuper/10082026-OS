@@ -134,7 +134,11 @@ export function DealComments({ deal }: { deal: string }) {
         }}
       >
         {(rows) => (
-          <ul className="space-y-3">
+          // Named, so a test can look at the thread rather than at the page:
+          // the composer holds a copy of whatever was just typed, and a
+          // page-wide text assertion is satisfied by that copy whether the
+          // comment posted or not.
+          <ul aria-label="Comment thread" className="space-y-3">
             {rows.map((row) => (
               <li key={row.name} className="rounded-xl border border-border bg-card p-3">
                 <div className="flex flex-wrap items-baseline gap-2">
