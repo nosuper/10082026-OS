@@ -998,6 +998,25 @@ But the board's own subtitle says only *"Drag a card to move the job."* (`routes
 
 ## 6. Recommendations, ordered by value ÷ effort
 
+> **Status, 2026-08-25 — items 1–5 have shipped** ([#176](https://github.com/nosuper/10082026-OS/pull/176)).
+> Two corrections came out of building them, both recorded here rather than
+> only in the pull request:
+>
+> - **§6.1's placement was wrong.** The rule cannot go in `@layer base`:
+>   Tailwind v4 compiles `outline-none` into `@layer utilities`, and a later
+>   layer beats an earlier one whatever the source order. It reads correctly
+>   and does nothing. It has to be **unlayered**, which outranks every layer.
+> - **§6.2 was incomplete.** `--ember` alone cannot fix it: `text-ember` on
+>   `bg-ember-soft` is the app's commonest pairing (152 usages, the
+>   margin-floor banner among them) and at the existing soft tint **no** value
+>   of `--ember` clears 4.5:1 on every pair. Both tokens moved. §6.2 also
+>   missed that white on `bg-ember` — every ember button — was 3.40:1 and
+>   failing too.
+>
+> **§6.18 deliberately did not ship**, because this document files it as a
+> product decision rather than a defect. It belongs with §9.5.
+
+
 Effort is in the usual currency: **XS** ≈ under an hour, **S** ≈ half a day,
 **M** ≈ one to three days, **L** ≈ a week or more. "Value" is against the
 founder's three stated complaints plus the accessibility findings, not against
