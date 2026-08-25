@@ -23,6 +23,7 @@ import { LockKeyhole, Upload } from "lucide-react";
 import { useState, type ChangeEvent, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
+import { VocabularyLists } from "@/components/aura/VocabularyLists";
 import { Card, Pill, Td, Th } from "@/components/aura/primitives";
 import { ErrorState, QueryStates } from "@/components/aura/states";
 import { FrappeError, uploadFile } from "@/lib/frappe";
@@ -168,11 +169,24 @@ function SettingsPage() {
       title="Company settings"
       meta="Studio-wide defaults - deals, quotes and the jobs board read these live"
     >
+      {/* Outside the founder gate, deliberately. T3.5 stopped Settings being a
+          founder-only door: a producer manages deal sources here while the
+          margin floor below stays out of reach. Putting this inside the gate
+          would send a producer to a page that refuses them wholesale, which is
+          the screen T3.5 exists to replace. Each list decides for itself
+          whether this session may edit it. */}
+      <div className="mb-4">
+        <VocabularyLists />
+      </div>
+
       {refused ? (
         <Card>
           <div className="flex items-start gap-2 p-4 text-sm text-muted-foreground">
             <LockKeyhole className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-            <span>Only the founder can view company settings.</span>
+            <span>
+              The lists above are yours to manage. The rest of company settings - the margin floor,
+              tiers, positioning and the company identity - is the founder's.
+            </span>
           </div>
         </Card>
       ) : (

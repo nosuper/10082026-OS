@@ -13,6 +13,7 @@ import {
   Receipt,
   Wallet,
   LogOut,
+  ClipboardList,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -29,18 +30,32 @@ type NavItem = {
   icon: typeof Home;
   founder?: boolean;
   match?: string;
+  /** Which reach this link needs. Absent means every session gets it. */
+  needs?: "jobs" | "deals" | "settings";
 };
 
+// `needs` marks a link the server would refuse for some sessions. A crew
+// member holds no permission on Job or Deal at all (T7.1), so a nav full of
+// links that answer 403 is worse than a shorter nav - and My work is the door
+// they do have. Decided by auraos.api.session_scope rather than by a role name
+// read in the browser.
 const primaryNav: NavItem[] = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/deals", label: "Deals", icon: Handshake },
-  { to: "/quotations", label: "Quotations", icon: FileSpreadsheet },
-  { to: "/jobs", label: "Jobs", icon: Clapperboard },
+  { to: "/my-work", label: "My work", icon: ClipboardList },
+  { to: "/deals", label: "Deals", icon: Handshake, needs: "deals" },
+  { to: "/quotations", label: "Quotations", icon: FileSpreadsheet, needs: "deals" },
+  { to: "/jobs", label: "Jobs", icon: Clapperboard, needs: "jobs" },
   // Points at the Paperwork tab rather than a bare /documents, the way
   // contactsNav points at a tab rather than a bare /contacts. Paperwork is
   // first because it is the half people open daily.
-  { to: "/documents/paperwork", label: "Documents", icon: FileText, match: "/documents" },
-  { to: "/finance", label: "Finance", icon: Wallet },
+  {
+    to: "/documents/paperwork",
+    label: "Documents",
+    icon: FileText,
+    match: "/documents",
+    needs: "jobs",
+  },
+  { to: "/finance", label: "Finance", icon: Wallet, needs: "jobs" },
 ];
 
 const contactsNav: NavItem[] = [
@@ -51,8 +66,11 @@ const contactsNav: NavItem[] = [
 // Settings is readable only by the founder, so a producer never sees the link.
 // The server refuses the data either way - this only keeps the nav honest.
 const footNav: NavItem[] = [
-  { to: "/expense", label: "Quick expense", icon: Receipt },
-  { to: "/settings", label: "Settings", icon: Settings, founder: true },
+  { to: "/expense", label: "Quick expense", icon: Receipt, needs: "jobs" },
+  // No longer founder-only: T3.5 put the managed lists here, and a producer
+  // manages deal sources on this page while the margin floor stays out of
+  // reach. The server decides, and the page itself gates the founder half.
+  { to: "/settings", label: "Settings", icon: Settings, needs: "settings" },
 ];
 
 function NavLink({ item }: { item: NavItem }) {
@@ -102,6 +120,15 @@ export function AppShell({
 }) {
   const session = useSession();
 
+  /** Whether this session is offered a link at all. */
+  const reachable = (item: NavItem) => {
+    if (item.founder && !session.isFounder) return false;
+    if (item.needs === "jobs") return session.scope.can_read_jobs;
+    if (item.needs === "deals") return session.scope.can_read_deals;
+    if (item.needs === "settings") return session.scope.can_read_settings;
+    return true;
+  };
+
   return (
     <div className="min-h-screen bg-background dot-grid">
       <div className="flex min-h-screen">
@@ -118,24 +145,29 @@ export function AppShell({
 
           <nav className="flex-1 space-y-6 px-2.5 pb-4">
             <div className="space-y-0.5">
-              {primaryNav.map((i) => (
+              {primaryNav.filter(reachable).map((i) => (
                 <NavLink key={i.to} item={i} />
               ))}
             </div>
-            <div className="space-y-0.5">
-              <div className="label-caps px-2.5 pb-1.5">Contacts</div>
-              {contactsNav.map((i) => (
-                <NavLink key={i.to} item={i} />
-              ))}
-            </div>
-            <div className="space-y-0.5">
-              <div className="label-caps px-2.5 pb-1.5">Studio</div>
-              {footNav
-                .filter((i) => !i.founder || session.isFounder)
-                .map((i) => (
+            {/* Contacts rides on the deal reach: a crew member has no client
+                list to read, and the section header would otherwise sit above
+                nothing. */}
+            {session.scope.can_read_deals ? (
+              <div className="space-y-0.5">
+                <div className="label-caps px-2.5 pb-1.5">Contacts</div>
+                {contactsNav.map((i) => (
                   <NavLink key={i.to} item={i} />
                 ))}
-            </div>
+              </div>
+            ) : null}
+            {footNav.filter(reachable).length > 0 ? (
+              <div className="space-y-0.5">
+                <div className="label-caps px-2.5 pb-1.5">Studio</div>
+                {footNav.filter(reachable).map((i) => (
+                  <NavLink key={i.to} item={i} />
+                ))}
+              </div>
+            ) : null}
           </nav>
 
           <div className="border-t border-border p-3">
@@ -145,7 +177,7 @@ export function AppShell({
               </div>
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="truncate text-sm font-medium">{session.userName}</div>
-                <div className="label-caps">{session.isFounder ? "Founder" : "Producer"}</div>
+                <div className="label-caps">{session.roleLabel}</div>
               </div>
               <button
                 type="button"

@@ -5,7 +5,7 @@
 // computed, nothing formats a number outside lib/format.ts, and every request
 // goes through lib/queries.ts.
 
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Navigate, createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock } from "lucide-react";
 import { useState } from "react";
 
@@ -173,7 +173,31 @@ function biggestUncovered(lines: ExposureLine[]): ExposureLine[] {
   return [...lines].sort((a, b) => b.amount - a.amount).slice(0, 5);
 }
 
+/**
+ * Who this screen is for, decided before any of its reads are set up.
+ *
+ * A crew session has no dashboard to draw: the dashboard is built from the
+ * Deal and Job lists, and crew hold no permission on either - not read, not
+ * list, not search (T7.1) - so rendering it for them would be a page of
+ * permission errors with a greeting on top. My work is the door they do have,
+ * so Home is that door for them.
+ *
+ * A wrapper rather than an early return inside the dashboard, because the
+ * dashboard opens with a dozen hooks and a conditional return above them
+ * would call them in a different order on the render after the scope arrives.
+ * Splitting the decision out is what keeps the hook order fixed.
+ *
+ * Redirected rather than reshaped into a crew dashboard: there is exactly one
+ * screen a crew session can read, and a second route rendering the same list
+ * would be two places to keep in step for no gain.
+ */
 function HomePage() {
+  const session = useSession();
+  if (session.scope.crew_only) return <Navigate to="/my-work" replace />;
+  return <HomeDashboard />;
+}
+
+function HomeDashboard() {
   const session = useSession();
 
   // -- the four reads this screen is built from --

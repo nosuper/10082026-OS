@@ -5,8 +5,15 @@ import { callMethod } from "./frappe";
 // read the cookies Frappe sets at login for the name, probe a founder-only
 // endpoint for the role, bounce guests to Frappe's own login page.
 
-/** Where log-out lands the user afterwards, so re-login returns to this app. */
-export const HOME_PATH = "/aura-next/deals";
+/**
+ * Where log-out lands the user afterwards, so re-login returns to this app.
+ *
+ * The app root rather than the deals board: a crew session holds no permission
+ * on Deal at all (T7.1), so signing one back in used to drop them on a page
+ * that answered with a permission error. The root knows who is asking and
+ * sends a crew session to My work, which is the only screen they can read.
+ */
+export const HOME_PATH = "/aura-next/";
 
 function readCookie(name: string): string {
   const raw = document.cookie
