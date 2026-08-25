@@ -114,8 +114,12 @@ function BankPage() {
   const chosen = open ?? statements.data?.[0]?.name ?? null;
 
   return (
-    <AppShell title="Finance" meta={<FinanceTabs />}>
+    // The tab strip belongs in the body, where the other eight put it. It
+    // used to render in AppShell's `meta` slot - a small muted line under the
+    // heading - so the whole strip jumped position when you clicked Bank.
+    <AppShell title="Bank" meta="Statements as the bank sent them, against the ledger" wide>
       <div className="space-y-4">
+        <FinanceTabs />
         <Card
           title="Statements"
           subtitle="As the bank sent them. A statement is recorded, never edited."

@@ -114,13 +114,13 @@ export type ForecastReport = {
 export const Route = createFileRoute("/finance/forecast")({
   head: () => ({
     meta: [
-      { title: "Cash forecast - weighted pipeline by stage | AuraOS" },
+      { title: "Forecast - weighted pipeline by stage | AuraOS" },
       {
         name: "description",
         content:
           "Each open deal weighted by the win probability of its stage, landing in the month that stage's lead time reaches. A projection, labelled apart from cash.",
       },
-      { property: "og:title", content: "Cash forecast - AuraOS" },
+      { property: "og:title", content: "Forecast - AuraOS" },
       {
         property: "og:description",
         content: "Weighted pipeline by month and by stage, derived on every read.",
@@ -171,7 +171,7 @@ function ForecastPage() {
 
   return (
     <AppShell
-      title="Cash forecast"
+      title="Forecast"
       meta={
         report
           ? `Weighted pipeline · as of ${formatDate(report.as_of)}`

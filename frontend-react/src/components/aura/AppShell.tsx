@@ -112,11 +112,22 @@ export function AppShell({
   title,
   meta,
   actions,
+  wide = false,
 }: {
   children: ReactNode;
   title: string;
   meta?: ReactNode;
   actions?: ReactNode;
+  /**
+   * Let the page use every pixel, instead of the 1296px default.
+   *
+   * For the screens whose content is genuinely two-dimensional - a board, the
+   * quote editor's cost table, bank reconciliation's two facing columns.
+   * Atlassian's grid reserves the fluid case for "Kanban boards, whiteboards"
+   * and warns to use it sparingly, "because at very large viewports, text
+   * lines can become too long". This prop is that "sparingly".
+   */
+  wide?: boolean;
 }) {
   const session = useSession();
 
@@ -210,7 +221,16 @@ export function AppShell({
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6">{children}</main>
+          {/* 1296px is Atlassian's published fixed-wide maximum, which their
+              grid names as "the default for most experiences". At the app's
+              12px chrome that is ~210 characters a line, down from ~375 on a
+              wide monitor - still long, but no longer a line the eye loses its
+              place in on the way back. */}
+          <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6">
+            <div className={cn("mx-auto w-full", wide ? "max-w-none" : "max-w-[1296px]")}>
+              {children}
+            </div>
+          </main>
         </div>
       </div>
     </div>
