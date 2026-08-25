@@ -8,6 +8,9 @@
   "title",
   "phase",
   "description",
+  "qty",
+  "unit",
+  "deliverables",
   "price"
  ],
  "fields": [
@@ -38,6 +41,27 @@
    "fieldname": "phase",
    "fieldtype": "Data",
    "label": "Phase",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen with the version, like the description beside it.",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen with the version, like the description beside it.",
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unit",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen with the version, like the description beside it.",
+   "fieldname": "deliverables",
+   "fieldtype": "Small Text",
+   "label": "Deliverables",
    "read_only": 1
   }
  ],

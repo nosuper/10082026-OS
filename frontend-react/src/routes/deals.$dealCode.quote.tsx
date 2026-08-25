@@ -157,6 +157,9 @@ type PackageRow = {
   title: string | null;
   description: string | null;
   phase: string | null;
+  qty: number | null;
+  unit: string | null;
+  deliverables: string | null;
   price_override: number | null;
   has_price_override: number | null;
 };
@@ -176,6 +179,14 @@ type PackageFields = {
   override: number | null;
   /** Which phase this package is quoted under. "" is quoted on its own. */
   phase: string;
+  /**
+   * What the client is buying, as against what it costs (#44). Descriptive
+   * only - nothing multiplies `qty` by anything, because the price is the
+   * sum of the lines or the override the producer typed.
+   */
+  qty: string;
+  unit: string;
+  deliverables: string;
 };
 
 /**
@@ -202,6 +213,7 @@ type DealDoc = {
   exclusions: string | null;
   included_revision_rounds: number | null;
   quote_detail_level: string | null;
+  quote_valid_until: string | null;
   commission_pct: number | null;
   cost_lines: Partial<LineFields>[] | null;
   packages: PackageRow[] | null;
@@ -273,7 +285,13 @@ type OpenEvent = {
  *  Edited on the deal, frozen onto each published version, printed on the
  *  client's page. Grouped with the rates because they are the same kind of
  *  thing: what a version says, fixed at the moment it is sent. */
-type QuoteTerms = { assumptions: string; exclusions: string; revisionRounds: number };
+type QuoteTerms = {
+  assumptions: string;
+  exclusions: string;
+  revisionRounds: number;
+  /** The day the offer stops standing (#44). Empty is no expiry. */
+  validUntil: string;
+};
 
 type Terms = {
   mfPct: number;
@@ -388,6 +406,12 @@ function toPackage(row: PackageRow): Package {
     description: text(row.description),
     override: row.has_price_override ? num(row.price_override) : null,
     phase: text(row.phase),
+    // Kept as typed text rather than a number: an empty box is "no
+    // quantity", and a 0 the producer types is the same answer. Coerced
+    // on the way out, once.
+    qty: row.qty ? String(row.qty) : "",
+    unit: text(row.unit),
+    deliverables: text(row.deliverables),
   };
 }
 
@@ -463,6 +487,9 @@ function wirePackage(pkg: Package): Record<string, string | number | null> {
     // Trimmed, and blank rather than null: the server matches a package to a
     // phase by this name, so " Tiền kỳ" and "Tiền kỳ" must not be two phases.
     phase: pkg.phase.trim(),
+    qty: Number(pkg.qty) || 0,
+    unit: pkg.unit.trim(),
+    deliverables: blank(pkg.deliverables),
   };
 }
 
@@ -541,6 +568,7 @@ function BreakdownPage() {
     assumptions: "",
     exclusions: "",
     revisionRounds: 0,
+    validUntil: "",
   });
   const [commission, setCommission] = useState<number | null>(null);
   const [visibleMeta, setVisibleMeta] = useState<MetaKey[]>(() => loadColumns(session.userId));
@@ -583,6 +611,7 @@ function BreakdownPage() {
       assumptions: data.assumptions ?? "",
       exclusions: data.exclusions ?? "",
       revisionRounds: data.included_revision_rounds ?? 0,
+      validUntil: data.quote_valid_until ?? "",
     });
     setCommission(data.commission_pct ?? null);
     setBaseline(
@@ -595,6 +624,7 @@ function BreakdownPage() {
           assumptions: data.assumptions ?? "",
           exclusions: data.exclusions ?? "",
           revisionRounds: data.included_revision_rounds ?? 0,
+          validUntil: data.quote_valid_until ?? "",
         },
         data.commission_pct ?? null,
       ),
@@ -724,6 +754,7 @@ function BreakdownPage() {
       assumptions: blank(quoteTerms.assumptions),
       exclusions: blank(quoteTerms.exclusions),
       included_revision_rounds: quoteTerms.revisionRounds,
+      quote_valid_until: blank(quoteTerms.validUntil),
     };
     // Producers never receive this field and the server ignores it from them.
     if (view?.founder && commission !== null) doc["commission_pct"] = commission;
@@ -806,7 +837,16 @@ function BreakdownPage() {
   function addPackage() {
     setPackages((current) => [
       ...current,
-      { key: nextKey(), title: "", description: "", override: null, phase: "" },
+      {
+        key: nextKey(),
+        title: "",
+        description: "",
+        override: null,
+        phase: "",
+        qty: "",
+        unit: "",
+        deliverables: "",
+      },
     ]);
   }
 
@@ -1672,6 +1712,7 @@ function BreakdownPage() {
                       <tr>
                         <Th>Package</Th>
                         <Th>Phase</Th>
+                        <Th>Qty</Th>
                         <Th>What the client reads</Th>
                         <Th className="text-right">Member sum</Th>
                         <Th className="text-right">Override</Th>
@@ -1730,6 +1771,33 @@ function BreakdownPage() {
                               </select>
                             </Td>
                             <Td>
+                              {/* Descriptive, never arithmetic (#44): this
+                                  says what is being bought, and nothing
+                                  multiplies it by the price. */}
+                              <div className="flex gap-1">
+                                <input
+                                  inputMode="decimal"
+                                  value={pkg.qty}
+                                  onChange={(event) =>
+                                    updatePackage(index, { qty: event.target.value })
+                                  }
+                                  placeholder="2"
+                                  aria-label={`Quantity, package ${index + 1}`}
+                                  className={`w-14 ${cellNum}`}
+                                />
+                                <input
+                                  value={pkg.unit}
+                                  onChange={(event) =>
+                                    updatePackage(index, { unit: event.target.value })
+                                  }
+                                  placeholder="ngày quay"
+                                  aria-label={`Unit, package ${index + 1}`}
+                                  title="Prints only with a quantity beside it - a unit on its own is a label nobody asked for."
+                                  className={`w-24 ${cellInput}`}
+                                />
+                              </div>
+                            </Td>
+                            <Td>
                               <textarea
                                 rows={2}
                                 value={pkg.description}
@@ -1739,6 +1807,17 @@ function BreakdownPage() {
                                 placeholder="Client-facing wording"
                                 aria-label={`Package description, package ${index + 1}`}
                                 className={`w-full resize-y ${cellInput}`}
+                              />
+                              <textarea
+                                rows={2}
+                                value={pkg.deliverables}
+                                onChange={(event) =>
+                                  updatePackage(index, { deliverables: event.target.value })
+                                }
+                                placeholder="What they receive, one per line"
+                                aria-label={`Deliverables, package ${index + 1}`}
+                                title="One per line. Prose the client reads, never something the app counts."
+                                className={`mt-1 w-full resize-y ${cellInput}`}
                               />
                             </Td>
                             <Td
@@ -1918,9 +1997,29 @@ function BreakdownPage() {
 
           <Card
             title="Assumptions and exclusions"
-            subtitle="What this price assumes, and what it does not cover. Frozen into every version you publish, and printed on the client's page."
+            subtitle="What this price assumes, what it does not cover, and how long it stands. Frozen into every version you publish, and printed on the client's page."
           >
             <div className="grid gap-4 p-4">
+              {/* Beside the assumptions because it is the same kind of thing:
+                  a promise frozen with the version, argued over later (#44). */}
+              <label className="block text-xs text-muted-foreground">
+                Valid until
+                <input
+                  type="date"
+                  aria-label="Quote valid until"
+                  value={quoteTerms.validUntil}
+                  disabled={!serverDoc}
+                  onChange={(event) =>
+                    setQuoteTerms((current) => ({ ...current, validUntil: event.target.value }))
+                  }
+                  className={`num mt-1 w-44 ${cellInput}`}
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Để trống là không hết hạn. Quá ngày thì trang báo giá vẫn mở và vẫn đọc được đủ -
+                  nó chỉ ghi rõ là đã qua, để khách không đọc giá cũ như giá hiện tại.
+                </span>
+              </label>
+
               <label className="block text-xs text-muted-foreground">
                 Assumptions
                 <textarea

@@ -25,9 +25,11 @@ from auraos.lib.quote import (
     DEFAULT_DETAIL_LEVEL,
     client_view,
     company_view,
+    deliverables_list,
     delivery_state,
     lump_sum_entry,
     needs_nudge,
+    package_quantity,
     quote_number,
     quote_totals,
 )
@@ -257,6 +259,11 @@ def publish(deal_name, notes=None):
             # whatever the deal says today.
             "assumptions": deal.assumptions,
             "exclusions": deal.exclusions,
+            # Frozen for the same reason (#44): a client holding a quote
+            # that says "valid until 20 August" must keep that date when
+            # the deal is re-priced with a different one. Blank on a deal
+            # with no expiry, which is the default.
+            "valid_until": deal.quote_valid_until,
             "included_revision_rounds": deal.included_revision_rounds,
             "quote_mf_pct": deal.quote_mf_pct,
             "vat_pct": deal.vat_pct,
@@ -499,6 +506,19 @@ def client_context(quote):
         if context.get("published_on")
         else None
     )
+    # Formatted the same way the published date is, so the two dates on
+    # one page read alike (#44). `expired` was decided in client_view -
+    # this only says the day out loud.
+    context["valid_until_display"] = (
+        frappe.utils.formatdate(context["valid_until"], "d MMMM yyyy")
+        if context.get("valid_until")
+        else None
+    )
+    # The two package-detail helpers, on top of the whitelist and never
+    # new data: a quantity is a string built from fields already there,
+    # and a deliverables list is one field split on its own newlines.
+    context["package_quantity"] = package_quantity
+    context["deliverables_list"] = deliverables_list
     return context
 
 

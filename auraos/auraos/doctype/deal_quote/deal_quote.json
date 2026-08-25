@@ -18,6 +18,7 @@
   "client_contact",
   "detail_level",
   "column_break_client",
+  "valid_until",
   "notes",
   "included_revision_rounds",
   "assumptions",
@@ -258,6 +259,13 @@
    "fieldtype": "Table",
    "label": "Phases",
    "options": "Deal Quote Phase",
+   "read_only": 1
+  },
+  {
+   "description": "Frozen with the version. A quote handed to a client keeps the date it was handed with, whatever the deal says afterwards.",
+   "fieldname": "valid_until",
+   "fieldtype": "Date",
+   "label": "Valid Until",
    "read_only": 1
   }
  ],

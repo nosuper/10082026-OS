@@ -28,6 +28,7 @@
   "deal_links",
   "breakdown_section",
   "cost_lines",
+  "quote_valid_until",
   "phases",
   "packages",
   "params_section",
@@ -464,6 +465,12 @@
    "fieldtype": "Table",
    "label": "Phases",
    "options": "Deal Phase"
+  },
+  {
+   "description": "The day the offer stops standing, printed on the quote. Leave it empty for no expiry, which is the default. A version past its date still opens and still reads - the date tells a client the price may have moved, it does not close the link.",
+   "fieldname": "quote_valid_until",
+   "fieldtype": "Date",
+   "label": "Quote Valid Until"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -30,6 +30,18 @@
   .aura-quote td.aura-amount, .aura-quote th.aura-amount { text-align: right;
     white-space: nowrap; }
   .aura-quote .aura-package-title { font-weight: 600; }
+  /* What is being bought, and what arrives (#44). Set quieter than the
+     title and quieter than the price: it is the answer to "what am I
+     getting", which a reader wants after they have found the line, not
+     before. */
+  .aura-quote .aura-package-qty { color: #4b5563; font-size: .8125rem;
+    margin-top: .15rem; }
+  .aura-quote .aura-deliverables { margin: .35rem 0 0; padding-left: 1.1rem;
+    color: #4b5563; font-size: .8125rem; }
+  .aura-quote .aura-deliverables li { margin: .1rem 0; }
+  /* An expired quote says so where the dates are, and nowhere else - the
+     offer below it still reads in full. */
+  .aura-quote .aura-expired { color: #b91c1c; font-weight: 600; }
   /* A phase heading (#43). Heavier than a package title and set apart
      above it, because a phase is the part of the job a package sits
      inside - if the two read at the same weight the client cannot tell
@@ -243,6 +255,15 @@
     <div class="aura-quote-meta">
       <div><strong>{{ quote_number or "Version " ~ version }}</strong></div>
       {% if published_display %}<div>{{ published_display }}</div>{% endif %}
+      {# The offer's own shelf life (#44). Said, never enforced: a quote past
+         its date still opens and still reads in full, because the version is
+         a record of what was offered and the founder may still honour it.
+         What this stops is a client reading an old price as a current one. #}
+      {% if valid_until_display %}
+      <div class="{{ 'aura-expired' if expired else '' }}">
+        {% if expired %}&#9888; {% endif %}Hiệu lực đến: {{ valid_until_display }}{% if expired %} — đã qua{% endif %}
+      </div>
+      {% endif %}
       <div>Project: <strong>{{ title or "" }}</strong></div>
     </div>
   </div>
@@ -281,6 +302,14 @@
           <div class="aura-package-title">{{ section.title }}</div>
           {% if section.description %}
           <div class="aura-package-desc">{{ section.description }}</div>
+          {% endif %}
+          {% set quantity = package_quantity(section.qty, section.unit) %}
+          {% if quantity %}<div class="aura-package-qty">{{ quantity }}</div>{% endif %}
+          {% set gets = deliverables_list(section.deliverables) %}
+          {% if gets %}
+          <ul class="aura-deliverables">
+            {% for line in gets %}<li>{{ line }}</li>{% endfor %}
+          </ul>
           {% endif %}
         </td>
         <td class="aura-amount aura-section-amount">
@@ -327,6 +356,14 @@
           <div class="aura-package-title{% if group.title %} aura-in-phase{% endif %}">{{ package.title }}</div>
           {% if package.description %}
           <div class="aura-package-desc">{{ package.description }}</div>
+          {% endif %}
+          {% set quantity = package_quantity(package.qty, package.unit) %}
+          {% if quantity %}<div class="aura-package-qty">{{ quantity }}</div>{% endif %}
+          {% set gets = deliverables_list(package.deliverables) %}
+          {% if gets %}
+          <ul class="aura-deliverables">
+            {% for line in gets %}<li>{{ line }}</li>{% endfor %}
+          </ul>
           {% endif %}
         </td>
         <td class="aura-amount">{{ money(package.price or 0) }}</td>
