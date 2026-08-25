@@ -61,8 +61,13 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
   page.on("pageerror", (error) => failures.push(error.message));
 
   const deal = await openDeal(page);
-  const before = (await callAs(page, THREAD, { deal })).body.message.length;
+  const before = await threadCount(page, deal);
   const written = [];
+  // Declared once, used for every control that belongs to the thread. The page
+  // header carries its own Save and the deal card its own Delete, so scoping by
+  // role and name alone resolves to two elements and Playwright refuses to
+  // guess - the same lesson as the text assertions, applied to the buttons.
+  const thread = page.getByRole("list", { name: "Comment thread" });
 
   try {
     await writeComment(page, "khach muon quay truoc Tet");
@@ -70,7 +75,6 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
 
     // Scoped to the thread, never to the page: the composer holds a copy of
     // this text until the post succeeds, so a page-wide match proves nothing.
-    const thread = page.getByRole("list", { name: "Comment thread" });
     await expect(thread.getByText("khach muon quay truoc Tet")).toBeVisible();
 
     await expect.poll(() => threadCount(page, deal)).toBe(before + 1);
@@ -84,12 +88,12 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
     expect(mine.edited).toBe(false);
     expect(mine.mine, "the author does not own their own comment").toBe(true);
 
-    await page.getByRole("button", { name: "Edit comment" }).first().click();
+    await thread.getByRole("button", { name: "Edit comment" }).first().click();
     const editor = page.getByRole("textbox", { name: "Edit comment" });
     await editor.click();
     await page.keyboard.press("ControlOrMeta+a");
     await editor.pressSequentially("quay sau Tet");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await thread.getByRole("button", { name: "Save", exact: true }).click();
 
     await expect(thread.getByText("quay sau Tet")).toBeVisible();
     await expect(thread.getByText("khach muon quay truoc Tet")).toHaveCount(0);
@@ -97,8 +101,8 @@ test("a comment posts, edits and deletes from the deal card", async ({ page }) =
 
     // Deleting asks first. A comment is speech, and speech that vanishes on a
     // stray click is worse than one click too many.
-    await page.getByRole("button", { name: "Delete comment" }).first().click();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await thread.getByRole("button", { name: "Delete comment" }).first().click();
+    await thread.getByRole("button", { name: "Delete", exact: true }).click();
     await expect.poll(() => threadCount(page, deal)).toBe(before);
     written.length = 0;
   } finally {
