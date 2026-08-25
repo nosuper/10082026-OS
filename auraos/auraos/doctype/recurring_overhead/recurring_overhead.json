@@ -1,0 +1,137 @@
+{
+ "actions": [],
+ "autoname": "format:RO-{#####}",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "label",
+  "amount",
+  "category",
+  "column_break_head",
+  "paid_from",
+  "supplier",
+  "description",
+  "schedule_section",
+  "day_of_month",
+  "starts_on",
+  "column_break_schedule",
+  "ends_on",
+  "disabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "What It Is",
+   "reqd": 1,
+   "description": "What the founder calls this standing cost - Tiền thuê văn phòng, Lương Minh, Adobe. It becomes the payment's description, so write it the way it should read on the overhead log."
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount Each Month",
+   "reqd": 1,
+   "description": "What it usually is. A month that came out different is corrected on the payment, not here - changing this restates what the company is committed to from now on, and never restates a payment already recorded."
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Category",
+   "options": "Company Expense Category"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "label": "Paid From",
+   "options": "Cash Account"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Data",
+   "label": "Supplier"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "When it falls"
+  },
+  {
+   "default": "1",
+   "fieldname": "day_of_month",
+   "fieldtype": "Int",
+   "label": "Day Of The Month",
+   "description": "The day it usually falls. 31 means month end and lands on the 28th in February - a payment stays inside the month it belongs to."
+  },
+  {
+   "fieldname": "starts_on",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "First Month",
+   "reqd": 1,
+   "description": "Any day in the first month it runs. Agreed on the 20th still means that whole month."
+  },
+  {
+   "fieldname": "column_break_schedule",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ends_on",
+   "fieldtype": "Date",
+   "label": "Last Month",
+   "description": "Any day in the last month it runs. Leave empty while it is still running."
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Paused",
+   "description": "Stops it coming due without deleting what the company used to pay for. The payments already recorded from it stay exactly as they are."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Recurring Overhead",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Founder",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

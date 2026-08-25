@@ -16,7 +16,7 @@ from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.job_task import job_task
 from auraos.auraos.doctype.paperwork_template import paperwork_template
 from auraos import statements
-from auraos.lib import acceptance, breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax, vocabulary
+from auraos.lib import acceptance, breakdown, breakeven, contracts, exposure, finance, library, paper_status, paperwork, recurring, settlement, tax, vocabulary
 from auraos.lib import reporting
 from auraos.lib import statement
 # Imported by name: `milestones` is a parameter of save_job_milestones.
@@ -1241,6 +1241,12 @@ def _attach_photo(expense, file_url):
     Only an unattached file the caller uploaded themselves qualifies:
     otherwise this endpoint would re-parent someone else's private file
     and read it back through the expense.
+
+    The doctype is read off the document rather than named here, because
+    a receipt belongs to two kinds of expense now (#14): a job's, and the
+    company's own. A literal would attach a Company Expense's photo to a
+    Job Expense that does not exist, which is worse than losing the
+    photo - the file would keep the permissions of nothing at all.
     """
     photo = frappe.db.get_value(
         "File",
@@ -1253,7 +1259,7 @@ def _attach_photo(expense, file_url):
             _("The photo must be a file you just uploaded"), frappe.ValidationError
         )
     file_doc = frappe.get_doc("File", photo.name)
-    file_doc.attached_to_doctype = "Job Expense"
+    file_doc.attached_to_doctype = expense.doctype
     file_doc.attached_to_name = expense.name
     file_doc.attached_to_field = "photo"
     file_doc.save()
@@ -3424,6 +3430,574 @@ def cash_transfers(limit=50):
         order_by="moved_on desc, creation desc",
         limit_page_length=frappe.utils.cint(limit) or 50,
     )
+
+
+# -- the overhead log and the break-even line (T12, issue #14) --
+#
+# The founder's own screen: what the company costs to run, and whether
+# the work it took on covered that. Three flows meet here and they are
+# kept apart on purpose.
+#
+# **Standing costs are templates, and a template is never a payment.**
+# `Recurring Overhead` says the rent is 30 triệu on the 5th;
+# `auraos.lib.recurring` works out which months have come round with
+# nothing recorded against them; `record_recurring_overheads` writes the
+# payments the founder confirms. Nothing writes a Company Expense on a
+# timer, because a Company Expense posts to the cash ledger and an
+# invented posting makes the cash screens disagree with the bank
+# statement - the one thing they exist to match. Twelve forms a year
+# become twelve clicks, and no đồng is posted that nobody decided.
+#
+# **Every endpoint here is founder-only twice over.** The doctypes grant
+# no Producer row, so the ORM, the REST layer and search refuse a
+# producer without any of this code running - which is what #14's third
+# criterion asks for, and it is a permission matrix rather than an
+# endpoint check. The explicit `_is_founder()` gate on top is for the
+# reads that go through `frappe.get_all`, which skips permissions by
+# design: the break-even endpoint reads every job in the site, and a
+# check that only existed in the doctype would not cover it.
+#
+# **Nothing here proposes a floor.** #14 says show, don't suggest, and
+# `auraos.lib.breakeven` carries the reason. The floor stays a founder
+# setting written by `set_margin_floor`, and no code path in this section
+# reads it, writes it or recommends one.
+
+# What a Recurring Overhead row carries to the screen. The write side
+# takes the same names through an explicit whitelist, so a field added to
+# the doctype has to be added here before a browser can set it.
+RECURRING_OVERHEAD_FIELDS = [
+    "name",
+    "label",
+    "amount",
+    "category",
+    "paid_from",
+    "supplier",
+    "description",
+    "day_of_month",
+    "starts_on",
+    "ends_on",
+    "disabled",
+]
+
+RECURRING_OVERHEAD_WRITABLE = {
+    "label",
+    "amount",
+    "category",
+    "paid_from",
+    "supplier",
+    "description",
+    "day_of_month",
+    "starts_on",
+    "ends_on",
+    "disabled",
+}
+
+# What a Company Expense row carries to the overhead log. `recurring` and
+# `recurring_month` travel with it because the log has to be able to show
+# which payments came from a standing cost and which the founder typed -
+# the two read differently when a month looks wrong.
+COMPANY_EXPENSE_FIELDS = [
+    "name",
+    "spent_on",
+    "amount",
+    "category",
+    "description",
+    "paid_from",
+    "supplier",
+    "photo",
+    "invoice_no",
+    "invoice_date",
+    "invoice_vat_amount",
+    "for_depreciation",
+    "recurring",
+    "recurring_month",
+]
+
+
+def _founder_only(what):
+    """Refuse anyone but the founder, by name.
+
+    The doctypes underneath already refuse a producer outright - there is
+    no Producer row on Company Expense or Recurring Overhead - so this is
+    the second lock rather than the only one. It matters because the
+    reads below use frappe.get_all, which skips permissions by design:
+    break-even reads every job in the site, and what the company costs to
+    run is not scoped to what a session may list.
+    """
+    if not _is_founder():
+        frappe.throw(_("Only the Founder may {0}").format(what), frappe.PermissionError)
+
+
+def _default_overhead_range():
+    """The twelve months ending this one.
+
+    The run-rate reading, and the reason it is the default: a founder who
+    has not opened this screen since spring should see the whole backlog
+    rather than a tidy-looking month, and `monthly_committed` is the last
+    month in the range, so this answers "what do we owe every month, as
+    things stand" without the caller having to say so.
+    """
+    end = frappe.utils.getdate(frappe.utils.today())
+    return frappe.utils.add_months(frappe.utils.get_first_day(end), -11), end
+
+
+def _company_expense_rows(date_from=None, date_to=None):
+    """Overhead payments, optionally windowed by the day money left.
+
+    **Either date, when a window is given.** Two blocks come out of these
+    rows and they are decided by different dates - what was paid by the
+    day the money left, the VAT on it by the day the invoice was issued -
+    so the query asks for either and each module applies its own
+    boundary. The same shape `period_tax_position` uses, and the same
+    reason: a single SQL filter would have to pick one and would silently
+    shorten the other.
+    """
+    filters = {}
+    if date_from and date_to:
+        filters = {
+            "or_filters": {
+                "spent_on": ["between", [date_from, date_to]],
+                "invoice_date": ["between", [date_from, date_to]],
+            }
+        }
+    return frappe.get_all(
+        "Company Expense",
+        fields=COMPANY_EXPENSE_FIELDS,
+        order_by="spent_on desc, creation desc",
+        limit_page_length=0,
+        **filters,
+    )
+
+
+def _recurring_rows():
+    return frappe.get_all(
+        "Recurring Overhead",
+        fields=RECURRING_OVERHEAD_FIELDS,
+        order_by="disabled asc, amount desc",
+        limit_page_length=0,
+    )
+
+
+@frappe.whitelist()
+def recurring_overheads(date_from=None, date_to=None):
+    """The standing costs, and what they commit the company to.
+
+    The schedule travels with the list because the two answer one
+    question - what does this company cost to run - and a screen that
+    added the amounts itself would own arithmetic it has no business
+    owning. Paused templates are listed, because the founder is managing
+    them, and `auraos.lib.recurring.runs_in` keeps them out of the
+    commitment.
+    """
+    _founder_only(_("read the company's standing costs"))
+    rows = _recurring_rows()
+    start, end = (
+        _finance_range(date_from, date_to)
+        if date_from and date_to
+        else _default_overhead_range()
+    )
+    return {"rows": rows, "schedule": recurring.schedule(rows, start, end)}
+
+
+@frappe.whitelist()
+def save_recurring_overhead(values, name=None):
+    """Create or amend one standing cost.
+
+    An explicit whitelist rather than **kwargs, the shape `amend_quote`
+    uses: a whitelisted method's arguments are whatever the caller sends,
+    and a doctype field that has not been approved for this door must not
+    be settable through it. A name outside the list is refused by name
+    rather than ignored, so a caller learns that their field did nothing.
+
+    Amending changes what the company is committed to from now on. It
+    restates no payment already recorded - those carry their own amounts,
+    where a correction is visible beside the money it changed.
+    """
+    _founder_only(_("change the company's standing costs"))
+    values = frappe.parse_json(values) or {}
+    unknown = sorted(set(values) - RECURRING_OVERHEAD_WRITABLE)
+    if unknown:
+        frappe.throw(
+            _("Not a standing cost field: {0}").format(", ".join(unknown)),
+            frappe.ValidationError,
+        )
+    doc = (
+        frappe.get_doc("Recurring Overhead", name)
+        if name
+        else frappe.new_doc("Recurring Overhead")
+    )
+    for field, value in values.items():
+        doc.set(field, value)
+    if name:
+        doc.save()
+    else:
+        doc.insert()
+    return {field: doc.get(field) for field in RECURRING_OVERHEAD_FIELDS}
+
+
+@frappe.whitelist()
+def delete_recurring_overhead(name):
+    """Remove a standing cost the company never had.
+
+    For the row entered by mistake, and **only** for it: a template any
+    payment was written from cannot be deleted at all, because
+    `Company Expense.recurring` is a Link and Frappe refuses to orphan
+    one. That refusal is the guard rather than an obstacle to work
+    around - the money moved, and a payment whose origin had been
+    deleted would be a rent nobody could trace back to the agreement it
+    came from.
+
+    So a cost that genuinely stopped is given a last month instead. That
+    keeps the fact that the company used to pay for it, which is a fact
+    the founder reading a past month needs, and it is why `ends_on`
+    exists beside `disabled` rather than this endpoint taking
+    `ignore_links`.
+    """
+    _founder_only(_("delete the company's standing costs"))
+    frappe.delete_doc("Recurring Overhead", name, ignore_permissions=False)
+    return {"deleted": name}
+
+
+@frappe.whitelist()
+def overheads_due(date_from=None, date_to=None):
+    """Standing costs whose month has come round with nothing recorded.
+
+    Due, never overdue. Whether the landlord has been paid is a fact
+    about a bank account; this is a fact about what has been typed, and
+    the payload says which in `basis` rather than leaving a screen to
+    word it. Nothing is ever offered for a month that has not started.
+    """
+    _founder_only(_("read the standing costs that are due"))
+    start, end = (
+        _finance_range(date_from, date_to)
+        if date_from and date_to
+        else _default_overhead_range()
+    )
+    # Every payment ever written from a template, not only the ones in
+    # the window: "already recorded" is a question about the pair, and a
+    # windowed query would re-offer a month whose payment carries a date
+    # outside it.
+    written = frappe.get_all(
+        "Company Expense",
+        filters={"recurring": ["is", "set"]},
+        fields=["name", "recurring", "recurring_month"],
+        limit_page_length=0,
+    )
+    return recurring.due(_recurring_rows(), written, start, end, frappe.utils.today())
+
+
+@frappe.whitelist()
+def record_recurring_overheads(rows):
+    """Write the payments the founder has confirmed, and post them.
+
+    `rows` is a list of `{template, month}` pairs the founder ticked -
+    never "everything due", because the endpoint would then be deciding
+    what the founder had confirmed. The screen offers the whole backlog
+    and the founder says which of it happened.
+
+    **Each pair is re-derived here from the template rather than trusted
+    from the browser.** The amount, the category and the account come off
+    the record at the moment of writing; a browser that posted its own
+    figures could post any figure at all, and this writes to the cash
+    ledger.
+
+    **A pair already recorded is skipped rather than refused.** Two
+    clicks on a slow connection must not become two rents, and failing
+    the whole batch because one line of it was already written would
+    leave the founder unable to record the other eleven. What was skipped
+    comes back in the payload, so the screen can say so rather than
+    quietly showing fewer rows than were ticked.
+    """
+    _founder_only(_("record the company's standing costs"))
+    rows = frappe.parse_json(rows) or []
+    written, skipped = [], []
+    for row in rows:
+        template_name = (row or {}).get("template")
+        month = str((row or {}).get("month") or "")
+        if not template_name or not month:
+            frappe.throw(
+                _("A standing cost needs a template and a month"),
+                frappe.ValidationError,
+            )
+        if frappe.db.exists(
+            "Company Expense", {"recurring": template_name, "recurring_month": month}
+        ):
+            skipped.append({"template": template_name, "month": month})
+            continue
+        template = frappe.get_doc("Recurring Overhead", template_name)
+        line = recurring.line(template.as_dict(), month)
+        expense = frappe.get_doc(
+            {
+                "doctype": "Company Expense",
+                # The day it falls, in the month it covers. The founder
+                # corrects it on the payment when the bank says
+                # otherwise, which is the correction that belongs beside
+                # the money rather than on the template.
+                "spent_on": line["due_on"],
+                "amount": line["amount"],
+                "category": line["category"],
+                # The template's own words, so the log reads the way the
+                # founder named the cost rather than "RO-00001".
+                "description": line["description"] or line["label"],
+                "paid_from": line["paid_from"],
+                "supplier": line["supplier"],
+                "recurring": template_name,
+                "recurring_month": month,
+            }
+        )
+        # CompanyExpense.on_update posts the cash movement, so inserting
+        # is the whole of the act - there is no second call that could be
+        # missed and no endpoint the Desk could walk past.
+        expense.insert()
+        written.append(
+            {
+                "name": expense.name,
+                "template": template_name,
+                "month": month,
+                "spent_on": expense.spent_on,
+                "amount": round_vnd(expense.amount),
+                "label": line["label"],
+            }
+        )
+    return {"written": written, "skipped": skipped}
+
+
+@frappe.whitelist()
+def overhead_log(date_from, date_to):
+    """Every payment the company made on itself in a window, and its shape.
+
+    The log and the totals in one read. The totals are
+    `auraos.lib.tax.overheads` - the same block the Reports screen's tax
+    card prints - so the two screens cannot come to disagree about what
+    August cost. Nothing is summed twice and nothing is summed in a
+    browser.
+    """
+    _founder_only(_("read the overhead log"))
+    start, end = _finance_range(date_from, date_to)
+    rows = _company_expense_rows(start, end)
+    return {
+        "date_from": start.isoformat(),
+        "date_to": end.isoformat(),
+        # Only the payments the money actually left in during this
+        # window. The query asks wider so the VAT block can be dated by
+        # its invoices, and the log is the payment-dated half of that.
+        "rows": [
+            row
+            for row in rows
+            if row.get("spent_on")
+            and start <= frappe.utils.getdate(row["spent_on"]) <= end
+        ],
+        "overheads": tax.overheads(rows, start, end),
+        "input_vat": tax.input_vat(rows, start, end),
+    }
+
+
+@frappe.whitelist()
+def log_company_expense(
+    amount,
+    spent_on=None,
+    category=None,
+    description=None,
+    paid_from=None,
+    supplier=None,
+    invoice_no=None,
+    invoice_date=None,
+    invoice_vat_amount=None,
+    for_depreciation=0,
+    photo=None,
+):
+    """Record one thing the company bought for itself.
+
+    The one-off half of #14's entry criterion - the printer, the client
+    lunch, the accountant's fee - beside the standing costs that come
+    round on their own. Everything but the amount has a default that is
+    right often enough not to be typed, the shape `log_job_expense` uses
+    for the same reason: an expense that is a chore to record is an
+    expense that goes unrecorded, and an unrecorded expense mismatches
+    the accountant's return invisibly.
+
+    The document does the rest - the default account, the invoice date,
+    the VAT rules and the ledger posting all live on `CompanyExpense` -
+    so a founder entering this here gets exactly what a founder entering
+    it in the Desk gets.
+    """
+    _founder_only(_("record the company's own spending"))
+    expense = frappe.get_doc(
+        {
+            "doctype": "Company Expense",
+            "amount": amount,
+            "spent_on": spent_on or frappe.utils.today(),
+            "category": category or None,
+            "description": description,
+            "paid_from": paid_from or None,
+            "supplier": supplier or None,
+            "invoice_no": invoice_no or None,
+            "invoice_date": invoice_date or None,
+            "invoice_vat_amount": invoice_vat_amount or 0,
+            "for_depreciation": frappe.utils.cint(for_depreciation),
+        }
+    )
+    expense.insert()
+    if photo:
+        _attach_photo(expense, photo)
+    return {field: expense.get(field) for field in COMPANY_EXPENSE_FIELDS}
+
+
+@frappe.whitelist()
+def update_company_expense(
+    name,
+    amount,
+    spent_on=None,
+    category=None,
+    description=None,
+    paid_from=None,
+    supplier=None,
+    invoice_no=None,
+    invoice_date=None,
+    invoice_vat_amount=None,
+    for_depreciation=0,
+):
+    """Correct one overhead payment.
+
+    Including one written from a standing cost: the month rent came out
+    different is corrected here, on the payment, where the correction
+    sits beside the money it changed. `recurring` and `recurring_month`
+    are deliberately not settable - they say which month this payment
+    covers, and re-pointing one would either double-record a month or
+    empty one, silently.
+
+    Saving re-posts the cash movement through `CompanyExpense.on_update`,
+    so a corrected amount reaches the account balance by the same path
+    the original did.
+    """
+    _founder_only(_("correct the company's own spending"))
+    expense = frappe.get_doc("Company Expense", name)
+    expense.amount = amount
+    expense.spent_on = spent_on or expense.spent_on
+    expense.category = category or None
+    expense.description = description
+    expense.paid_from = paid_from or expense.paid_from
+    expense.supplier = supplier or None
+    expense.invoice_no = invoice_no or None
+    expense.invoice_date = invoice_date or None
+    expense.invoice_vat_amount = invoice_vat_amount or 0
+    expense.for_depreciation = frappe.utils.cint(for_depreciation)
+    expense.save()
+    return {field: expense.get(field) for field in COMPANY_EXPENSE_FIELDS}
+
+
+@frappe.whitelist()
+def delete_company_expense(name):
+    """Remove an overhead payment that never happened.
+
+    `CompanyExpense.on_trash` takes the cash movement back out, so the
+    account balance and the bank statement stay in step. A payment
+    written from a standing cost may be deleted like any other, and its
+    month becomes due again - which is the right answer, because the
+    month has not been paid for after all.
+    """
+    _founder_only(_("delete the company's own spending"))
+    frappe.delete_doc("Company Expense", name, ignore_permissions=False)
+    return {"deleted": name}
+
+
+@frappe.whitelist()
+def company_expense_categories():
+    """The accountant's vocabulary, for the category picker.
+
+    Deliberately not `Cost Item Category`, which is the quoting
+    vocabulary a breakdown line picks from: one prices a shoot, the other
+    tells the accountant which line of the books a payment belongs on.
+    """
+    _founder_only(_("read the company's expense categories"))
+    return frappe.get_all(
+        "Company Expense Category",
+        pluck="name",
+        order_by="name asc",
+        limit_page_length=0,
+    )
+
+
+def _break_even_jobs():
+    """Every job as `reporting.profit_view` sees it, plus its booking day.
+
+    **Every job, because break-even is a question about the company.**
+    The founder is the only caller and the line is the company's, so this
+    reads the whole table rather than `_permitted_jobs()` - the same
+    reason `period_tax_position` gives for reading every milestone.
+
+    `booked_on` is the job's creation stamp: a job is made the moment a
+    won deal is converted, so that is the day the work was taken on at
+    the price being judged. Renamed on the way out because `creation` is
+    a fact about a row and this is a fact about the business - and
+    `auraos.lib.breakeven` should not have to know that the two happen to
+    coincide here.
+    """
+    booked = {
+        row.name: row.creation
+        for row in frappe.get_all(
+            "Job",
+            fields=["name", "creation"],
+            order_by="creation asc",
+            limit_page_length=0,
+        )
+    }
+    docs = [frappe.get_doc("Job", name) for name in booked]
+    clients = _company_names(doc.company for doc in docs)
+    rows = []
+    for doc in docs:
+        # The same profit view the Reports screen renders, computed once
+        # and projected twice. A second margin formula here is how two
+        # screens come to disagree about one job.
+        row = _job_profit(doc, clients.get(doc.company))
+        row["booked_on"] = frappe.utils.getdate(booked[doc.name])
+        rows.append(row)
+    return rows
+
+
+@frappe.whitelist()
+def break_even(date_from, date_to):
+    """This period's overhead against the margin of the work booked in it.
+
+    #14's dashboard. It **shows and does not suggest**: there is no
+    recommended floor in this payload, nothing here reads or writes
+    `margin_floor_pct`, and `auraos.lib.breakeven` carries the reason -
+    what a job must earn is the founder's judgement against the quarter
+    ahead and the payroll, and this is the evidence for that judgement
+    rather than a substitute for it.
+
+    **Both sides come from where they already live.** Overheads are the
+    block `auraos.lib.tax.overheads` produces for the Reports screen's
+    tax card; job margin is the rows `reporting.profit_view` produces for
+    margin-by-job. Neither is recomputed here, so no two screens in this
+    app can disagree about what August cost or what a job earned.
+
+    **The two sides are dated by different things, and the payload says
+    so.** An overhead falls in the month the money left. A job's margin
+    is its whole life's margin, counted in the month it was booked. The
+    caveats travel in the payload rather than being left for a screen to
+    word, because a founder reading a surplus needs to know it may be
+    made of a job that has not finished spending.
+
+    Founder-only, and refused outright: this is the payroll and the rent
+    against what the company earns, which is the most founder-only pair
+    of numbers in the app.
+    """
+    _founder_only(_("see the break-even line"))
+    start, end = _finance_range(date_from, date_to)
+    payload = breakeven.break_even(
+        breakeven.contribution(_break_even_jobs(), start, end),
+        tax.overheads(_company_expense_rows(start, end), start, end),
+    )
+    payload["date_from"] = start.isoformat()
+    payload["date_to"] = end.isoformat()
+    # What the standing costs commit the company to over the same window,
+    # beside what it actually paid. The two differ when a month has not
+    # been recorded yet, and that difference is a reading the founder
+    # wants: a month that looks cheap because the rent has not been typed
+    # in is not a cheap month.
+    payload["committed"] = recurring.schedule(_recurring_rows(), start, end)
+    return payload
 
 
 # -- job tasks, and the crew door onto a job (T7.1, issue #41) --

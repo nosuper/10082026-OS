@@ -962,6 +962,147 @@ def seed_106_paper_states(deal_name):
     set_paper_status(papers[2], DRAFT)
 
 
+
+# -- #14: what the company costs to run --
+#
+# The break-even screen is a subtraction, so a stack seeded with only one
+# side of it renders a page that is technically working and tells the
+# founder nothing. Both sides are seeded here, and deliberately so that
+# the line falls the interesting way: the standing costs alone outweigh
+# the margin of the one job on the stack, so the walkthrough opens on a
+# shortfall rather than on a comfortable surplus nobody looks at twice.
+#
+# **The backlog is left unrecorded on purpose.** Two of the three months
+# each standing cost has run for are confirmed; the newest is not, so
+# "Standing costs due" has rows in it the moment the stack boots. A seed
+# that recorded everything would leave the founder looking at the empty
+# state of the one control this ticket added, with no way to try it
+# without inventing a template first.
+
+# Three months back, so the break-even table has a run of months rather
+# than a single populated row. The same reasoning as #108's second month:
+# a screen whose every record landed today looks the same whether it
+# buckets correctly or buckets everything into now.
+OVERHEAD_MONTHS = 3
+
+# The accountant's vocabulary, which is not the quoting vocabulary a
+# breakdown line picks from - see the Company Expense Category module
+# docstring. Seeded here because a category picker with nothing in it
+# reads as a broken control rather than as an empty list.
+OVERHEAD_CATEGORIES = [
+    "Thuê văn phòng",
+    "Lương cứng",
+    "Phần mềm",
+    "Chi phí tiếp khách",
+]
+
+STANDING_COSTS = [
+    {
+        "label": "Thuê văn phòng",
+        "amount": 30_000_000,
+        "category": "Thuê văn phòng",
+        "day_of_month": 5,
+        "supplier": "Chị Hà",
+    },
+    {
+        "label": "Lương cứng team",
+        "amount": 96_000_000,
+        "category": "Lương cứng",
+        "day_of_month": 10,
+    },
+    {
+        # A small one, and on the 31st: the month-end case, which lands
+        # on the 28th in February and is the rule most likely to be got
+        # wrong by whoever touches auraos.lib.recurring next.
+        "label": "Adobe Creative Cloud",
+        "amount": 1_800_000,
+        "category": "Phần mềm",
+        "day_of_month": 31,
+        "supplier": "Adobe",
+    },
+]
+
+# One purchase that is not a running cost, so the founder can see a
+# flagged line sitting beside the break-even line rather than inside it -
+# and see that the money still left the account on the cash screens.
+CAPITAL_PURCHASE = {
+    "amount": 62_000_000,
+    "category": "Phần mềm",
+    "description": "Máy tính dựng mới",
+    "for_depreciation": 1,
+}
+
+ONE_OFF_OVERHEAD = {
+    "amount": 2_200_000,
+    "category": "Chi phí tiếp khách",
+    "description": "Cơm khách sau nghiệm thu",
+    "invoice_no": "HD-SEED-0001",
+    "invoice_vat_amount": 200_000,
+}
+
+
+def seed_14_overhead_and_break_even(deal_name):
+    """#14: standing costs, a backlog to confirm, and one-off spending.
+
+    Idempotent like the rest: the templates are found by label and the
+    payments by the (template, month) pair the record already carries, so
+    running this twice records no month twice - the same guard the
+    endpoint uses, asked the same way.
+    """
+    # Locally imported like every other endpoint this file drives: the
+    # module is loaded at install time, before the app's own doctypes
+    # necessarily exist.
+    from auraos.api import record_recurring_overheads
+
+    for category in OVERHEAD_CATEGORIES:
+        if not frappe.db.exists("Company Expense Category", category):
+            frappe.get_doc(
+                {"doctype": "Company Expense Category", "category_name": category}
+            ).insert(ignore_permissions=True)
+
+    today = frappe.utils.getdate(frappe.utils.today())
+    first_month = frappe.utils.add_months(
+        frappe.utils.get_first_day(today), -(OVERHEAD_MONTHS - 1)
+    )
+
+    for values in STANDING_COSTS:
+        name = frappe.db.get_value("Recurring Overhead", {"label": values["label"]})
+        if not name:
+            name = frappe.get_doc(
+                {
+                    "doctype": "Recurring Overhead",
+                    "starts_on": first_month,
+                    **values,
+                }
+            ).insert(ignore_permissions=True).name
+        # Every month but the newest. The one left open is what makes the
+        # "Standing costs due" card have something in it on a fresh stack.
+        for back in range(OVERHEAD_MONTHS - 1, 0, -1):
+            month = frappe.utils.add_months(frappe.utils.get_first_day(today), -back)
+            record_recurring_overheads(
+                [{"template": name, "month": frappe.utils.getdate(month).strftime("%Y-%m")}]
+            )
+
+    # One-off spending, in the month before this one so it sits in a month
+    # the standing costs have also been recorded for - a month made of one
+    # kind of payment would not show the log doing its actual job, which
+    # is putting the two kinds side by side.
+    last_month = frappe.utils.add_months(frappe.utils.get_first_day(today), -1)
+    for values in (ONE_OFF_OVERHEAD, CAPITAL_PURCHASE):
+        if frappe.db.exists(
+            "Company Expense",
+            {"description": values["description"], "recurring": ["is", "not set"]},
+        ):
+            continue
+        frappe.get_doc(
+            {
+                "doctype": "Company Expense",
+                "spent_on": frappe.utils.add_days(last_month, 12),
+                **values,
+            }
+        ).insert(ignore_permissions=True)
+
+
 # T7.1: the job's own plan, and the two people who may see it and
 # nothing else. Dates hang off today so the timeline always has a bar
 # either side of the "today" line, whenever the stack boots.
@@ -1086,4 +1227,8 @@ FEATURE_SEEDS = {
     "#123 no-invoice exposure": seed_123_no_invoice_exposure,
     "#108 a second month": seed_108_a_second_month,
     "#106 paper states": seed_106_paper_states,
+    # Last, and after #108: the break-even screen reads every job's margin
+    # and every overhead, so it should see whatever the seeds above have
+    # finished making.
+    "#14 overhead and break-even": seed_14_overhead_and_break_even,
 }

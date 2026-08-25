@@ -283,6 +283,52 @@ def test_categories_are_biggest_first():
     assert [bucket["category"] for bucket in report["by_category"]] == ["Lớn", "Nhỏ"]
 
 
+def test_the_months_add_up_to_the_range_and_include_the_empty_ones():
+    """The by-month fold is the same pass as the by-category one (#14).
+
+    A tax return reads a period whole; break-even asks whether *this
+    month's* work covered *this month's* upkeep, and a range total cannot
+    answer that. Both views come out of one pass over one set of rows,
+    which is what stops the break-even screen and the tax card disagreeing
+    about August - so the addition is asserted rather than assumed.
+
+    A month the range touches is a month here even when nothing was paid
+    in it: a chart with an empty August quietly absent reads as a shorter
+    quarter rather than as a month that spent nothing.
+    """
+    report = overheads(
+        [
+            overhead(name="a", spent_on=date(2026, 7, 3), amount=1_000_000),
+            overhead(name="b", spent_on=date(2026, 9, 4), amount=4_000_000),
+            overhead(
+                name="c", spent_on=date(2026, 9, 5), amount=9_000_000, for_depreciation=1
+            ),
+        ],
+        date(2026, 7, 1),
+        date(2026, 9, 30),
+    )
+
+    assert [month["month"] for month in report["by_month"]] == [
+        "2026-07",
+        "2026-08",
+        "2026-09",
+    ]
+    assert [month["total"] for month in report["by_month"]] == [
+        1_000_000,
+        0,
+        4_000_000,
+    ]
+    assert sum(month["total"] for month in report["by_month"]) == report["paid_total"]
+    assert sum(month["count"] for month in report["by_month"]) == report["count"]
+    # The flagged side folds by month too, and stays outside the total
+    # the same way it stays outside `paid_total`.
+    assert [month["flagged_total"] for month in report["by_month"]] == [0, 0, 9_000_000]
+    assert (
+        sum(month["flagged_total"] for month in report["by_month"])
+        == report["flagged"]["total"]
+    )
+
+
 def test_the_blocks_stay_in_their_own_branches():
     """Nothing can total two figures measured over different things."""
     whole = position(
