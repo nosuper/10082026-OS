@@ -5,6 +5,35 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The Vue frontend is retired (#103). This job exists because retiring it
+  # once was not enough: the deletion lived on `feat/react-frontend` while
+  # `main` went on showing an intact `frontend/`, and three tickets built new
+  # Vue screens against a decision they had no way to see (#160, #161, #162).
+  # #164 closed that gap. This is what stops it reopening - a decision nobody
+  # can act against is worth more than a decision written down somewhere.
+  no-vue-frontend:
+    name: The Vue frontend stays retired
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse files under frontend/
+        run: |
+          # Tracked files only, so an untracked local build directory or a
+          # stale checkout cannot fail somebody's CI for something git does
+          # not carry.
+          found=$(git ls-files -- 'frontend/' | head -50)
+          if [ -n "$found" ]; then
+            echo "::error::frontend/ is the retired Vue app (#103). The frontend is frontend-react/."
+            echo ""
+            echo "These files are tracked under frontend/ and should not be:"
+            echo "$found"
+            echo ""
+            echo "If you are porting a screen, it belongs in frontend-react/src/routes/."
+            echo "The old Vue sources are readable at 6b206f7 - see #165."
+            exit 1
+          fi
+          echo "frontend/ is empty, as it should be."
+
   pure-tests:
     name: Pure pytest (pricing seam)
     runs-on: ubuntu-latest
