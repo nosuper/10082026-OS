@@ -63,6 +63,37 @@ global_search_doctypes = {
 #
 # /quote/<token> is the client-facing quote page (auraos/www/quote.py);
 # the token lands in frappe.form_dict.
+# Where a signed-in person lands when they open the site root.
+#
+# Without this, Frappe's own fallback applies - and it is
+# `"login" if user == "Guest" else "me"` (frappe/website/utils.py), so
+# every signed-in user was being dropped on the profile page. Nobody
+# chose that; it is what is left when nothing is declared, and it reads
+# as a bug because the one thing the site is for is somewhere else.
+#
+# `role_home_page` rather than the blanket `home_page` hook, because the
+# blanket one applies to Guest too. A guest hitting the root would get
+# the SPA shell, which reads the session cookie, finds no user and
+# bounces to /login - the right destination reached the long way round,
+# with a flash of an app they cannot use. Guest holds the Guest role,
+# which is deliberately not in this map, so the fallback above still
+# sends them straight to the login page.
+#
+# All three roles land in the same place on purpose: the app decides what
+# each of them may see once they are inside it. A crew session that lands
+# at the root is redirected to My work by the root route itself (#165),
+# because that decision needs `session_scope` and belongs in the app
+# rather than in a dict here.
+#
+# Resolution is cached per user (`frappe.cache.hget("home_page", ...)`),
+# so a change here takes effect after a cache clear - which every deploy
+# does.
+role_home_page = {
+    "Founder": "aura-next",
+    "Producer": "aura-next",
+    "Crew": "aura-next",
+}
+
 website_route_rules = [
     {"from_route": "/aura-next/<path:app_path>", "to_route": "aura-next"},
     {"from_route": "/quote/<token>", "to_route": "quote"},
