@@ -16,12 +16,15 @@
 // route tree nobody can build-verify while the box is busy.
 
 import { Link } from "@tanstack/react-router";
-import { BookOpen, FileText } from "lucide-react";
+import { BookOpen, FileText, FolderOpen } from "lucide-react";
 
 export function DocumentsTabs() {
   const tabs = [
     { to: "/documents/paperwork", label: "Paperwork", icon: FileText },
     { to: "/documents/library", label: "Library", icon: BookOpen },
+    // Files is the third question under this roof (#28): not "fill a
+    // template" and not "read an SOP", but "which deal was that brief on".
+    { to: "/documents/files", label: "Files", icon: FolderOpen },
   ] as const;
 
   return (

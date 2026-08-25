@@ -120,12 +120,30 @@ export function RichText({
   placeholder,
   ariaLabel,
   className = "min-h-[7rem]",
+  bodyRef,
+  onKeyDown,
+  onKeyUp,
+  onPaste,
+  extras,
 }: {
   defaultValue: string;
   onChange: (html: string) => void;
   placeholder?: string | undefined;
   ariaLabel?: string | undefined;
   className?: string | undefined;
+  /**
+   * The editable element itself, handed back to a caller that needs the
+   * caret rather than the text - the mention picker in DealComments has to
+   * know where the "@" is to put a span there. Optional, because every other
+   * caller only wants the HTML `onChange` already gives them.
+   */
+  bodyRef?: (node: HTMLDivElement | null) => void;
+  onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onKeyUp?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  /** For a pasted picture. Call `preventDefault` to keep the file out of the DOM. */
+  onPaste?: (event: React.ClipboardEvent<HTMLDivElement>) => void;
+  /** Extra toolbar controls, beside the four this component owns. */
+  extras?: ReactNode;
 }) {
   const body = useRef<HTMLDivElement>(null);
 
@@ -139,9 +157,12 @@ export function RichText({
 
   return (
     <div>
-      <EditorToolbar />
+      <EditorToolbar extras={extras} />
       <div
-        ref={body}
+        ref={(node) => {
+          body.current = node;
+          bodyRef?.(node);
+        }}
         contentEditable
         suppressContentEditableWarning
         role="textbox"
@@ -149,6 +170,9 @@ export function RichText({
         aria-label={ariaLabel}
         data-placeholder={placeholder}
         onInput={(event) => onChange(event.currentTarget.innerHTML)}
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onPaste={onPaste}
         className={`aura-rich overflow-y-auto rounded-b-lg border border-t-0 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong ${className}`}
       />
     </div>

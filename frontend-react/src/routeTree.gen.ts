@@ -20,6 +20,7 @@ import { Route as ContactsCompaniesRouteImport } from './routes/contacts.compani
 import { Route as ContactsPeopleRouteImport } from './routes/contacts.people'
 import { Route as DealsIndexRouteImport } from './routes/deals.index'
 import { Route as DealsDealCodeRouteImport } from './routes/deals.$dealCode'
+import { Route as DocumentsFilesRouteImport } from './routes/documents.files'
 import { Route as DocumentsLibraryRouteImport } from './routes/documents.library'
 import { Route as DocumentsPaperworkRouteImport } from './routes/documents.paperwork'
 import { Route as FinanceIndexRouteImport } from './routes/finance.index'
@@ -95,6 +96,11 @@ const DealsDealCodeRoute = DealsDealCodeRouteImport.update({
   id: '/deals/$dealCode',
   path: '/deals/$dealCode',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DocumentsFilesRoute = DocumentsFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => DocumentsRoute,
 } as any)
 const DocumentsLibraryRoute = DocumentsLibraryRouteImport.update({
   id: '/library',
@@ -208,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
+  '/documents/files': typeof DocumentsFilesRoute
   '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
@@ -237,6 +244,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
+  '/documents/files': typeof DocumentsFilesRoute
   '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/contacts/companies': typeof ContactsCompaniesRoute
   '/contacts/people': typeof ContactsPeopleRoute
   '/deals/$dealCode': typeof DealsDealCodeRouteWithChildren
+  '/documents/files': typeof DocumentsFilesRoute
   '/documents/library': typeof DocumentsLibraryRouteWithChildren
   '/documents/paperwork': typeof DocumentsPaperworkRoute
   '/finance/accounts': typeof FinanceAccountsRoute
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/contacts/companies'
     | '/contacts/people'
     | '/deals/$dealCode'
+    | '/documents/files'
     | '/documents/library'
     | '/documents/paperwork'
     | '/finance/accounts'
@@ -335,6 +345,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/contacts/companies'
     | '/contacts/people'
+    | '/documents/files'
     | '/documents/library'
     | '/documents/paperwork'
     | '/finance/accounts'
@@ -368,6 +379,7 @@ export interface FileRouteTypes {
     | '/contacts/companies'
     | '/contacts/people'
     | '/deals/$dealCode'
+    | '/documents/files'
     | '/documents/library'
     | '/documents/paperwork'
     | '/finance/accounts'
@@ -485,6 +497,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/deals/$dealCode'
       preLoaderRoute: typeof DealsDealCodeRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/documents/files': {
+      id: '/documents/files'
+      path: '/files'
+      fullPath: '/documents/files'
+      preLoaderRoute: typeof DocumentsFilesRouteImport
+      parentRoute: typeof DocumentsRoute
     }
     '/documents/library': {
       id: '/documents/library'
@@ -641,11 +660,13 @@ const DocumentsLibraryRouteWithChildren =
   DocumentsLibraryRoute._addFileChildren(DocumentsLibraryRouteChildren)
 
 interface DocumentsRouteChildren {
+  DocumentsFilesRoute: typeof DocumentsFilesRoute
   DocumentsLibraryRoute: typeof DocumentsLibraryRouteWithChildren
   DocumentsPaperworkRoute: typeof DocumentsPaperworkRoute
 }
 
 const DocumentsRouteChildren: DocumentsRouteChildren = {
+  DocumentsFilesRoute: DocumentsFilesRoute,
   DocumentsLibraryRoute: DocumentsLibraryRouteWithChildren,
   DocumentsPaperworkRoute: DocumentsPaperworkRoute,
 }
