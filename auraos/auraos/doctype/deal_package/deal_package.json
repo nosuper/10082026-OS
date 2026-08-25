@@ -8,6 +8,9 @@
   "title",
   "phase",
   "description",
+  "qty",
+  "unit",
+  "deliverables",
   "has_price_override",
   "price_override",
   "default_price",
@@ -69,6 +72,24 @@
    "fieldname": "phase",
    "fieldtype": "Data",
    "label": "Phase"
+  },
+  {
+   "description": "How much of it the client is buying - 2, 3, 1. Descriptive only: the price is still the sum of the lines or the override you typed, and nothing multiplies by this.",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty"
+  },
+  {
+   "description": "What the quantity counts - ngày quay, video, buổi. Prints only when there is a quantity beside it: a unit on its own is a label nobody asked for.",
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unit"
+  },
+  {
+   "description": "What the client receives, one per line. Prose they read, never something the app counts - so a list rather than a table.",
+   "fieldname": "deliverables",
+   "fieldtype": "Small Text",
+   "label": "Deliverables"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -36,6 +36,10 @@ DEFAULT_DETAIL_LEVEL = "Package totals"
 # Everything a client may read off a quote. Ordered as the page reads.
 CLIENT_QUOTE_FIELDS = (
     "title",
+    # The day this offer stops standing (#44). Blank on a quote with no
+    # expiry, which is the default; frozen with the version like every
+    # other promise on it.
+    "valid_until",
     "client_name",
     "client_address",
     "client_tax_code",
@@ -60,7 +64,18 @@ CLIENT_QUOTE_FIELDS = (
 
 # ...and off each of its packages. Cost, variance and the override are
 # ours; the client sees an offer, not how we arrived at it.
-CLIENT_PACKAGE_FIELDS = ("title", "description", "price", "phase")
+CLIENT_PACKAGE_FIELDS = (
+    "title",
+    "description",
+    "price",
+    "phase",
+    # What the client is getting, as against what it costs (#44).
+    # Descriptive only: the price stays the price the producer set, and
+    # nothing here multiplies anything.
+    "qty",
+    "unit",
+    "deliverables",
+)
 
 # A frozen phase, as the client reads it. Whitelisted like everything
 # else that crosses the guest boundary: adding a field to Deal Quote
@@ -180,6 +195,10 @@ def client_view(quote: Mapping[str, Any]) -> dict:
         {field: phase.get(field) for field in CLIENT_PHASE_FIELDS}
         for phase in (quote.get("phases") or [])
     ]
+    # Said on the page rather than worked out by it: the template prints
+    # what this decided, and a reader and a printer cannot disagree about
+    # whether today is past the date.
+    view["expired"] = has_expired(quote.get("valid_until"))
     view["phase_groups"] = phase_groups(view["phases"], view["packages"])
     view["line_phase_groups"] = phase_groups(view["phases"], view["sections"])
     return view
@@ -254,6 +273,65 @@ def phase_groups(phases, entries):
             }
         )
     return groups
+
+
+def package_quantity(qty, unit) -> str | None:
+    """A package's own quantity, as a client reads it - "2 ngày quay" (#44).
+
+    **Descriptive, never arithmetic.** A package is priced at the sum of its
+    lines or at the override the producer typed; this says what is being
+    bought, and no code path multiplies it by anything. That is the whole of
+    the decision - the founder sets the price, and this stops a client
+    doing the sum in their head and asking why it does not divide evenly.
+
+    None when there is nothing to say. A unit with no number reads as a
+    label nobody asked for, and a number with no unit is a mystery - so
+    both are required before either prints, and a quantity of zero counts
+    as nothing rather than as "0 days".
+    """
+    if not qty or not (unit or "").strip():
+        return None
+    return f"{_number_display(qty)} {unit.strip()}"
+
+
+def deliverables_list(text) -> list[str]:
+    """A package's deliverables, one per line, blanks dropped.
+
+    Stored as text the producer types rather than as a child table,
+    because it is prose the client reads and never a thing the app counts.
+    Split here so the page and the PDF cannot disagree about what a line
+    is, and stripped so a trailing return does not print an empty bullet.
+    """
+    return [line.strip() for line in (text or "").splitlines() if line.strip()]
+
+
+def has_expired(valid_until, today=None) -> bool:
+    """Whether a quote's validity has passed (#44).
+
+    **Said, never enforced.** A quote past its date still opens and still
+    reads in full: the version is a record of what was offered, the founder
+    may well still honour it, and a page that locked itself would be the
+    software making a commercial decision on their behalf. What it does is
+    stop a client reading an old price as a current one.
+
+    Blank means no expiry rather than expired immediately, which is the
+    default and the common case.
+
+    The last day is inclusive - a quote valid until the 20th is valid on
+    the 20th. Anyone reading "valid until 20 August" expects that, and the
+    alternative expires it a day early on the reader's own reckoning.
+    """
+    if not valid_until:
+        return False
+    day = valid_until
+    if isinstance(day, str):
+        day = datetime.fromisoformat(day[:10]).date()
+    elif isinstance(day, datetime):
+        day = day.date()
+    now = today or datetime.now().date()
+    if isinstance(now, datetime):
+        now = now.date()
+    return day < now
 
 
 def quantity_display(qty1, unit1, qty2, unit2) -> str:
@@ -458,6 +536,13 @@ def client_entries(packages, lines):
             # of the first phase - so it travels rather than being
             # dropped for being empty.
             "phase": package.get("phase") or None,
+            # What is being bought, and what arrives (#44). Carried
+            # through untouched: no code path multiplies the quantity by
+            # the price, because the price is the producer's and this is
+            # a description of what it buys.
+            "qty": package.get("qty") or None,
+            "unit": package.get("unit") or None,
+            "deliverables": package.get("deliverables") or None,
         }
         for package in packages
     ]
@@ -466,6 +551,12 @@ def client_entries(packages, lines):
             "title": line.get("description") or f"Item {line.get('idx')}",
             "description": None,
             "price": line.get("quote_price") or 0,
+            # A standalone line is its own entry and carries no package
+            # detail: its quantities are already printed line by line,
+            # and repeating them here would say the same thing twice.
+            "qty": None,
+            "unit": None,
+            "deliverables": None,
             # A cost line belonging to no package belongs to no phase
             # either: it is priced outside the shape of the job, which
             # is exactly what the unphased group is for.

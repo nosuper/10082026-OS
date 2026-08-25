@@ -22,6 +22,9 @@ from auraos.lib.quote import (
     CLIENT_PHASE_FIELDS,
     CLIENT_QUOTE_FIELDS,
     client_entries,
+    deliverables_list,
+    has_expired,
+    package_quantity,
     phase_groups,
     client_view,
     delivery_state,
@@ -99,6 +102,9 @@ def test_client_view_keeps_only_whitelisted_quote_fields():
         "phases",
         "phase_groups",
         "line_phase_groups",
+        # Derived from `valid_until`, which is whitelisted above. Decided
+        # server-side so a page and a PDF cannot disagree about the date.
+        "expired",
     }
 
 
@@ -681,3 +687,96 @@ def test_a_quote_with_no_phases_at_all_is_one_unlabelled_group():
 
 def test_no_phases_and_no_entries_is_no_groups():
     assert phase_groups([], []) == []
+
+
+# -- package detail and quote validity (#44) --
+#
+# Two widenings of what a client reads. Neither changes a price, and the
+# tests are here to keep it that way:
+#
+# - A quantity on a package is **descriptive**. The founder sets the
+#   price; "2 ngày quay" says what is being bought, and nothing
+#   multiplies it. A test that let arithmetic in here would be the first
+#   step to a client asking why the total does not divide evenly.
+# - A validity date is **said, never enforced**. A quote past its date
+#   still opens and still reads in full - it is a record of what was
+#   offered, and locking the page would be the software deciding
+#   commercially on the founder's behalf.
+
+
+def test_a_package_quantity_reads_as_what_is_being_bought():
+    assert package_quantity(2, "ngày quay") == "2 ngày quay"
+    # A dot, because that is what `_number_display` already prints for a
+    # cost line's quantity on the same page. A comma would be the local
+    # convention, but two decimal separators on one quote is worse than
+    # either - and changing it is a locale decision for the whole app,
+    # not a thing to slip in under a package field.
+    assert package_quantity(1.5, "ngày") == "1.5 ngày"
+
+
+def test_a_quantity_needs_both_halves_or_it_says_nothing():
+    """A unit with no number is a label nobody asked for; a number with no
+    unit is a mystery. Zero counts as nothing, not as "0 days"."""
+    assert package_quantity(2, None) is None
+    assert package_quantity(2, "   ") is None
+    assert package_quantity(None, "ngày") is None
+    assert package_quantity(0, "ngày") is None
+
+
+def test_deliverables_are_one_per_line_with_blanks_dropped():
+    """Split here so the page and the PDF cannot disagree about what a
+    line is, and stripped so a trailing return prints no empty bullet."""
+    assert deliverables_list("Bản dựng 60s\n Bản 30s \n\nFile gốc\n") == [
+        "Bản dựng 60s",
+        "Bản 30s",
+        "File gốc",
+    ]
+    assert deliverables_list("") == []
+    assert deliverables_list(None) == []
+
+
+def test_the_last_day_of_validity_is_inclusive():
+    """A quote valid until the 20th is valid on the 20th.
+
+    Anyone reading "valid until 20 August" expects that, and the
+    alternative expires it a day early on the reader's own reckoning.
+    """
+    from datetime import date
+
+    assert has_expired(date(2026, 8, 20), today=date(2026, 8, 20)) is False
+    assert has_expired(date(2026, 8, 20), today=date(2026, 8, 21)) is True
+    assert has_expired(date(2026, 8, 20), today=date(2026, 8, 19)) is False
+
+
+def test_no_date_means_no_expiry_rather_than_expired():
+    """Blank is the default and the common case."""
+    from datetime import date
+
+    assert has_expired(None, today=date(2099, 1, 1)) is False
+    assert has_expired("", today=date(2099, 1, 1)) is False
+
+
+def test_a_validity_date_arrives_however_the_database_hands_it_over():
+    """A row read back carries a date; a freshly inserted doc carries the
+    string it was stamped with. Both have to answer the same."""
+    from datetime import date, datetime as dt
+
+    assert has_expired("2026-08-20", today=date(2026, 8, 21)) is True
+    assert has_expired(dt(2026, 8, 20, 9, 30), today=date(2026, 8, 21)) is True
+
+
+def test_client_view_says_whether_the_offer_has_expired():
+    """Decided here, not in the template: a reader and a printer must not
+    disagree about whether today is past the date."""
+    view = client_view(quote(valid_until="2020-01-01"))
+    assert view["expired"] is True
+    assert view["valid_until"] == "2020-01-01"
+
+    assert client_view(quote())["expired"] is False
+
+
+def test_package_detail_crosses_the_guest_boundary_as_a_whitelist():
+    """Widened deliberately, like the phase fields before it - adding a
+    field to Deal Quote Package must not publish it by accident."""
+    for field in ("qty", "unit", "deliverables"):
+        assert field in CLIENT_PACKAGE_FIELDS
