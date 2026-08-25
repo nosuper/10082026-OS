@@ -348,9 +348,14 @@ class RecurringOverheadTestCase(FrappeTestCase):
         with self.assertRaises(frappe.PermissionError):
             frappe.get_doc("Recurring Overhead", doc.name).check_permission("read")
         # get_list is what the awesome bar and every list view go
-        # through, and it answers a role with no read permission with
-        # nothing at all.
-        self.assertEqual(frappe.get_list("Recurring Overhead", ignore_permissions=False), [])
+        # through, and it **refuses** rather than answering an empty
+        # list. The stronger of the two, and worth asserting as the
+        # stronger: an empty list is what a producer would also get from
+        # a table that happened to have no rows in it that day, so a
+        # suite that accepted one would go green on a site where the
+        # permission had been deleted and the rent not yet entered.
+        with self.assertRaises(frappe.PermissionError):
+            frappe.get_list("Recurring Overhead", ignore_permissions=False)
 
     def test_a_producer_is_refused_by_every_endpoint_in_the_flow(self):
         """The second lock, for the reads that skip permissions.
