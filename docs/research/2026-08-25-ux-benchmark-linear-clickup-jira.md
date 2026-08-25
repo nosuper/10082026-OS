@@ -6,6 +6,12 @@ question: >
   space distributed wrongly, and no intuitive scanning order. What exactly is
   confusing about AuraOS, screen by screen, and what would Linear, ClickUp and
   Jira do instead?
+
+  Then, having read that: "bên cạnh những yếu tố thiết kế thì cái tôi quan tâm
+  hơn nữa là user flow và vị trí các con số, screen có hợp lý chưa. có nên gộp
+  / tách screen hay gì không" - are these the right screens at all, is each
+  number where the person who needs it is standing, and what should be merged
+  or split? That is §9.
 status: complete
 ---
 
@@ -28,6 +34,15 @@ it says **judgement** in as many words.
 **One thing this document will not do is call a deliberate decision a defect.**
 §7 lists the decisions that look like flaws and are not, with the docstring
 that argues each one. Read §7 before acting on §6.
+
+**§9 is the information-architecture half and was written second**, after the
+founder asked the harder question underneath the design one: *user flow và vị
+trí các con số, screen có hợp lý chưa — có nên gộp / tách screen hay gì không.*
+§1-§8 ask where the eye goes *within* a screen. §9 asks where the screen
+boundaries should be, traces the five real task flows route by route, and
+tabulates every significant figure against who needs it and where they are
+standing when they do. It contains one correction to §7.5. **If you only read
+one section, read §9.3 and §9.4.**
 
 ## 1. TL;DR
 
@@ -72,6 +87,41 @@ Underneath those sit three findings that are not about clutter but will bite:
    is 3.45:1 and the ember `<Pill>` is 2.99:1, against the 4.5:1 that WCAG
    1.4.3 asks for text. Dark mode passes comfortably. The colour the app uses
    to mean "this is the urgent one" is the colour hardest to read.
+
+### And on the architecture question (§9, written second)
+
+The screens are mostly the right screens. **What is wrong is the wiring between
+them and where two numbers live.**
+
+7. **Six of the nine Finance tabs have no outbound link, and Home does not link
+   to Finance at all.** Overhead prints a job that lost money, Reports prints
+   its margin, Forecast prints a deal's weighted value, and Files prints the
+   deal a brief hangs on — **none of them as a link**. You read the answer,
+   memorise it, and go and search for it again. There is no global search
+   either. This, not the tab count, is why Finance reads as a separate app.
+8. **The Quotations section is read-only.** Both its routes contain **zero
+   mutations**. `Mark sent` and `Mark confirmed` exist only at
+   `deals.$dealCode.quote.tsx:2222` and `:2230` — the ninth card of a 2464-line
+   file. The screen built to answer "what is out with clients" cannot act on
+   its own answer.
+9. **The margin-floor warning is silent where it matters.** `floor_breached`
+   appears in exactly one file. The banner is the first element on the quote
+   page; the Publish button is eight cards below it and mentions no margin. The
+   flag never reaches `/deals`, `/quotations`, or the job. A below-floor quote
+   can be published, sent, confirmed and won without any screen saying so again.
+10. **"Are we all right?" costs seven screens.** Cash on hand is on
+    `/finance/accounts` and nowhere else; the break-even surplus is on
+    `/finance/overhead` and nowhere else — the ninth tab of the seventh nav
+    item. `CONTEXT.md` made the break-even line "one signed number rather than
+    two fields" precisely so it could be shown as one. It is the hardest number
+    in the app to reach, and it is not on Home.
+11. **A job's own margin is served to the founder's reports and not to the
+    producer running the job.** `job_profitability(job=…)` exists, is
+    producer-permitted, and its docstring says it exists "so they can act on
+    it". The frontend calls it twice, both times without a `job` argument.
+
+Items 19-23 in §9.6 close all of that and are roughly **one afternoon's work**
+between them. They touch no pricing logic, add no endpoint and rename nothing.
 
 **The benchmark answer, in one line.** Linear's discipline is the right one for
 a one-founder studio and ClickUp's is not - but this app has already made
@@ -1477,6 +1527,12 @@ a stronger backend guarantee than either. Leave it alone.
 
 ### 7.5 The Finance tabs are not redundant
 
+> **Partly withdrawn — see §9.6.** The *argument* below (each tab has its own
+> endpoint, therefore each tab should exist) does not hold, and §9.6 says why.
+> The endpoint table is still accurate and still shows these tabs are not
+> displaying the same data twice. The conclusion survives for seven of the nine
+> on better evidence in §9.5 B; `finance.overhead.tsx` should split.
+
 It is tempting to read "nine tabs" as "nine tabs too many" and merge them. Each
 one is backed by a distinct server endpoint answering a distinct question:
 
@@ -1626,9 +1682,674 @@ each does not rename anything, does not touch the glossary, and does more for
   (đã xuất HĐ) → Paid (đã thanh toán)"). That is §8.3's pattern in the
   glossary; it should reach the screen.
 
-## 9. Sources, and what could not be sourced
+## 9. Information architecture: are these the right screens at all?
 
-### 9.1 Primary sources used
+§4 asked where the eye goes *within* a screen. This section asks the different
+and harder question the founder put next: **where should the screen boundaries
+be**, is every number in the place the person who needs it is standing, and what
+should be merged or split.
+
+It is organised as: the navigation graph the code actually builds (§9.2), the
+five real task flows traced route by route with the seams marked (§9.3), a
+table of every significant figure against who needs it and where it is (§9.4),
+and then — only then — merge/split proposals with their counter-arguments
+(§9.5). §9.6 collects the actions and marks one correction to §7.5.
+
+Two constraints hold throughout, as before: **no domain term is renamed to make
+a screen tidier**, and every proposal is argued on its own evidence rather than
+against a general preference for fewer screens or more.
+
+### 9.1 What "the right number of screens" looks like elsewhere
+
+The three benchmark products disagree about this more sharply than they disagree
+about anything in §3, which makes the comparison useful rather than decorative.
+
+**ClickUp puts six levels between you and a task**, and documents them as the
+product's spine:
+
+> "The Hierarchy is how your Workspace is organized... **Workspace → Spaces →
+> Folders → Lists → Tasks → Subtasks.**"
+> — [help.clickup.com, Intro to the Hierarchy](https://help.clickup.com/hc/en-us/articles/13856392825367-Intro-to-the-Hierarchy)
+
+with **Folders optional** and **17 view types** available at several of those
+levels ([Intro to views](https://help.clickup.com/hc/en-us/articles/6329880717719-Intro-to-views)).
+ClickUp's answer to "should this be its own screen?" is *"make a view, at
+whichever level of the hierarchy it belongs to."*
+
+**Linear's object model is deliberately small**, and its sidebar is smaller
+still: four personal items, a Workspace group, Favorites, then Teams
+([linear.app/docs/layout](https://linear.app/docs/layout)). Everything else is a
+**view** — a saved filter that lives in the sidebar rather than a page that had
+to be built:
+
+> "The applied filters are also reflected in the browser URL. **You can copy the
+> browser address to share the filtered view**; opening the link applies the same
+> filters."
+> — [linear.app/docs/filters](https://linear.app/docs/filters)
+
+And Linear's stated reason for keeping the model small is the one that matters
+for a studio of this size:
+
+> "**Purpose-built** — Productivity software needs to be designed for purpose...
+> **Flexible software lets everyone invent their own workflows, which eventually
+> creates chaos as teams scale.**"
+> — [linear.app/method/introduction](https://linear.app/method/introduction)
+
+**Jira sits between them** and is the most instructive for AuraOS, because Jira
+solves "same data, several surfaces" explicitly: a board, a backlog, an issue
+navigator and a dashboard are four presentations of the same issues, each
+answering a different question, and Atlassian is clear that you switch
+presentation rather than duplicate data
+([support.atlassian.com](https://support.atlassian.com/jira-service-management-cloud/docs/switch-between-views-for-different-ways-to-visualize-your-work-items/)).
+Its record-page rule is the transplantable one already quoted in §6.17:
+description fields where people look first, context fields to the side, and
+**hide-when-empty** below a divider
+([support.atlassian.com](https://support.atlassian.com/jira-software-cloud/docs/configure-field-layout-in-the-work-item/)).
+
+Atlassian's own navigation guidance points the same direction as Linear's
+count — *"**Keep nested navigation levels to a minimum. If you need to use a
+nested navigation, always provide a 'go back' button to help people get out of
+the menu.**"*
+([atlassian.design](https://atlassian.design/components/side-navigation/usage)).
+
+**Where AuraOS sits.** Its object model is already small and already correct —
+Deal → Quote version → Job → Job task, with Package and Phase inside the quote
+and Advance / Expense / Milestone hanging off the job. That is a Linear-shaped
+model, not a ClickUp-shaped one, and §7.1 explains why none of it should be
+renamed. The problem §9 finds is not the model. **It is that the model's
+lifecycle is spread across surfaces that do not link to each other**, and that
+the two figures the founder most needs are the two furthest from where they
+stand.
+
+### 9.2 The navigation graph the code builds
+
+Every `<Link to="/...">` in `routes/` and `components/aura/`, deduplicated:
+
+```
+                    ┌──────────────► /my-work ───► /my-work/$jobId
+                    │
+   Home ────────────┼──► /deals ─────► /deals/$dealCode ──► /deals/$dealCode/quote
+    │               │        ▲               │  ▲                 │
+    │               │        │               │  └─────────────────┘
+    │               └──► /jobs ──► /jobs/$jobId ◄── /documents/paperwork
+    │                                   │  ▲
+    │                                   │  └─── /finance/receivables
+    │                                   └─────► /deals/$dealCode
+    │
+    └──► /settings                /quotations ──► /quotations/$quoteRef
+                                       └──► /deals, /deals/$dealCode
+
+   /finance ──► /finance/income, /finance/expenses          (and nothing else)
+
+   DEAD ENDS (zero outbound links):
+     finance.accounts   finance.bank      finance.expenses
+     finance.forecast   finance.income    finance.overhead
+     finance.reports    contacts.companies  contacts.people
+     documents.files    documents.library   settings
+```
+
+Three facts fall straight out of that picture:
+
+1. **Home does not link to Finance.** Not to the Dashboard, not to Accounts, not
+   to Overhead. The sidebar is the only route in.
+2. **Six of the nine Finance tabs have no way out.** Only the Dashboard (→
+   Income, Expenses) and Receivables (→ a job) link anywhere.
+3. **The job page does not link to `/expense`**, though `/expense` links to it.
+
+There is also no global search: `/deals`, `/jobs` and `/quotations` each have
+their own server-side search box, and the one affordance that would cross
+objects — the `⌘K` chip in the header — does nothing (§6.12). So when a screen
+prints a record's name without linking it, the recovery is: read it, remember
+it, go to the right list, search it again.
+
+### 9.3 The five flows, traced from the code
+
+Each flow below is what the routes actually force. A **seam** is marked where
+the app makes somebody carry a fact in their head from one screen to another —
+that is the measurable cost of a screen boundary in the wrong place.
+
+#### Flow A — Win work
+
+```
+/deals ──► /deals/$dealCode ──► /deals/$dealCode/quote ──► [Zalo] ──► ⤶ same page
+ create        the record            price + publish        send        Mark sent
+   │                                                                    (card 9 of 9,
+   │                                                                     line 2222/2464)
+   └─ two ways to create: a typed blank row (table view, line 1275)
+      and a "New deal" dialog (kanban view)
+
+  …client replies…
+
+/quotations ──► /quotations/$quoteRef ──► /deals/$dealCode ──► /deals/$dealCode/quote
+  "what's out"     read-only, 0 mutations     the record          scroll to card 9,
+                        ▲                                          Mark confirmed
+                        └── SEAM 1 ─────────────────────────────────────┘
+```
+
+**Seam 1 is the worst screen boundary in the app.** `/quotations` and
+`/quotations/$quoteRef` contain **zero mutations** — verified by grep, both
+files. Every action on a quote version lives at
+`deals.$dealCode.quote.tsx:2222` (`Mark sent`) and `:2230` (`Mark confirmed`),
+which is the bottom of a 2464-line file, in the ninth card down.
+
+So the section built to answer *"what is out with clients right now"* — a nav
+item and two routes — cannot act on the answer. Reading it costs two more
+navigations and a long scroll into the pricing editor, which is the one screen
+you did **not** want to open, because it is where prices get changed by
+accident.
+
+**Also missing across the whole flow:** `floor_breached` appears in exactly one
+file. The margin-floor warning is `deals.$dealCode.quote.tsx:1085` — the first
+element in the page body — and the Publish button is at ~2097, eight cards
+below, in a card that mentions no margin at all. `/deals` has a `quote_status`
+column but no margin; `/quotations` has eight columns and none of them is
+margin or floor.
+
+> `CONTEXT.md` — **Margin floor**: "The single global margin percentage below
+> which any quote warns, without revealing where the number comes from."
+
+It warns while you type. It is silent where you commit, and silent forever
+after. A below-floor quote can be published, sent, confirmed and won without
+any screen after the editor ever saying so.
+
+*Credit where due:* a producer **does** see the banner, without the percentage
+(`view.founder` gates the number). That is the glossary's "without revealing
+where the number comes from", implemented exactly.
+
+#### Flow B — Run a shoot
+
+```
+/jobs ──► /jobs/$jobId ──┬─ Production (7 cards: Files, Revisions, Packages,
+ board      4 stat tiles  │              Client, Links, Quoted, Stage log)
+            + stage trail ├─ Tasks      (JobTasks: board / timeline / list)
+            + 4 tabs      ├─ Money      (JobMoneyPanel + JobMilestonesPanel)
+                          └─ Paperwork  (JobPaperworkPanel)
+```
+
+**This flow is cohesive and is the app's best decomposition.** One job, one
+route, four tabs, and the four money figures (Quoted, Collected, Uncollected,
+Spent) sit **above** the tabs so they persist across all four. Revisions and
+the redo round-trip are on Production where the stage is. Paperwork generation
+is here, against the job's own records, while the template library lives at
+`/documents/paperwork` — and that split is right and its docstring says why:
+*"This screen owns what a paper is made from, and what has been made."* The
+registry rows link back to `/jobs/$jobId`.
+
+Two seams, both small:
+
+- **The job page does not link to `/expense`.** `expense.tsx` links to
+  `/jobs/$jobId`; nothing links back. The one-handed on-set screen is reachable
+  only from a sidebar that does not exist below 1024px (§5.3).
+- **The tab is `useState`, not the URL** (line 100), so no tab is linkable —
+  which becomes an IA problem in Flow C.
+
+#### Flow C — Get paid
+
+```
+/jobs/$jobId ► Money tab ► JobMilestonesPanel ► set status ► generate invoice
+                                              (Not requested → Requested →
+                                               Invoiced → Paid)
+                                                     │
+        the money then appears in ────────────────────┼──► /finance/income
+                                                     └──► /finance/receivables
+
+chasing it back the other way:
+/finance/receivables ──► /jobs/$jobId ──► click "Money" ──► scroll to milestones
+                            ▲ opens on Production
+                            └── SEAM 2
+```
+
+**Seam 2:** Receivables is the *only* Finance tab besides the Dashboard with an
+outbound link, and it links to a job page that opens on the wrong tab, because
+the tab is component state. You arrive one click away from the thing the link
+was for. This is §6.11 with an IA consequence attached: the fix is a search
+param and a `?tab=money` on that link.
+
+#### Flow D — Pay out
+
+```
+advance ──► expenses ──► settlement        all inside JobMoneyPanel, one endpoint
+   (record_job_advance, log_job_expense, settle_job, job_money)
+   + /expense?job=… as the standing-up shortcut
+```
+
+**No seam.** This is the tightest flow in the app: one read (`job_money`)
+answers the ledger, the floats, and actual-against-quoted per category, because
+*"they are computed from the same rows."* Nothing to change.
+
+#### Flow E — the founder's Monday morning
+
+The question is "are we all right?" Here is what answering it costs today:
+
+| # | Screen | What it answers |
+|---|---|---|
+| 1 | `/` Home | pipeline, weighted projection, in production, overdue, silent quotes, margin floor, no-invoice exposure |
+| 2 | `/finance` Dashboard | money in vs money out by month |
+| 3 | `/finance/accounts` | **cash on hand** |
+| 4 | `/finance/receivables` | who owes, ageing |
+| 5 | `/finance/overhead` | **the break-even line: surplus or shortfall** |
+| 6 | `/finance/reports` | P&L, margin by job |
+| 7 | `/finance/forecast` | weighted pipeline ahead |
+
+**Seven screens, and Home links to none of them.** `index.tsx`'s outbound links
+are `/deals`, `/jobs`, `/jobs/$jobId`, `/my-work` and `/settings` — there is no
+link from Home to Finance at all. The sidebar is the only way in.
+
+And the two figures that most directly answer "are we all right?" are the two
+that are furthest away:
+
+- **Cash on hand** — `finance.accounts.tsx:141`, one screen, nowhere else.
+- **The break-even surplus/shortfall** — `finance.overhead.tsx`, one screen,
+  nowhere else, behind the ninth tab of the seventh nav item, founder-gated.
+
+`CONTEXT.md` defines the break-even line as *"A month's contribution against
+its overhead. Positive is a surplus, negative a shortfall, **and it is one
+signed number rather than two fields**."* The glossary went to the trouble of
+making it one number precisely so it could be shown as one. It is currently the
+hardest number in the app to reach.
+
+**This is the finding of §9.** Not "too many screens" — the founder's most
+important question is spread across seven of them, and the app's own home page
+does not carry the answer or a route to it.
+
+#### Flows that end in a wall
+
+Four screens print a record's name and do not link to it. Each one forces a
+memorise-and-re-search:
+
+| Screen | Prints | Link? | The seam |
+|---|---|---|---|
+| `finance.overhead.tsx:503` | per-job contribution, "Final" or "Still spending" | **no** | founder sees a job that lost money and must go find it |
+| `finance.reports.tsx` | margin by job | **no** | same |
+| `finance.forecast.tsx` | per-deal weighted contribution | **no** | same, for deals |
+| `documents.files.tsx:267` | `{row.deal_title \|\| row.deal}` | **no** | worst of the four — see below |
+| `contacts.companies.tsx` | Company, Tax code, Phone, Email, Paperwork | **no** | no deals, no jobs, no ageing |
+
+`documents.files.tsx` is the sharpest because its own docstring states the
+purpose: *"The question this screen exists for is the one a deal card cannot
+answer: 'we have that brief somewhere, which deal was it on?' So the deal is a
+column rather than a heading."* The reasoning is right and the column is dead
+text. The screen answers the question and then makes you carry the answer to
+the sidebar by hand.
+
+And one more, on Home: a **silent-quote row links to `/deals`** — the whole
+board — not to the deal it names, because `index.tsx:279` sets `job: null` for
+silent deals and the fallback link is generic. The row says *"TVC Tết 2027 ·
+Silent quote · quote sent, no reply for 14 days"*, you click it, and you land
+on a board of every deal. `SilentDeal` carries `name` (line 117). The link is
+one field away from working.
+
+**Six dead ends of nine Finance tabs.** Routes with zero outbound `<Link>`:
+`finance.accounts`, `finance.bank`, `finance.expenses`, `finance.forecast`,
+`finance.income`, `finance.overhead`, plus `contacts.companies`,
+`contacts.people`, `documents.files`, `documents.library`, `settings`.
+
+**This, not the tab count, is why Finance feels like a separate application.**
+It is a reporting annexe you enter from the sidebar and leave the same way.
+
+### 9.4 Every significant number: who needs it, when, and is it where they are standing
+
+Screens are from `grep` across `routes/` and `components/aura/`. "Verdict" is my
+judgement against the flows in §9.3.
+
+| Figure | Printed on | Who needs it | At what moment | Where they are standing | Verdict |
+|---|---|---|---|---|---|
+| **Quote total** | Home, `jobs.index`, `jobs.$jobId`, `quotations.index`, quote editor | producer + founder | pricing; and on every job all through the shoot | it is on all of them | ✅ correct duplication |
+| **Margin %** (`margin_pct`) | quote editor, `finance.reports`, `finance.receivables`, `finance.overhead` | producer while spending; founder afterwards | when a shoot starts costing more than quoted | producer is on `/jobs/$jobId`, which does not have it | ⚠️ see below |
+| **Floor breached** (`floor_breached`) | **quote editor only** | whoever decides to send, and the founder reviewing what is out | at publish; at send; while reviewing `/quotations` | banner is 1000 lines above the Publish button; absent from `/deals`, `/quotations`, the job | ❌ **wrong place** |
+| **Days overdue** | Home, `jobs.index`, `finance.receivables`, `JobMilestonesPanel` | founder chasing; producer on the job | Monday; and when opening the job | all four | ✅ useful reminder, not noise |
+| **Uncollected** | `jobs.$jobId`, `jobs.index`, `finance.receivables`, `finance.reports` | founder + producer | on the job, and when chasing | both | ✅ |
+| **Collected** | 9 screens incl. `finance.accounts`, `finance.income`, `finance.index`, `finance.reports`, `AcceptanceFigures` | founder | reporting | everywhere | ⚠️ nine is more than the fact needs, but each is a different aggregate of it (cash basis, per-client, per-month, per-job) — not duplication |
+| **Spent / Advanced total** | `jobs.$jobId`, `JobMoneyPanel` | producer | while spending | exactly there | ✅ |
+| **Float** (per person) | `JobMoneyPanel` only | producer + the person holding it | at settlement | exactly there | ✅ |
+| **Actual vs quoted cost, per category** | `JobMoneyPanel` "Where the money went" | producer | every time they spend | exactly there | ✅ **the best-placed number in the app** |
+| **Contribution** | `finance.overhead`, `finance.forecast` | founder | month end | founder-only screens | ✅ |
+| **Break-even surplus / shortfall** | **`finance.overhead` only** | founder | Monday morning; "are we all right?" | Home | ❌ **wrong place** |
+| **Cash on hand** | **`finance.accounts` only** | founder | same moment | Home | ❌ **wrong place** |
+| **Open task count** | **`my-work.index` only** | crew and producer | daily | correct for crew; a producer's own tasks are not on Home | ⚠️ minor |
+| **Revision rounds / change order** | `jobs.$jobId` (Production), quote editor, `quotations.$quoteRef` | producer at the moment a client asks again | on the job | there | ✅ |
+| **Margin floor % itself** | Home ("Margin floor" card, founder), Settings, quote editor | founder | when setting it, and when pricing | there | ✅ |
+| **No-invoice tax exposure** | Home (founder) | founder | Monday | there | ✅ |
+| **Weighted projection** | Home (founder), `finance.forecast` | founder | Monday | both, and Home names it *"not cash"* | ✅ well handled |
+
+#### The three ❌s, in order of how much they cost
+
+**1. `floor_breached` never leaves the pricing editor.** Covered in §9.3 Flow A.
+The fix is small and does not touch the pricing engine: put the flag on the
+Publish card, on the `/quotations` row, and on the deals table's `quote_status`
+cell. The server already sends it in the same payload the editor reads.
+
+**2. The break-even line and cash on hand are not on Home.** §9.3 Flow E. Both
+are single-endpoint reads (`break_even`, `cash_accounts`), both already
+founder-gated server-side, and Home already renders two founder-only cards
+behind `session.isFounder`, so the pattern is in the file. This is the change
+that would most directly answer *"are we all right?"* in one screen instead of
+seven.
+
+**3. A job's own margin is served to the founder's reports and not to the
+producer running the job.** This one deserves its own paragraph, because the
+codebase already argued for it:
+
+> `auraos/api.py:2008` — `def job_profitability(job=None, include_closed=0)`
+> "Margin, deliberately, and not the founder profit chain. **A producer already
+> sees the quoted total, the milestone plan and every đồng spent; the difference
+> between what was quoted and what the shoot is costing is the number that tells
+> them it is going wrong, and story 32 exists so they can act on it.**"
+
+The endpoint takes a single `job`. It is producer-permitted. Its docstring says
+it exists so a producer can act. And the frontend calls it from exactly two
+places — `finance.receivables.tsx:379` and `finance.reports.tsx:278` — **both
+with no `job` argument.** `jobs.$jobId.tsx` never calls it at all; its endpoint
+list is `job_milestones`, `job_money`, `log_job_revision`, `overdue_milestones`.
+
+**The single-job branch of that endpoint is unreached from the browser.** The
+number was built for the person running the shoot and is currently served only
+to the two screens they have no reason to open.
+
+**The honest counter-argument, which I accept in part:** the producer is not
+flying blind. `JobMoneyPanel`'s "Where the money went" card gives actual against
+**quoted cost** per category, with bars, which is the right *control* for
+someone deciding whether to approve one more rental. Margin is the right
+*verdict*, and a verdict belongs where the decision was made — which is the
+quote — not necessarily on the job. So this is a ⚠️ dressed as an ❌: adding a
+fifth stat tile is cheap and the endpoint is waiting, but the existing
+budget-bar framing is not wrong, and if only one thing gets built, build #1.
+
+#### On duplication, since not all of it is noise
+
+The brief asked when repetition helps. From the table above:
+
+- **Helpful:** *days overdue* on four screens. Each is a different standing
+  point — the founder's Monday list, the jobs board, the receivables ledger, the
+  milestone row itself — and the fact is short, urgent, and identical in all
+  four. `lib/format.ts`'s `overdueLabel` makes sure they cannot phrase it
+  differently, which is what makes the repetition safe.
+- **Helpful:** *quote total* everywhere a job appears. It is the job's size; it
+  is context, not a claim.
+- **Not duplication at all:** *collected* on nine screens. Each is a different
+  cut — cash-basis month, per client, per job, per account. The word is the
+  same; the number is not.
+- **Noise:** the Deals stat row against the board's own column headers (§6.4).
+  Same grain, same aggregate, sixty pixels apart.
+- **Noise:** the job page's header `<select>` against its chip trail (§6.18).
+  Not a number, but the same category of error.
+
+### 9.5 Merge or split: five proposals, each with its counter-argument
+
+#### A. Deals and Quotations — keep both lists, move the actions, retire the version page
+
+**Are they two screens or one with a filter?** They are two *grains*, and the
+backend says so:
+
+> `auraos/api.py:1013` — `quotation_list(status=None, search=None)`: "Every quote
+> version across every deal, newest first. A deal has always been able to list
+> its own versions (`deal_quotes`); this is **the same rows without a deal in
+> front of them**, because 'what is out with clients right now' cannot be
+> assembled one deal at a time."
+
+A deal has many versions. `/deals` is one row per deal; `/quotations` is one row
+per version. You cannot filter one into the other. **Keep both.**
+
+But `/quotations` is a filtered, searchable view over one doctype with three
+summary tiles — which is a *view*, not a section. That is fine; Linear's sidebar
+is largely views. What is not fine is that it is **read-only** (§9.3 Flow A).
+
+**Proposal.**
+1. Put `Mark sent` and `Mark confirmed` on the `/quotations` row, behind the
+   same confirm-dialog pattern `DealStage.tsx` already uses for Lost. **S.**
+2. Add a **margin / below-floor** column to `/quotations`. The payload behind
+   the editor already carries `floor_breached`. **S.**
+3. **Retire `/quotations/$quoteRef` as a separate destination**, or reduce it to
+   what only it has. Today it is 348 lines showing a status pill, client
+   engagement, "This version", and "Every version" — and every one of those
+   except the engagement timeline is already rendered by
+   `components/aura/QuoteVersions.tsx` at the bottom of the quote editor, *with*
+   the actions. It is a strictly weaker copy.
+
+**Counter-argument.** Row-level "Mark confirmed" on a list is a misclick that
+freezes the wrong version's status. Real, and the mitigation is the confirm
+dialog that already exists. Second counter: the engagement timeline (opens, PDF
+downloads, timestamps) genuinely has nowhere else to live and is the best reason
+to open a version. So retire the *route* only if that timeline moves into a
+drawer on the list; otherwise keep the route and just give it the two buttons.
+**My preference: keep the route, add the buttons to both.** Cheaper, and it
+does not delete a working screen to prove a point.
+
+#### B. Finance's nine tabs — a correction to §7.5, and one split
+
+**I am changing my position, and §7.5's argument was wrong.**
+
+§7.5 defended all nine tabs on the grounds that each backs a distinct server
+endpoint. That reasoning does not hold: **endpoint-distinctness proves the data
+is distinct, not that the screens should be.** By that argument the Home
+dashboard should be six screens. I was reading each file's docstring and letting
+it justify its own existence, which is exactly the failure the coordinator
+warned about — a tab can be individually justified and collectively wrong.
+
+What the flows change, and what they do not:
+
+**What survives.** Seven of the nine are still right as separate destinations.
+Bank reconciliation, Accounts, Receivables, Reports and Forecast each answer a
+question you go looking for deliberately, and `finance.forecast.tsx`'s
+fact-versus-estimate line is a real reason to keep the estimate away from the
+ledger.
+
+**What does not survive: `finance.overhead.tsx` should split.** It is 1148 lines
+holding **five cards and five tables**: the break-even line by month, per-job
+contributions, standing costs due, the standing-cost register, and the overhead
+payment log. That is two different jobs — *"are we all right?"* and
+*"bookkeeping for the company's own costs"* — and the first is buried inside the
+second, behind the ninth tab of the seventh nav item.
+
+> `CONTEXT.md` — **Break-even line**: "A month's contribution against its
+> overhead. Positive is a surplus, negative a shortfall, **and it is one signed
+> number rather than two fields.**"
+
+The glossary made it one signed number so it could be *shown* as one. Split it
+out: the break-even line goes up (to Home, or to a Finance overview); the
+standing-cost register, the due list and the payment log stay as **Overhead**,
+which is then honestly named — it becomes the screen for the thing the glossary
+calls an Overhead, rather than a dashboard with a register attached.
+
+**What I still will not do: merge Dashboard / Income / Expenses.** These are the
+closest to genuinely redundant — `finance.index` calls exactly the two endpoints
+that Income and Expenses each call alone, and shares one range control with both
+via `FinanceRange`. But Income carries a per-client breakdown inside each month
+and Expenses carries the category split and the company-money-versus-float
+split, and neither fits on a summary. This is ordinary hub-and-spoke: a summary
+and its two drill-downs. `finance.index` already links to both, which is the
+right relationship. **Leave it.**
+
+**The bigger fix is not the count — it is that Finance is terminal.** Six of the
+nine have no outbound link (§9.3). Make every job name and deal name in
+Overhead, Reports and Forecast a `<Link>`. That is **XS per screen**, it is the
+single change that would most reduce the "Finance is a different app" feeling,
+and it does not move a single tab.
+
+#### C. The quote editor — do not split it yet, and here is exactly what breaks
+
+I called it the worst and most important screen (§4.3) and named a seam:
+Cost lines / Phases / Packages is one task; Client terms / Assumptions /
+Publish is another.
+
+**What breaks if you split it.** The screen is backed by **one
+`frappe.client.save` writing the entire Deal document**
+(`deals.$dealCode.quote.tsx:743-757`):
+
+```
+const doc = { ...base, doctype: "Deal",
+  cost_lines, packages, phases,
+  quote_mf_pct, vat_pct, contingency_pct, quote_detail_level,
+  assumptions, exclusions, included_revision_rounds, quote_valid_until }
+```
+
+Every field on both halves of the proposed split is in that one payload, and it
+is written by spreading `...base`. Two routes each autosaving that object is
+**last-write-wins clobbering**: screen A's 2.5-second autosave would write its
+stale copy of `assumptions` over what you just typed on screen B.
+
+And publishing depends on the save having happened:
+
+> "Answers whether the server now holds what is on screen, which is what
+> publishing has to know: **a version freezes the *saved* deal, so an unsaved
+> override would be published at its old price.**"
+
+So `publish` `await`s `save()`. Split the screen and that await now has to reach
+across a route boundary.
+
+**The safe split exists and the seam is already in the tree.**
+`routes/deals.$dealCode.tsx` is a nine-line passthrough `<Outlet />`. Hoisting
+the draft state, the dirty flag, the autosave timer and the status line into that
+layout route, with `index` / `quote` / a new `offer` as children, is the correct
+architecture. It is **M-to-L**, it touches the most dangerous code in the app,
+and it would be done for readability rather than for a bug.
+
+**Verdict: not now.** Do §6.6 (rebalance the column widths, S) and the XS fix
+below first, then re-measure.
+
+**The XS fix that solves the actual harm.** The reason the seam hurts is not
+that the page is long — it is that the **margin floor banner is 1000 lines above
+the Publish button** (§9.3 Flow A). Put `floor_breached` *inside* the Publish
+card, next to the button that commits. The flag is already in the same payload
+the card renders from. That is one conditional, and it removes most of the
+argument for splitting.
+
+**Counter-argument to my own verdict:** the founder "sits on this page for
+hours" (line 786) and the page is 2464 lines. If the width fix does not land it,
+the split is the real answer and putting it off twice would be cowardice. Revisit
+after §6.6 ships.
+
+#### D. Job tabs versus Deal long column — the job pattern is right, and fixing it is change C
+
+Two records, two patterns, in one app:
+
+| | Deal | Job |
+|---|---|---|
+| Routes | **2** (`/deals/$dealCode`, `/deals/$dealCode/quote`) | **1** |
+| Split by | route | four `useState` tabs |
+| Persistent summary | none — "At a glance" is card 4 of 7 and scrolls away | **4 money tiles above the tab strip**, visible on all four tabs |
+| Depth of one page | 7 cards, 12 fields in the first | Production tab = 7 cards |
+
+**The job pattern is right**, and specifically because of the summary strip:
+Quoted / Collected / Uncollected / Spent stay on screen whichever tab you are
+on, so switching tabs never costs you the context you switched with. The deal's
+equivalent numbers are inside a card that scrolls away, and its pricing is on a
+different route entirely.
+
+**Proposal:** converge the deal onto the job's shape — one route, a persistent
+summary strip (client, stage, estimated budget, quote status, margin), and tabs
+for Record / Pricing / Offer / Activity.
+
+**But notice this is the same change as C.** Both need the draft state hoisted
+into `routes/deals.$dealCode.tsx`. They are one piece of work, not two, and that
+is a point in favour of eventually doing it.
+
+**Counter-argument.** A deal is *a form plus a pricing tool* — two things. A job
+is *four unrelated workstreams*. Four tabs earn their tab strip; two do not, and
+two tabs is usually worse than two routes. So the converged deal might be one
+route with a summary strip and **no** tabs, keeping `quote` as a sibling route.
+That is a smaller change and probably the right one. **Decide when C is
+scheduled, not before.**
+
+**Do not converge the other way.** Do not split the job into routes. Its tabs
+are correct, they keep unsaved work alive (`jobs.$jobId.tsx:302`), and the only
+thing wrong with them is that they are not in the URL (§6.11).
+
+#### E. My work as the model — yes, but for the rule, not the shape
+
+`my-work.index.tsx` is one card, one list, one `<Pill>` per row, money-free by
+construction. I called it the least confusing screen in the app (§4.6).
+
+**The transferable rule is "a screen answers one question and says which" — not
+"every screen should be one card."** `finance.bank.tsx` argues its own density
+convincingly (*"The two unmatched lists are the product"*) and would be worse
+with less on it. Reading My work as a density target rather than a clarity
+target would damage the app.
+
+Applied concretely, the rule produces exactly two things, both already proposed:
+
+1. **A Finance overview that answers one question** — cash on hand, the
+   break-even line, what is owed, money in against money out — instead of a
+   Dashboard that answers half of it and four sibling tabs that hold the rest
+   (§9.4, and B above).
+2. **Home leading with "Needs attention"** rather than with five tiles of equal
+   weight (§4.1). Home's job is *"what should I do now"*; the tiles answer
+   *"how big is everything"*, which is a different question and belongs under it.
+
+**Should Home and My work merge?** No. They answer *"how is the company"* and
+*"what is on my plate"*, which are different questions. Linear does keep the
+equivalent surfaces separate — **Inbox** and **My issues** are two of the four
+personal items in its sidebar
+([linear.app/docs/layout](https://linear.app/docs/layout)) — though Linear does
+not publish a rationale for the split, so the reason above is mine, not theirs.
+Home already links to `/my-work`, which is the right relationship.
+
+### 9.6 What to do, ordered — and one correction
+
+These are IA changes. They are additional to §6, not a replacement for it, and
+the numbering continues from it so the two lists can be scheduled together.
+
+| # | Change | Value | Effort | Files |
+|---|---|---|---|---|
+| 19 | Make every record name in Finance a link | ★★★★★ | XS ×4 | `finance.overhead`, `finance.reports`, `finance.forecast`, `documents.files` |
+| 20 | `floor_breached` into the Publish card | ★★★★★ | XS | `deals.$dealCode.quote.tsx` |
+| 21 | Silent-quote rows link to their deal | ★★★★ | XS | `index.tsx:265-281` |
+| 22 | `Mark sent` / `Mark confirmed` on `/quotations` | ★★★★★ | S | `quotations.index`, `quotations.$quoteRef` |
+| 23 | Break-even line + cash on hand onto Home | ★★★★★ | S | `index.tsx` |
+| 24 | Receivables links carry `?tab=money` | ★★★ | S | with §6.11 |
+| 25 | Margin / below-floor column on `/quotations` and `/deals` | ★★★ | S | `quotations.index`, `deals.index` |
+| 26 | Job margin tile from `job_profitability(job=…)` | ★★★ | S | `jobs.$jobId.tsx` |
+| 27 | Split the break-even line out of Overhead | ★★★★ | M | `finance.overhead.tsx`, new overview |
+| 28 | Companies link to their deals, jobs and ageing | ★★ | M | `contacts.companies.tsx` |
+| 29 | Job page links to `/expense?job=…` | ★★ | XS | `jobs.$jobId.tsx` |
+| 30 | Hoist deal draft state into the layout route | ★★ | L | `deals.$dealCode.tsx` + 2 routes |
+
+**The first five are one afternoon and they are the whole point of this
+section.** Nineteen through twenty-three cost roughly a day between them, touch
+no pricing logic, add no endpoint, rename nothing, and between them they close
+every ❌ in §9.4 and three of the four seams in §9.3.
+
+Number 30 is the one to *not* do yet (§9.5 C).
+
+#### Correction to §7.5
+
+§7.5 defended all nine Finance tabs on the grounds that each is backed by a
+distinct server endpoint, with a table of endpoints as the evidence.
+
+**That argument is wrong and I withdraw it.** Endpoint-distinctness shows the
+*data* is distinct; it says nothing about whether the *screens* should be. By
+that reasoning Home would be six screens, since it reads six endpoints. What I
+was actually doing was reading each file's docstring and allowing it to justify
+its own existence — which cannot discover a boundary that is collectively wrong,
+because no file's docstring is written from outside itself.
+
+The conclusion survives for seven of the nine tabs, on the different and better
+evidence in §9.5 B: they answer questions somebody goes looking for
+deliberately. It does **not** survive for `finance.overhead.tsx`, which holds two
+jobs in one route and should split, and it never addressed the finding that
+matters more than the count — that six of the nine are navigational dead ends.
+
+§7.5's table of endpoints is still accurate and still useful. Its heading should
+be read as "these tabs are not showing the same data twice", which is true,
+rather than "therefore nine tabs is right", which does not follow.
+
+#### What §9 does *not* propose
+
+- **No renaming.** §7.1 stands unchanged. None of items 19-30 touches a term in
+  `CONTEXT.md`, and the Overhead split in item 27 makes the Overhead screen a
+  *better* match for its glossary entry, not a worse one.
+- **No new permission surface.** Items 23 and 26 use endpoints that are already
+  gated server-side (`break_even`, `cash_accounts`, `job_profitability`); Home
+  already renders two founder-only cards behind `session.isFounder`.
+- **No client-side arithmetic.** Every figure moved by items 19-27 is one the
+  server already computes. §7.2 stands.
+- **No merged Finance tabs.** §9.5 B argues the Dashboard / Income / Expenses
+  trio is ordinary hub-and-spoke and should be left alone.
+- **No split of the job's four tabs**, and no split of the quote editor yet.
+
+## 10. Sources, and what could not be sourced
+
+### 10.1 Primary sources used
 
 **Linear** — [method/introduction](https://linear.app/method/introduction),
 [method/product-direction](https://linear.app/method/product-direction),
@@ -1722,7 +2443,7 @@ WCAG 2.2 Understanding docs for
 [3.1.2](https://www.w3.org/WAI/WCAG22/Understanding/language-of-parts.html),
 [4.1.2](https://www.w3.org/WAI/WCAG22/Understanding/name-role-value.html).
 
-### 9.2 Claims I could not source, and therefore did not make
+### 10.2 Claims I could not source, and therefore did not make
 
 Listed so that nobody re-introduces them from memory:
 
@@ -1759,8 +2480,27 @@ Listed so that nobody re-introduces them from memory:
     appears only as local sub-menu labels. Per-Space ClickApps are the real
     mechanism.
 12. **A ClickUp sidebar width figure.** Not published.
+13. **Any published rationale from Linear for splitting Inbox from My Issues.**
+    The two surfaces demonstrably exist side by side in the sidebar
+    ([linear.app/docs/layout](https://linear.app/docs/layout)); the reasoning in
+    §9.5 E for why AuraOS should keep Home and My work apart is mine.
+14. **NN/g on information architecture specifically** — breadth-versus-depth
+    numbers, "pogo-sticking", or an interaction-cost figure for navigating away
+    and back. §9's arguments about dead-end screens and remembered record names
+    therefore rest on the codebase evidence plus NN/g heuristic #6,
+    *"**Recognition rather than recall** — Minimize the user's memory load by
+    making elements, actions, and options visible"*
+    ([nngroup.com](https://www.nngroup.com/articles/ten-usability-heuristics/)),
+    and are labelled as judgement where they go further than that.
 
-### 9.3 Method
+**One more caveat specific to §9.** Its flow traces are read off the routing
+and the `<Link>` graph, not observed over anyone's shoulder. They are an
+accurate account of what the app *permits* and *affords*; they are not a claim
+about what any particular producer actually does. A half-day of watching one
+person price a deal and one person close a shoot would be worth more than the
+whole of §9, and nothing here substitutes for it.
+
+### 10.3 Method
 
 Codebase measurements were taken on `origin/main` at `05607de` by counting
 literal occurrences in `frontend-react/src/routes/` and
