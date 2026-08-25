@@ -6,16 +6,31 @@
 // three panels, running in production - the same doctype, the same endpoints
 // and the same words, because the backend is unchanged.
 //
-// The three tabs are shown and hidden rather than mounted and unmounted, so a
+// The four tabs are shown and hidden rather than mounted and unmounted, so a
 // half-typed milestone plan is still there when the reader comes back from the
 // paperwork tab.
+//
+// **Tasks is the same panel a crew member reads** (#41, ported at #165). The
+// difference is not the component, it is what the server says the session may
+// do: `job_tasks` answers `can_plan`, and a producer gets the planning surface
+// while an editor gets their own card and nothing else. Nothing about the plan
+// is money, which is what makes one component safe for both.
 
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ChevronLeft, ChevronRight, DollarSign, FileText, Film } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  FileText,
+  Film,
+  ListChecks,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { AppShell } from "@/components/aura/AppShell";
 import { JobMilestonesPanel } from "@/components/aura/JobMilestonesPanel";
+import { JobTasks } from "@/components/aura/JobTasks";
 import { JobMoneyPanel } from "@/components/aura/JobMoneyPanel";
 import { JobPaperworkPanel } from "@/components/aura/JobPaperworkPanel";
 import { Card, Money, Pill, Stat, Td, Th } from "@/components/aura/primitives";
@@ -58,10 +73,15 @@ type CompanyRow = { name: string; company_name: string | null };
 
 type RevisionResult = { round: number; stage: string; redo: boolean };
 
-const TABS = ["Production", "Money", "Paperwork"] as const;
+const TABS = ["Production", "Tasks", "Money", "Paperwork"] as const;
 type Tab = (typeof TABS)[number];
 
-const TAB_ICONS = { Production: Film, Money: DollarSign, Paperwork: FileText };
+const TAB_ICONS = {
+  Production: Film,
+  Tasks: ListChecks,
+  Money: DollarSign,
+  Paperwork: FileText,
+};
 
 function JobDetail() {
   const { jobId } = Route.useParams();
@@ -288,6 +308,18 @@ function JobDetail() {
               hidden={tab !== "Production"}
             >
               <ProductionTab doc={loaded} companyName={companyName} />
+            </div>
+
+            <div
+              role="tabpanel"
+              id="panel-Tasks"
+              aria-labelledby="tab-Tasks"
+              hidden={tab !== "Tasks"}
+            >
+              <JobTasks
+                job={jobId}
+                emptyMessage="Write the plan: what has to happen, who is doing it and by when."
+              />
             </div>
 
             <div
