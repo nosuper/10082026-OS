@@ -22,7 +22,8 @@ import { expect, test } from "@playwright/test";
 
 import { producerState } from "./auth-state.js";
 import { callAs } from "./call.js";
-import { openJob, openJobTab } from "./records.js";
+import { JOB_DEAL } from "./fixture.js";
+import { firstName, openJob, openJobTab } from "./records.js";
 
 const producerTest = test.extend({ storageState: producerState });
 
@@ -220,30 +221,74 @@ test("a value still in use cannot be removed, and the refusal says how many hold
   page,
 }) => {
   await openDashboard(page);
-  const lists = (await callAs(page, VOCABULARIES)).body.message;
-  const source = lists.find((v) => v.key === "source");
-  const inUse = source.values.find((v) => v.in_use > 0);
 
-  // Skipped rather than faked when the seed happens to carry no used value:
-  // inventing a deal to make this true would be testing the fixture.
-  test.skip(!inUse, "no deal source is in use on this site");
+  // **Built here rather than found in the seed.** An earlier version of this
+  // test looked for a source some deal already held and skipped when it found
+  // none - and neither seed has ever set `Deal.source`, so it skipped every
+  // run and read as coverage while proving nothing. A test that can only skip
+  // is worse than no test, because the file still lists it.
+  const value = "Playwright spec source";
+  const deal = await firstName(page, "Deal", { title: JOB_DEAL });
+  expect(deal, "the seeded deal is missing, so this test has nothing to attach to").toBeTruthy();
 
-  const refused = await callAs(page, "auraos.api.remove_vocabulary_value", {
+  const added = await callAs(page, "auraos.api.add_vocabulary_value", {
     kind: "source",
-    value: inUse.name,
+    value,
   });
-  // Asserted by exception class rather than by HTTP status: the status Frappe
-  // maps a ValidationError to is the framework's business and has moved
-  // between versions, while the class is the contract auraos.lib.vocabulary
-  // actually promises. `not 200` is the half that matters and is checked too.
-  expect(
-    refused.status,
-    `a value on ${inUse.in_use} records was removed: ${JSON.stringify(refused.body)}`,
-  ).not.toBe(200);
-  expect(refused.excType).toBe("ValidationError");
+  expect(added.status, `the source was refused: ${JSON.stringify(added.body)}`).toBe(200);
 
-  // The number is in the refusal, because "cannot remove" without it is a
-  // dead end and "cannot remove, eleven deals hold it" is a next step.
-  const said = JSON.stringify(refused.body ?? {});
-  expect(said).toContain(String(inUse.in_use));
+  try {
+    // Nothing holds it yet, so it is removable - the control for the refusal
+    // below. Without it this test would pass on a server that refused every
+    // removal.
+    const free = added.body.message.find((v) => v.key === "source");
+    expect(free.values.find((v) => v.name === value).in_use).toBe(0);
+
+    const attached = await callAs(page, "frappe.client.set_value", {
+      doctype: "Deal",
+      name: deal,
+      fieldname: "source",
+      value,
+    });
+    expect(attached.status, `could not put the source on the deal`).toBe(200);
+
+    // The count is the server's, and it is what makes the refusal readable
+    // before it happens.
+    const held = (await callAs(page, VOCABULARIES)).body.message
+      .find((v) => v.key === "source")
+      .values.find((v) => v.name === value);
+    expect(held.in_use).toBe(1);
+
+    const refused = await callAs(page, "auraos.api.remove_vocabulary_value", {
+      kind: "source",
+      value,
+    });
+    // Asserted by exception class rather than by HTTP status: the status
+    // Frappe maps a ValidationError to is the framework's business and has
+    // moved between versions, while the class is the contract
+    // auraos.lib.vocabulary actually promises.
+    expect(
+      refused.status,
+      `a value on a deal was removed: ${JSON.stringify(refused.body)}`,
+    ).not.toBe(200);
+    expect(refused.excType).toBe("ValidationError");
+
+    // The number is in the refusal, because "cannot remove" without it is a
+    // dead end and "cannot remove, one deal holds it" is a next step.
+    expect(JSON.stringify(refused.body ?? {})).toContain("1");
+  } finally {
+    // Put the deal back first: while it holds the value, the value cannot be
+    // removed - which is the rule this test just proved.
+    await callAs(page, "frappe.client.set_value", {
+      doctype: "Deal",
+      name: deal,
+      fieldname: "source",
+      value: "",
+    });
+    const gone = await callAs(page, "auraos.api.remove_vocabulary_value", {
+      kind: "source",
+      value,
+    });
+    expect(gone.status, `the spec could not remove ${value}`).toBe(200);
+  }
 });
