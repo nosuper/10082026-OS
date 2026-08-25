@@ -76,10 +76,21 @@ causes. Ranked by how much of the "rối" each one explains:
 
 Underneath those sit three findings that are not about clutter but will bite:
 
-4. **`outline-none` appears 63 times across 23 files and there is not one
-   `focus-visible` rule in the entire application.** A keyboard user cannot
-   see where they are. This is a WCAG 2.4.7 (Level A) failure and it is the
-   single cheapest thing on this list to fix.
+4. **`outline-none` appears 63 times across 23 files, and no rule anywhere
+   restores a focus ring for any of them.** A keyboard user cannot see where
+   they are. This is a WCAG 2.4.7 (Level A) failure and it is the single
+   cheapest thing on this list to fix.
+
+   > **Corrected 2026-08-25.** This item first read "there is not one
+   > `focus-visible` rule in the entire application", which is false.
+   > `focus-visible` appears **44 times across 11 files** — all of them in
+   > `components/ui/`, the shadcn primitives. The claim that survives is the
+   > narrower one **§5.1 made all along**: zero occurrences in `routes/` or
+   > `components/aura/`, and none in `styles.css` — which is every file the
+   > app actually renders, because nothing imports `components/ui/`. The app
+   > ships the styling for a focus ring it never mounts. Nothing in §5.1 or §6
+   > changes, and the fix gets *better* supported: `--ring` is not only
+   > defined, it is already written against.
 5. **Below 1024px there is no navigation at all.** The sidebar is
    `hidden ... lg:flex` with no drawer, no hamburger and no fallback. A
    producer holding a phone on set can reach `/expense` only by typing the URL.
@@ -2457,7 +2468,15 @@ rather than "therefore nine tabs is right", which does not follow.
 [docs/favorites](https://linear.app/docs/favorites),
 [docs/dashboards](https://linear.app/docs/dashboards),
 [now/how-we-redesigned-the-linear-ui](https://linear.app/now/how-we-redesigned-the-linear-ui),
-[now/rebuilding-delta-sync-read-path](https://linear.app/now/rebuilding-delta-sync-read-path).
+[now/rebuilding-delta-sync-read-path](https://linear.app/now/rebuilding-delta-sync-read-path),
+[method/scope-projects](https://linear.app/method/scope-projects),
+[docs/projects](https://linear.app/docs/projects),
+[docs/initiatives](https://linear.app/docs/initiatives),
+[docs/use-cycles](https://linear.app/docs/use-cycles),
+[docs/inbox](https://linear.app/docs/inbox),
+[docs/my-issues](https://linear.app/docs/my-issues),
+[docs/triage](https://linear.app/docs/triage),
+[docs/parent-and-sub-issues](https://linear.app/docs/parent-and-sub-issues).
 
 **Atlassian Design System** —
 [foundations/grid](https://atlassian.design/foundations/grid),
@@ -2518,7 +2537,16 @@ rather than "therefore nine tabs is right", which does not follow.
 [Intro to permissions](https://help.clickup.com/hc/en-us/articles/6309225399703-Intro-to-permissions),
 [Intro to ClickUp 4.0](https://help.clickup.com/hc/en-us/articles/31142608907543-Intro-to-ClickUp-4-0),
 [My Tasks page](https://help.clickup.com/hc/en-us/articles/6308921446935-Home),
-[clickup.com/about](https://clickup.com/about).
+[clickup.com/about](https://clickup.com/about),
+[Hierarchy best practices](https://help.clickup.com/hc/en-us/articles/20480724378135-Hierarchy-best-practices),
+[What are Folders](https://help.clickup.com/hc/en-us/articles/6311450560407-What-are-Folders),
+[Add a view to All Tasks](https://help.clickup.com/hc/en-us/articles/6310138041367-Add-a-view-to-All-Tasks),
+[View all your tasks](https://help.clickup.com/hc/en-us/articles/6309783246103-View-all-your-tasks),
+[My Tasks page (formerly Home)](https://help.clickup.com/hc/en-us/articles/18944788880791-My-Tasks-page-formerly-Home),
+[Create nested subtasks](https://help.clickup.com/hc/en-us/articles/6304431740055-Create-nested-subtasks),
+[Intro to subtasks](https://help.clickup.com/hc/en-us/articles/6309825777943-Intro-to-subtasks),
+[Everything You Need to Know About Task Views](https://help.clickup.com/hc/en-us/articles/6310172583831-Everything-You-Need-to-Know-About-Task-Views),
+[Intro to Overviews](https://help.clickup.com/hc/en-us/articles/15115821058071-Intro-to-Overviews).
 
 **Nielsen Norman Group** —
 [Ten Usability Heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/),
@@ -2535,7 +2563,27 @@ rather than "therefore nine tabs is right", which does not follow.
 [Mobile Tables](https://www.nngroup.com/articles/mobile-tables/),
 [Legibility, Readability, and Comprehension](https://www.nngroup.com/articles/legibility-readability-comprehension/),
 [International Usability: Big Stuff the Same, Details Differ](https://www.nngroup.com/articles/international-usability-details-differ/),
-[International B2B](https://www.nngroup.com/articles/international-b2b/).
+[International B2B](https://www.nngroup.com/articles/international-b2b/),
+[IA vs. Navigation](https://www.nngroup.com/articles/ia-vs-navigation/),
+[Flat vs. Deep Hierarchy](https://www.nngroup.com/articles/flat-vs-deep-hierarchy/),
+[IA Questions for Navigation Menus](https://www.nngroup.com/articles/ia-questions-navigation-menus/),
+[The 3-Click Rule](https://www.nngroup.com/articles/3-click-rule/),
+[Interaction Cost](https://www.nngroup.com/articles/interaction-cost-definition/),
+[Pogo-Sticking](https://www.nngroup.com/articles/pogo-sticking/),
+[List Entries](https://www.nngroup.com/articles/list-entries/),
+[Task Analysis](https://www.nngroup.com/articles/task-analysis/),
+[Journey Mapping 101](https://www.nngroup.com/articles/journey-mapping-101/),
+[Card Sorting](https://www.nngroup.com/articles/card-sorting-definition/),
+[Mental Models](https://www.nngroup.com/articles/mental-models/),
+[Match the Real World](https://www.nngroup.com/articles/match-system-real-world/),
+[Recognition vs. Recall](https://www.nngroup.com/articles/recognition-and-recall/),
+[Short-Term Memory and Web Usability](https://www.nngroup.com/articles/short-term-memory-and-web-usability/),
+[Chunking](https://www.nngroup.com/articles/chunking/),
+[Dashboards: Preattentive Attributes](https://www.nngroup.com/articles/dashboards-preattentive/),
+[Complex Application Design](https://www.nngroup.com/articles/complex-application-design/),
+[Mobile Navigation Patterns](https://www.nngroup.com/articles/mobile-navigation-patterns/),
+[Customer Service Model](https://www.nngroup.com/articles/customer-service-model/),
+[Saving Scroll Position](https://www.nngroup.com/articles/saving-scroll-position/).
 
 **W3C** —
 [WAI-ARIA APG: Tabs pattern](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/),
@@ -2592,14 +2640,51 @@ Listed so that nobody re-introduces them from memory:
     The two surfaces demonstrably exist side by side in the sidebar
     ([linear.app/docs/layout](https://linear.app/docs/layout)); the reasoning in
     §9.5 E for why AuraOS should keep Home and My work apart is mine.
-14. **NN/g on information architecture specifically** — breadth-versus-depth
-    numbers, "pogo-sticking", or an interaction-cost figure for navigating away
-    and back. §9's arguments about dead-end screens and remembered record names
-    therefore rest on the codebase evidence plus NN/g heuristic #6,
-    *"**Recognition rather than recall** — Minimize the user's memory load by
-    making elements, actions, and options visible"*
-    ([nngroup.com](https://www.nngroup.com/articles/ten-usability-heuristics/)),
-    and are labelled as judgement where they go further than that.
+14. ~~**NN/g on information architecture specifically**~~ — **withdrawn
+    2026-08-25: this material exists and has now been read.** §9 was written
+    before a second sourcing round returned, and this entry recorded the gap
+    honestly at the time. It was wrong about the corpus. NN/g publishes
+    canonical articles on all three:
+
+    - **Pogo-sticking** is a named NN/g concept, and the definition indicts the
+      exact shape §9 describes: *"Misleading links and omitted information force
+      users to bounce back and forth in a hub-and-spoke pattern between a
+      routing page and subpages linked from it, **increasing the interaction
+      cost and decreasing engagement over time**"*
+      ([pogo-sticking](https://www.nngroup.com/articles/pogo-sticking/)). The
+      list/detail half is sharper still: *"a list entry without enough detail
+      leaves too many questions unanswered, forcing users to pogo stick"*
+      ([list-entries](https://www.nngroup.com/articles/list-entries/)) — which
+      is §9's argument for putting `floor_breached` on the list, not only in
+      the editor.
+    - **Interaction cost** is defined and enumerated: *"the sum of efforts —
+      mental and physical — that users must deploy in interacting with a
+      digital product in order to reach their goals"*, and the enumerated list
+      ends with *"**Memory load** — the information that users must remember in
+      order to complete their task"*
+      ([interaction-cost](https://www.nngroup.com/articles/interaction-cost-definition/)).
+      That is a stronger citation than heuristic #6 for §9's remembered-record-name
+      finding, because it names the cost rather than only the remedy.
+    - **Breadth versus depth** exists as prose: *"Content is more discoverable
+      when it's not buried under multiple intervening layers. All other things
+      being equal, deep hierarchies are more difficult to use"*
+      ([flat-vs-deep-hierarchy](https://www.nngroup.com/articles/flat-vs-deep-hierarchy/)).
+
+    **What is still unsourceable is the number**, and that is worth keeping
+    because it also retires item 6 above. There is no NN/g optimal count of
+    items per level or of levels, and this is NN/g's *position* rather than a
+    search failure — they name the seven-category rule a myth in the same
+    breath as the three-click rule: *"many designers have to choose between two
+    UX myths (neither supported by data): either no more than 3 clicks or no
+    more than 7 main-navigation categories … they aren't supported by research,
+    and they conflict"*
+    ([3-click-rule](https://www.nngroup.com/articles/3-click-rule/)). The
+    governing sentence is *"the number of categories should be determined by
+    what makes it easiest for people to discover and access information — not
+    by some preordained decision"*
+    ([ia-questions-navigation-menus](https://www.nngroup.com/articles/ia-questions-navigation-menus/)).
+    So "nine Finance tabs is too many" stays **my judgement**, and §9 is right
+    to argue it from the six dead-end tabs rather than from the nine.
 
 15. **Any first-party Atlassian criteria for "new project versus component
     versus label".** No such page exists on `support.atlassian.com` or the Jira
@@ -2628,6 +2713,13 @@ Quotations in this document preserve whichever term the cited page uses, which
 is why §6.17 says "work item" and §9.1 says both. That is inconsistency in the
 source, not in the citation.
 
+The same churn runs through ClickUp, and worse, because it is applied
+inconsistently inside their own documentation: **Home → My Tasks**, **Everything
+view → All Tasks**, **LineUp → Priorities**. The last is live mid-rename — the
+card table on the My Tasks page still says "LineUp" while the page that
+documents the card is titled "Use the Priorities card". Where this document
+quotes ClickUp it preserves the vintage of the page quoted.
+
 **A sourcing caveat.** `atlassian.design` is a client-rendered SPA: plain fetches
 return a ~640KB shell whose article bodies are empty, and there is no
 `page-data.json` escape hatch. Every `atlassian.design` quote here was read from
@@ -2652,8 +2744,23 @@ relative-luminance formula; they are arithmetic on the source tokens, not
 measurements of rendered pixels, and should be confirmed with a contrast tool
 before anyone changes a colour on their authority.
 
-`help.clickup.com` refuses automated fetches with HTTP 403; its content was
-retrieved from the same URLs over plain HTTP and is verifiable in a browser.
+`help.clickup.com` refuses automated fetches with HTTP 403. **This sentence
+first said the content "was retrieved from the same URLs over plain HTTP",
+which is wrong** — plain `curl` is refused exactly as the fetcher is. The pages
+yield only to a full browser header set (User-Agent, Accept, Accept-Language
+and `Sec-Fetch-*` together), which is how every `help.clickup.com` quote here
+was obtained; all of them are verifiable in a browser. Separately,
+`clickup.com/hierarchy-guide` is client-rendered — its raw HTML carries only tab
+labels — so no per-level copy is quoted from it.
+
+**Dead URLs met while sourcing**, recorded so nobody re-derives them:
+`linear.app/docs/cycles`, `/docs/views`, `/docs/sub-issues` and `/docs/issues` are
+all 404 (use `use-cycles`, `custom-views`, `parent-and-sub-issues`);
+`linear.app/method/scope-projects-down` is `scope-projects`;
+`nngroup.com/articles/the-magical-number-seven/` is 404 and its content lives in
+`/articles/chunking/`; `nngroup.com/articles/dashboards-preattentive-attributes/`
+is 404 and the slug is `/articles/dashboards-preattentive/`. NN/g's *"How Many
+Items in a Navigation Menu?"* is **video-only** and so is quoted nowhere here.
 `atlassian.design` component pages are client-rendered and were read in a
 browser rather than fetched.
 
