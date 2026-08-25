@@ -192,6 +192,11 @@ class Deal(Document):
                 [as_dict(package) for package in self.packages],
                 quote_mf_pct=self.quote_mf_pct,
                 vat_pct=self.vat_pct,
+                # Unset on every deal quoted before #69, and Frappe does
+                # not backfill a new field's default onto existing rows -
+                # so those recompute to the figures they were sold at
+                # rather than jumping 10% the next time anyone saves them.
+                contingency_pct=self.contingency_pct,
                 # Commission only feeds the founder block; whether that
                 # block is exposed is each caller's business.
                 commission_pct=self.commission_pct,

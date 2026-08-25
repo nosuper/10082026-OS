@@ -18,8 +18,11 @@ jobs:
       - name: Test
         run: pytest -v
 
+  # This job built the frappe-ui app until #103 retired it. It now builds the
+  # React app, which CI had never built at all - so until this change, the only
+  # frontend whose build was checked here was the one being deleted.
   frontend-build:
-    name: frappe-ui build
+    name: React build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,15 +30,15 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend-react/package-lock.json
       - name: Install
-        working-directory: frontend
+        working-directory: frontend-react
         run: npm ci --no-audit --no-fund
       - name: Build
-        working-directory: frontend
+        working-directory: frontend-react
         run: npm run build
       - name: Assert page shell was produced
-        run: test -f auraos/www/aura.html && grep -q aura-frontend-root auraos/www/aura.html
+        run: test -f auraos/www/aura-next.html && grep -q aura-next-root auraos/www/aura-next.html
 
   site-tests:
     name: Frappe site tests (incl. permission proof)
@@ -92,8 +95,11 @@ jobs:
         working-directory: /home/runner/frappe-bench
         run: bench get-app auraos "$GITHUB_WORKSPACE"
 
+      # Built inside the bench copy, not the workspace: the site tests assert
+      # the page shell and its assets resolve, and they read them from the
+      # clone bench actually serves.
       - name: Build frontend inside the bench copy
-        working-directory: /home/runner/frappe-bench/apps/auraos/frontend
+        working-directory: /home/runner/frappe-bench/apps/auraos/frontend-react
         run: |
           npm ci --no-audit --no-fund
           npm run build
@@ -125,7 +131,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .e2e-npm-cache
-          key: playwright-npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-npm-${{ runner.os }}-${{ hashFiles('frontend-react/package-lock.json') }}
           restore-keys: |
             playwright-npm-${{ runner.os }}-
 
@@ -138,7 +144,7 @@ jobs:
         with:
           name: playwright-failure-${{ github.run_id }}
           path: |
-            frontend/test-results
-            frontend/playwright-report
+            frontend-react/test-results
+            frontend-react/playwright-report
           if-no-files-found: ignore
           retention-days: 7

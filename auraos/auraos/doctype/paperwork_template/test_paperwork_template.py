@@ -171,6 +171,23 @@ class TestPaperworkTemplateLibrary(FrappeTestCase):
 
         self.assertIn("docx", str(refusal.exception))
 
+    def test_a_non_docx_that_reads_as_text_is_refused_in_words_too(self):
+        """The other mistake: a small PDF whose bytes all decode, so the
+        file store hands back text where the library wants bytes. That
+        used to surface as a TypeError (issue #105)."""
+        uploaded = upload(b"%PDF-1.4 tiny fake pdf, all ascii\n", "contract.docx")
+
+        with self.assertRaises(frappe.ValidationError) as refusal:
+            frappe.get_doc(
+                {
+                    "doctype": "Paperwork Template",
+                    "template_name": "Bản PDF chữ thường",
+                    "template_file": uploaded.file_url,
+                }
+            ).insert(ignore_permissions=True)
+
+        self.assertIn("docx", str(refusal.exception))
+
     def test_the_library_flags_a_placeholder_no_version_of_this_can_fill(self):
         """A typo in a template is found in the library, not on the printer."""
         make_template(

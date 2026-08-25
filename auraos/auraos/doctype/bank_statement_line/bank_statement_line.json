@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-20 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "effective_on",
+  "transacted_at",
+  "sequence",
+  "description",
+  "column_break_money",
+  "withdrawn",
+  "deposited",
+  "running_balance",
+  "match_section",
+  "matched_entry",
+  "matched_on",
+  "matched_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "effective_on",
+   "fieldtype": "Date",
+   "label": "Effective on",
+   "in_list_view": 1,
+   "reqd": 1,
+   "description": "The day the bank posted it, which is not always the day it was transacted."
+  },
+  {
+   "fieldname": "transacted_at",
+   "fieldtype": "Datetime",
+   "label": "Transacted at",
+   "description": "When it happened, as the bank recorded it. Differs from the effective day by hours normally and by a day at a month boundary."
+  },
+  {
+   "fieldname": "sequence",
+   "fieldtype": "Data",
+   "label": "Bank ref",
+   "in_list_view": 1,
+   "description": "The bank's own transaction number. Two payments of the same amount on the same day are two lines, and this is what keeps them two."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_money",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "withdrawn",
+   "fieldtype": "Currency",
+   "label": "Withdrawn"
+  },
+  {
+   "fieldname": "deposited",
+   "fieldtype": "Currency",
+   "label": "Deposited"
+  },
+  {
+   "fieldname": "running_balance",
+   "fieldtype": "Currency",
+   "label": "Balance after",
+   "description": "What the bank says the account held after this line. Checked against the walk from the opening balance on import."
+  },
+  {
+   "fieldname": "match_section",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation"
+  },
+  {
+   "fieldname": "matched_entry",
+   "fieldtype": "Link",
+   "label": "Matched ledger entry",
+   "options": "Cash Ledger Entry",
+   "description": "Set by a person confirming a suggestion. The link lives here and never on the entry: the ledger is what AuraOS knows and a statement is the bank's own document."
+  },
+  {
+   "fieldname": "matched_on",
+   "fieldtype": "Datetime",
+   "label": "Matched on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "matched_by",
+   "fieldtype": "Link",
+   "label": "Matched by",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Bank Statement Line",
+ "owner": "Administrator",
+ "states": [],
+ "track_changes": 1
+}

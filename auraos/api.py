@@ -9,12 +9,21 @@ from auraos.auraos.doctype.deal.deal import (
     margin_floor_pct,
 )
 from auraos.auraos.doctype.deal_quote import deal_quote
+from auraos.auraos.doctype.job.job import STAGES as JOB_STAGES
+from auraos.auraos.doctype.job.job import CLOSED_STAGE as JOB_CLOSED_STAGE
 from auraos.auraos.doctype.job.job import create_from_deal
 from auraos.auraos.doctype.job_payment_milestone import job_payment_milestone
 from auraos.auraos.doctype.job_task import job_task
 from auraos.auraos.doctype.paperwork_template import paperwork_template
-from auraos.lib import breakdown, paperwork, settlement, vocabulary
-from auraos.lib.money import round_vnd
+from auraos import statements
+from auraos.lib import acceptance, breakdown, contracts, exposure, finance, library, paper_status, paperwork, settlement, tax, vocabulary
+from auraos.lib import reporting
+from auraos.lib import statement
+# Imported by name: `milestones` is a parameter of save_job_milestones.
+from auraos.lib.milestones import INVOICED as MILESTONE_INVOICED
+from auraos.lib.milestones import PAID as MILESTONE_PAID
+from auraos.lib.milestones import invoice_split
+from auraos.lib.money import round_vnd, to_decimal
 # Imported by name: `quote` is a parameter throughout this module.
 from auraos.lib.quote import COMPANY_FIELDS
 
@@ -56,6 +65,189 @@ DEAL_TABLE_FIELDS = [
     "quote_sent_on",
     "modified",
 ]
+
+
+def _terms(terms):
+    """The generation dialog's typed values, as a plain mapping.
+
+    Frappe hands a whitelisted method its arguments as strings when the
+    call arrives as form data, so a dict may land here as JSON text.
+    Parsed in one place rather than trusted, and an unreadable value
+    becomes no terms at all rather than a crash on a contract nobody
+    can print.
+    """
+    if not terms:
+        return {}
+    if isinstance(terms, str):
+        try:
+            terms = frappe.parse_json(terms)
+        except Exception:
+            return {}
+    return terms if isinstance(terms, dict) else {}
+
+
+def _parent_contract_number(job):
+    """The number of this job's contract, for a paper written about it.
+
+    The most recent HDDV generated for the job. "Most recent" rather
+    than "the one", because a contract can be regenerated - a typo
+    fixed, a clause corrected - and the number the later paper should
+    quote is the one on the copy that was actually signed.
+    """
+    rows = frappe.get_all(
+        "Generated Paper",
+        filters={"job": job, "contract_number": ["is", "set"]},
+        fields=["contract_number", "creation"],
+        order_by="creation desc",
+    )
+    for row in rows:
+        if row.contract_number:
+            return row.contract_number
+    return None
+
+
+def _acceptance_table(job_doc, settled=None):
+    """The acceptance document's figures for this job (#153).
+
+    `settled` is what the founder typed at generation - the band totals
+    as agreed at acceptance. Not derived: they told us "cứ để tôi chỉnh
+    sửa ... rồi nhập lại số là xong", so the numbers are theirs and the
+    arithmetic between them is ours.
+
+    Contracted comes from the job's own quote. Collected comes from the
+    milestones actually paid, split at the rate each was invoiced at.
+    """
+    settled = settled or {}
+    paid = [
+        {"amount": m.get("amount"), "vat_pct": m.get("invoice_vat_pct")}
+        for m in job_doc.get("payment_milestones") or []
+        if m.get("status") == "Paid" and m.get("paid_on")
+    ]
+    collected = acceptance.collected_bands(paid)
+    contracted = {
+        "pre_vat": job_doc.get("quote_subtotal"),
+        "vat": job_doc.get("quote_vat_amount"),
+        "total": job_doc.get("quote_total"),
+    }
+    return acceptance.summary(contracted, settled, collected)
+
+
+@frappe.whitelist()
+def job_acceptance_figures(job):
+    """What the acceptance dialog pre-fills its inputs with.
+
+    Settled is offered as the contracted figure, which is the founder's
+    normal case - "giá trị thanh lý thông thường sẽ là giá trị hợp
+    đồng". They overwrite whichever differ.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    table = _acceptance_table(doc, settled=None)
+    return {
+        "contracted": {k: _plain(v["contracted"]) for k, v in table.items()},
+        "collected": {k: _plain(v["collected"]) for k, v in table.items()},
+        "refusals": list(acceptance.refusals(table)),
+    }
+
+
+def _plain(value):
+    """A Decimal as a number the browser can hold, or None."""
+    return None if value is None else float(value)
+
+
+@frappe.whitelist()
+def propose_contract_number(job, template, signed_on):
+    """What this paper would be numbered, before anyone commits to it.
+
+    Offered to the generation dialog so the founder sees the number and
+    can correct it before it is printed. Nothing is written here - the
+    number is only fixed when the paper is generated.
+
+    Two absences are reported rather than papered over, because both
+    have a person as the fix and neither has a sensible default:
+    a client with no short code, and a child paper whose contract has
+    not been generated yet.
+    """
+    _check_job_permission(job, "read")
+    frappe.has_permission("Paperwork Template", "read", throw=True)
+
+    kind = frappe.db.get_value("Paperwork Template", template, "kind") or ""
+    # Said whatever the kind is: a paper that carries no number can still
+    # describe a payment plan it cannot describe.
+    plan_refusal = contracts.payment_split(
+        frappe.get_all(
+            "Job Payment Milestone",
+            filters={"parent": job},
+            fields=["pct", "amount"],
+            order_by="idx asc",
+        )
+    )[1]
+    if not kind:
+        return {"kind": "", "number": None, "needs": None, "plan": plan_refusal}
+
+    company = frappe.db.get_value("Job", job, "company")
+    short_code = frappe.db.get_value("Party Company", company, "short_code") or ""
+
+    parent = contracts.parent_reference(kind, _parent_contract_number(job))
+    needs_parent = kind in contracts.CHILD_KINDS and not parent
+
+    if not short_code:
+        return {
+            "kind": kind,
+            "number": None,
+            "parent_number": parent,
+            "needs": "short_code",
+            "plan": plan_refusal,
+        }
+
+    return {
+        "kind": kind,
+        "number": contracts.number_for(
+            kind,
+            frappe.utils.getdate(signed_on),
+            short_code,
+            taken=_numbers_taken(kind, frappe.utils.getdate(signed_on), short_code),
+        ),
+        "parent_number": parent,
+        # A child paper still mints its own number; a missing parent
+        # costs it the reference, not its identity.
+        "needs": "contract" if needs_parent else None,
+        "plan": plan_refusal,
+    }
+
+
+def _numbers_taken(kind, signed_on, short_code):
+    """Numbers already issued that this one could collide with.
+
+    Read across every job rather than this one: two contracts with the
+    same partner on the same day collide whatever job they belong to,
+    and the number is the company's, not the job's.
+    """
+    stem = f"{kind.upper()}{signed_on.strftime('%d%m%y')}/AURA-"
+    rows = frappe.get_all(
+        "Generated Paper",
+        filters={"contract_number": ["like", f"{stem}%"]},
+        pluck="contract_number",
+    )
+    return [row for row in rows if row]
+
+
+@frappe.whitelist()
+def suggest_short_code(company_name):
+    """The partner abbreviation proposed for a company name (#139).
+
+    Asked of the server rather than worked out in the browser, so the
+    rule that builds a contract number has one home. A second copy in
+    TypeScript would agree with this one until somebody changed one of
+    them, which is the defect the date rule and the fixture-name mirror
+    both exist to avoid.
+
+    A suggestion only. The field it fills is editable and may be left
+    blank; generation asks for a code when it is missing rather than
+    inventing one.
+    """
+    frappe.has_permission("Party Company", "read", throw=True)
+    return contracts.suggest_short_code(company_name or "")
 
 
 @frappe.whitelist()
@@ -155,6 +347,12 @@ def _check_job_permission(job, ptype):
 
     Without the existence check a bad name reads as a permission
     failure, which tells the caller the wrong thing.
+
+    **This is the whole per-job authorization surface**, and today it
+    answers the same for every job: no role has a per-job boundary, by
+    the founder's ruling on #143. ADR-0003 records that decision and the
+    assignee model it becomes - when that lands it lands here, once, for
+    every endpoint that calls this, rather than on any one of them.
     """
     if not frappe.db.exists("Job", job):
         frappe.throw(_("Job {0} not found").format(job), frappe.DoesNotExistError)
@@ -265,7 +463,9 @@ def _founder_view(view, commission_pct):
     }
 
 
-def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct):
+def _breakdown_view(
+    line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct, contingency_pct=0
+):
     """lib/breakdown with this module's error channel and stored floor."""
     try:
         return breakdown.breakdown_view(
@@ -274,6 +474,7 @@ def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_p
             quote_mf_pct=quote_mf_pct,
             vat_pct=vat_pct,
             commission_pct=commission_pct,
+            contingency_pct=contingency_pct,
             margin_floor_pct=margin_floor_pct(),
         )
     except ValueError as err:
@@ -281,7 +482,14 @@ def _breakdown_view(line_rows, package_rows, quote_mf_pct, vat_pct, commission_p
 
 
 @frappe.whitelist()
-def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, packages=None):
+def compute_breakdown(
+    lines,
+    quote_mf_pct=10,
+    vat_pct=8,
+    commission_pct=None,
+    packages=None,
+    contingency_pct=0,
+):
     """Live engine results for the breakdown editor, before anything is saved.
 
     Producer sessions get costs, quote prices, margin and the floor
@@ -297,8 +505,11 @@ def compute_breakdown(lines, quote_mf_pct=10, vat_pct=8, commission_pct=None, pa
     if not _is_founder() or commission_pct is None:
         commission_pct = DEFAULT_COMMISSION_PCT
 
+    # Defaults to 0 rather than to 10 so that a caller which has not been
+    # taught about contingency yet gets the pre-#69 arithmetic instead of a
+    # silent 10% - the editor sends the deal's own stored rate.
     view = _breakdown_view(
-        line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct
+        line_rows, package_rows, quote_mf_pct, vat_pct, commission_pct, contingency_pct
     )
     out = {
         **view,
@@ -336,6 +547,24 @@ def deal_profit(deal):
 # -- quote delivery (T6, issue #8) --
 
 
+# What a typo can live in. Deliberately text only: package prices and
+# line figures are derived from the deal, so editing them on a version
+# would put a number on the client's page that the deal cannot reproduce
+# - which is a worse defect than the typo this door exists to fix. Money
+# still moves by publishing a new version.
+QUOTE_TEXT_FIELDS = (
+    "title",
+    "client_name",
+    "client_address",
+    "client_tax_code",
+    "client_contact",
+    "notes",
+    "assumptions",
+    "exclusions",
+    "included_revision_rounds",
+)
+
+
 def _quote_dict(quote, tracking=None):
     """A quote version as the producer's screen needs it.
 
@@ -358,6 +587,10 @@ def _quote_dict(quote, tracking=None):
         "opens": tracking.get("Page", 0),
         "downloads": tracking.get("PDF", 0),
         "last_open": tracking.get("last_open"),
+        # The wording, so the amend form (#35) opens filled rather than
+        # asking the screen to fetch each version separately. A deal has a
+        # handful of versions, so this is cheaper than the round trips.
+        **{field: quote.get(field) for field in QUOTE_TEXT_FIELDS},
     }
 
 
@@ -375,26 +608,44 @@ def deal_quotes(deal):
     quotes = frappe.get_all(
         "Deal Quote",
         filters={"deal": deal},
+        # The text fields ride along because _quote_dict returns them for
+        # the amend form (#35). Selecting them here is not optional: a row
+        # that arrives without a column reads back as None, and the form
+        # would open blank and then save the blanks over real wording.
         fields=[
             "name", "version", "status", "total", "token",
             "published_on", "sent_on", "confirmed_on",
+            *QUOTE_TEXT_FIELDS,
         ],
         order_by="version desc",
     )
-    tracking = {}
-    if quotes:
-        for row in frappe.get_all(
-            "Deal Quote Open",
-            filters={"quote": ["in", [q.name for q in quotes]]},
-            fields=["quote", "via", "count(name) as events", "max(opened_on) as last_open"],
-            group_by="quote, via",
-        ):
-            counts = tracking.setdefault(row.quote, {})
-            counts[row.via] = row.events
-            counts["last_open"] = max(
-                filter(None, [counts.get("last_open"), row.last_open]), default=None
-            )
+    tracking = _quote_tracking([row.name for row in quotes])
     return [_quote_dict(quote, tracking.get(quote.name)) for quote in quotes]
+
+
+def _quote_tracking(names):
+    """Opens and downloads per quote, counted in the database.
+
+    Grouped rather than fetched row by row: the open log is the one
+    table that grows without bound, and the cross-deal list asks about
+    every version at once. The fold itself is lib/reporting's, so the
+    two lists cannot count the same events differently.
+    """
+    if not names:
+        return {}
+    return reporting.open_tracking(
+        frappe.get_all(
+            "Deal Quote Open",
+            filters={"quote": ["in", list(names)]},
+            fields=[
+                "quote",
+                "via",
+                "count(name) as events",
+                "max(opened_on) as last_open",
+            ],
+            group_by="quote, via",
+        )
+    )
 
 
 @frappe.whitelist()
@@ -423,6 +674,95 @@ def deal_quote_links():
     return links
 
 
+QUOTATION_LIST_FIELDS = [
+    "name",
+    "deal",
+    "version",
+    "status",
+    "total",
+    "token",
+    "published_on",
+    "sent_on",
+    "confirmed_on",
+]
+
+
+def _company_names(companies):
+    """Display names for a set of Party Company links.
+
+    Screens list clients by name; the records link by code. One query
+    for the whole page rather than one per row.
+    """
+    companies = {company for company in companies if company}
+    if not companies:
+        return {}
+    return {
+        row.name: row.company_name
+        for row in frappe.get_all(
+            "Party Company",
+            filters={"name": ["in", list(companies)]},
+            fields=["name", "company_name"],
+        )
+    }
+
+
+@frappe.whitelist()
+def quotation_list(status=None, search=None):
+    """Every quote version across every deal, newest first.
+
+    A deal has always been able to list its own versions
+    (`deal_quotes`); this is the same rows without a deal in front of
+    them, because "what is out with clients right now" cannot be
+    assembled one deal at a time.
+
+    Scoped to the deals this session may list, the way the board's
+    mappings are: Deal Quote rows are read with get_all, which skips
+    row-level permissions, so the scope is the entire authorization.
+
+    Open tracking comes back as counts and a timestamp, never as prose -
+    the screen decides whether that reads "3 opens, last 17 Aug" or
+    "not opened yet".
+    """
+    frappe.has_permission("Deal", "read", throw=True)
+    deals = {
+        row.name: row
+        for row in frappe.get_list(
+            "Deal", fields=["name", "title", "company"], limit_page_length=0
+        )
+    }
+    if not deals:
+        return []
+
+    filters = {"deal": ["in", list(deals)]}
+    if status:
+        filters["status"] = status
+    quotes = frappe.get_all(
+        "Deal Quote",
+        filters=filters,
+        fields=QUOTATION_LIST_FIELDS,
+        # Newest first is publish order, not version order: two deals'
+        # v1s are not the same age.
+        order_by="published_on desc, version desc",
+    )
+    tracking = _quote_tracking([row.name for row in quotes])
+    clients = _company_names(deal.company for deal in deals.values())
+    rows = [
+        reporting.quotation_row(
+            quote,
+            deal_title=deals[quote.deal].title,
+            company=deals[quote.deal].company,
+            client=clients.get(deals[quote.deal].company),
+            url=deal_quote.page_url(quote.token),
+            tracking=tracking.get(quote.name),
+        )
+        for quote in quotes
+    ]
+    # Searched after the rows are built, not in SQL: the client's name
+    # lives on a third document, and the founder types whichever of the
+    # two they remember.
+    return [row for row in rows if reporting.matches_search(row, search)]
+
+
 @frappe.whitelist()
 def quote_opens(quote):
     """Open events of one version, newest first (spec #2, story 22)."""
@@ -445,6 +785,38 @@ def _quote_for_write(name):
     quote = frappe.get_doc("Deal Quote", name)
     _check_deal_permission(quote.deal, "write")
     return quote
+
+
+@frappe.whitelist()
+def amend_quote(quote, values):
+    """Fix wording on a version that has not gone out yet (#35).
+
+    The founder's pain was a spelling mistake forcing a v2 that says
+    nothing new. A version nobody can be holding is still a draft, so it
+    may be corrected in place; one that has been sent - or merely opened,
+    which the open log can prove and the status cannot - has become a
+    record and refuses. The controller owns that judgement; this only
+    decides which fields a caller may reach.
+    """
+    doc = _quote_for_write(quote)
+    # An explicit payload rather than **kwargs: a whitelisted method's
+    # keyword arguments are whatever the request happened to carry, and
+    # "whatever arrived" is not a good basis for deciding what to write.
+    values = frappe.parse_json(values) or {}
+    unknown = sorted(set(values) - set(QUOTE_TEXT_FIELDS))
+    if unknown:
+        frappe.throw(
+            _("Not editable on a published version: {0}").format(", ".join(unknown)),
+            frappe.ValidationError,
+        )
+    for field in QUOTE_TEXT_FIELDS:
+        if field in values:
+            doc.set(field, values[field])
+    # No is_new guard needed: DealQuote.validate refuses the write itself
+    # once the version has hardened, so the refusal is one rule in one
+    # place rather than a second opinion here that could drift from it.
+    doc.save()
+    return _quote_dict(doc)
 
 
 @frappe.whitelist()
@@ -544,9 +916,13 @@ def log_job_revision(job, note):
 # -- money out on a job (T8, issue #10) --
 
 ADVANCE_FIELDS = ["name", "recipient", "amount", "transferred_on", "note"]
+# cost_line and invoice_no travel because the money screen can now
+# correct them (#125), and a field an editor cannot read is a field it
+# cannot open with the value the record actually holds.
 EXPENSE_FIELDS = [
     "name", "spent_on", "amount", "category", "description",
     "paid_by", "paid_from", "photo", "creation",
+    "cost_line", "invoice_no",
 ]
 SETTLEMENT_FIELDS = [
     "name", "recipient", "amount", "direction", "advanced", "spent",
@@ -633,6 +1009,12 @@ def job_money(job):
         # server would refuse anyway.
         "may_advance": bool(frappe.has_permission("Job Advance", "create")),
         "may_settle": bool(frappe.has_permission("Job Settlement", "create")),
+        # Whether this job's spending is still a draft or already a
+        # record (#123). Carried here rather than fetched separately, so
+        # the screen and the lock read the same source: the doctype
+        # refuses a change after the closing stage, and a screen offering
+        # a control the server would refuse is a lie about the record.
+        "closed": doc.stage == CLOSED_JOB_STAGE,
     }
 
 
@@ -641,6 +1023,30 @@ def job_expense_categories(job):
     """The categories an expense on this job may carry, in quote order."""
     _check_job_permission(job, "read")
     return frappe.get_doc("Job", job).expense_categories()
+
+
+@frappe.whitelist()
+def job_cost_lines(job):
+    """The quoted lines an expense on this job may be spent against.
+
+    In quote order, carrying the tax type, because the screen has to be
+    able to say which of them come with no invoice - that is the whole
+    reason a payment against one of them is a tax exposure (#123). The
+    line's own expected cost travels too, so the person entering the
+    real figure can see what was quoted beside it.
+    """
+    _check_job_permission(job, "read")
+    doc = frappe.get_doc("Job", job)
+    return [
+        {
+            "name": row.name,
+            "description": row.description,
+            "package": row.package,
+            "tax_type": row.tax_type,
+            "quoted": round_vnd(settlement.handed_over(row.as_dict())),
+        }
+        for row in doc.cost_lines
+    ]
 
 
 @frappe.whitelist()
@@ -675,6 +1081,8 @@ def log_job_expense(
     paid_by=None,
     paid_from=None,
     photo=None,
+    cost_line=None,
+    invoice_no=None,
 ):
     """Log one payment out, the way it happens on a shoot: fast.
 
@@ -683,6 +1091,13 @@ def log_job_expense(
     `paid_by` exists for the case that isn't: money Linh spent that the
     founder is entering from a Zalo message, which has to land on her
     float rather than his.
+
+    `cost_line` is which quoted line this spend answers to, and it is
+    the reason the founder's tax exposure can be a fact rather than an
+    estimate: the tax treatment lives on the line, the money lives here,
+    and this link carries one to the other (#123). Optional, because
+    money gets spent on things nobody quoted and forcing a line would
+    invent one.
 
     Returns the payer's float, so the phone can answer the only
     follow-up question there is - how much of the advance is left.
@@ -698,6 +1113,8 @@ def log_job_expense(
             "spent_on": spent_on or frappe.utils.today(),
             "paid_by": paid_by or frappe.session.user,
             "paid_from": paid_from or settlement.FROM_ADVANCE,
+            "cost_line": cost_line,
+            "invoice_no": invoice_no,
         }
     )
     expense.insert()
@@ -710,6 +1127,106 @@ def log_job_expense(
         "photo": expense.photo,
         "float": _holder_float(job, expense.paid_by),
     }
+
+
+@frappe.whitelist()
+def update_job_expense(
+    name,
+    amount,
+    category=None,
+    description=None,
+    cost_line=None,
+    invoice_no=None,
+):
+    """Correct one payment that has already been logged (#125).
+
+    **The reason this endpoint exists is the invoice number**, not the
+    typo. `auraos.lib.exposure` calls a payment covered when paper was
+    obtained for it, and covered spending leaves the founder's tax
+    figure - so recording the replacement invoice is the only way that
+    number ever comes down. Until now nothing in the app could write it:
+    `log_job_expense` accepts one and no screen ever passed one, so the
+    tile could rise and could not fall. The other fields ride along
+    because the founder asked for spending to be correctable while a job
+    is open, and an invoice number is a correction like any other.
+
+    **`cost_line` is the second lever on the same figure.** An expense
+    against a line marked Không hoá đơn is exposed, one against a line
+    that comes with paper is not, and one attributed to nothing counts
+    as exposed until somebody says otherwise. So a mis-picked line
+    overstates or understates the company's position exactly as a
+    missing invoice number does, and a screen that could fix one and not
+    the other would close half the hole.
+
+    **This states the row; it does not patch it.** Every editable field
+    is written from what the caller sent, so an omitted `category`
+    clears the category rather than keeping it. The caller is a row
+    editor that holds all five values and sends all five; a patch
+    endpoint that quietly kept what it was not told about would make
+    "clear this field" unexpressible, which is the worse of the two
+    surprises.
+
+    Not editable here: who paid and out of whose float. The reconciler
+    would cope - `paid_by_company` is re-read on every save - but moving
+    a payment between a float and the company changes who is owed what,
+    and that conversation belongs on the settlement screen.
+
+    **No posting call, deliberately.** `Job Expense.on_update` already
+    hangs `post_payment` off the save, and `auraos.lib.ledger.posting`
+    answers a changed amount with REPOST while `restated` carries the
+    original account forward. Correcting an amount reconciles itself;
+    adding a second posting call here would double it.
+
+    A closed job refuses all of this, in the doctype rather than here:
+    `reject_change_after_close` runs in `validate`, so this endpoint
+    inherits the freeze that #123 put on the record rather than
+    restating it and risking the two drifting apart.
+    """
+    expense = frappe.get_doc("Job Expense", name)
+    _check_job_permission(expense.job, "write")
+    expense.amount = amount
+    expense.category = category or None
+    expense.description = description or None
+    expense.cost_line = cost_line or None
+    expense.invoice_no = (invoice_no or "").strip() or None
+    expense.save()
+    return {
+        "name": expense.name,
+        "amount": round_vnd(expense.amount),
+        "category": expense.category,
+        "photo": expense.photo,
+        "float": _holder_float(expense.job, expense.paid_by),
+    }
+
+
+@frappe.whitelist()
+def delete_job_expense(name):
+    """Remove a payment that was never made (#125).
+
+    The mistaken entry, not the corrected one: an amount typed wrong is
+    `update_job_expense`'s job, and this is for spending that did not
+    happen at all. Deleting was reachable from the Desk and from nowhere
+    a person using the app could get to, which left the money screen
+    able to add a payment and unable to take one back.
+
+    The ledger comes back with it. `Job Expense.on_trash` posts the
+    movement again with `moved=False`, which `auraos.lib.ledger.posting`
+    answers by taking the entry out - so a deleted expense leaves no
+    trace of money that never left the company.
+
+    Closed jobs refuse this too, and for a sharper reason than they
+    refuse an edit: `on_trash` walks a ledger entry back, so a freeze
+    with a hole here would be the one direction that moves money and
+    leaves nothing saying it was adjusted. The gate is in the doctype.
+
+    Returns the payer's float, because taking a payment out of a shoot's
+    spending is exactly when somebody wants to know what is left.
+    """
+    expense = frappe.get_doc("Job Expense", name)
+    _check_job_permission(expense.job, "write")
+    job, payer = expense.job, expense.paid_by
+    expense.delete()
+    return {"name": name, "float": _holder_float(job, payer)}
 
 
 def _attach_photo(expense, file_url):
@@ -841,17 +1358,53 @@ def save_job_milestones(job, milestones):
 
 
 @frappe.whitelist()
-def set_milestone_status(job, milestone, status):
+def set_milestone_status(job, milestone, status, invoice_no=None, account=None):
     """Move one milestone along (or back along) the collection flow.
 
     Back along on purpose: a status set by mistake would otherwise be a
     one-way door, which is exactly what the T6 walkthrough asked us to
     stop building. The timestamps follow the status either way.
+
+    Issuing an invoice is this call, not a second one. đã xuất HĐ already
+    stamps the issue date here; the number the accountant sent back rides
+    in beside it, so there is exactly one door onto "invoiced" and the
+    same door leads back out. Passing it again while the milestone is
+    still invoiced corrects a mistyped number without disturbing the day
+    the invoice went out. The VAT rate is never accepted from a caller -
+    like the amount, it is derived on save, from the job.
+
+    Collecting is the same shape: `account` says which pot of money the
+    payment landed in, and belongs to đã thanh toán the way the invoice
+    number belongs to đã xuất HĐ. It is optional at every level - omitted
+    it falls back to the company's default account, and a company that
+    has named no account collects exactly as it did before the ledger
+    existed. The posting itself happens on the save; see
+    job_payment_milestone.post_collections.
     """
     _check_job_permission(job, "write")
+    if invoice_no is not None and status != MILESTONE_INVOICED:
+        frappe.throw(
+            _("An invoice number belongs to a milestone marked {0}").format(
+                MILESTONE_INVOICED
+            ),
+            frappe.ValidationError,
+        )
+    if account is not None and status != MILESTONE_PAID:
+        frappe.throw(
+            _("An account belongs to a milestone marked {0}").format(MILESTONE_PAID),
+            frappe.ValidationError,
+        )
+    if account and not frappe.db.exists("Cash Account", account):
+        frappe.throw(
+            _("{0} is not a cash account").format(account), frappe.DoesNotExistError
+        )
     doc = frappe.get_doc("Job", job)
     row = job_payment_milestone.find(doc, milestone)
     row.status = status
+    if invoice_no is not None:
+        row.invoice_no = (invoice_no or "").strip()
+    # Where this collection landed, carried to the save that posts it.
+    doc.flags.cash_account = account or None
     doc.save()
     # The save recomputed the row's stamps in place, so this is the
     # stored milestone, not the one the caller described.
@@ -864,11 +1417,28 @@ def milestone_invoice_request(job, milestone):
 
     Read-only: pasting the message is a human act, and marking the
     milestone requested is a separate, undoable decision.
+
+    The text is for the accountant; the numbers beside it are for the
+    screen. The VAT basis is stated rather than implied - a milestone
+    already invoiced is read at the rate it was issued under, and one
+    still to be invoiced at the company's rate today - so nothing has to
+    parse a Vietnamese sentence to find out which.
     """
     _check_job_permission(job, "read")
     doc = frappe.get_doc("Job", job)
     row = job_payment_milestone.find(doc, milestone)
-    return {"text": job_payment_milestone.request_text(doc, row)}
+    vat_pct = job_payment_milestone.invoice_vat_pct(doc, row)
+    amount = round_vnd(row.amount or 0)
+    split = invoice_split(amount, vat_pct)
+    return {
+        "text": job_payment_milestone.request_text(doc, row),
+        "invoice_no": row.invoice_no,
+        "invoiced_on": row.invoiced_on,
+        "amount": amount,
+        "vat_pct": vat_pct,
+        "net": split.net,
+        "vat": split.vat,
+    }
 
 
 @frappe.whitelist()
@@ -886,12 +1456,298 @@ def overdue_milestones():
     }
 
 
+# -- finance aggregates across every job --
+#
+# Money in, money out and money owed, rolled up for the finance screens.
+# The arithmetic is auraos.lib.finance; these three are the adapters that
+# fetch the rows.
+#
+# All three are producer-visible on purpose and by construction. They are
+# built from milestone amounts and job expenses, both of which a producer
+# already reads one job at a time (job_milestones, job_money); the
+# founder's numbers - commission, CM, profit before tax, TNDN, net profit
+# and VAT payable - live on the Deal behind permlevel 1 and are not part
+# of any of these answers.
+
+MILESTONE_INCOME_FIELDS = ["name", "parent", "title", "amount", "paid_on"]
+MILESTONE_RECEIVABLE_FIELDS = ["name", "parent", "title", "amount", "status", "due_on"]
+FINANCE_EXPENSE_FIELDS = ["name", "job", "spent_on", "amount", "category", "paid_from"]
+
+
+def _finance_range(date_from, date_to):
+    """The reporting window, refused rather than guessed.
+
+    frappe.utils.getdate turns a missing bound into today, which would
+    quietly report a different period than the caller asked for. A range
+    that ends before it starts is a different matter - it is empty, and
+    an empty report is the honest answer to it.
+    """
+    if not date_from or not date_to:
+        frappe.throw(
+            _("A finance report needs a date range"), frappe.ValidationError
+        )
+    return frappe.utils.getdate(date_from), frappe.utils.getdate(date_to)
+
+
+def _permitted_jobs():
+    """The jobs this session may list - the scope of every finance read.
+
+    The rows below are read with frappe.get_all, which skips row-level
+    permissions, so this list is the entire authorization: the same shape
+    job_payment_milestone.overdue() and the deal board's tag map use.
+    """
+    return frappe.get_list("Job", pluck="name", limit_page_length=0)
+
+
+def _job_clients(names):
+    """{job: {title, company, company_name}} for a set of jobs.
+
+    Read with get_all behind the caller's job scoping, exactly as
+    job_payment_milestone.overdue() reads the same three fields. The
+    client's own name is on every quote a producer sends, so nothing here
+    widens what they may see.
+    """
+    if not names:
+        return {}
+    jobs = frappe.get_all(
+        "Job",
+        filters={"name": ["in", list(names)]},
+        fields=["name", "title", "company"],
+    )
+    companies = {job.company for job in jobs if job.company}
+    labels = (
+        {
+            row.name: row.company_name
+            for row in frappe.get_all(
+                "Party Company",
+                filters={"name": ["in", list(companies)]},
+                fields=["name", "company_name"],
+            )
+        }
+        if companies
+        else {}
+    )
+    return {
+        job.name: {
+            "title": job.title,
+            "company": job.company,
+            "company_name": labels.get(job.company),
+        }
+        for job in jobs
+    }
+
+
+def _with_client(rows, clients):
+    """Hang each row's job, client and client name off the row."""
+    for row in rows:
+        client = clients.get(row.parent) or {}
+        row["job"] = row.parent
+        row["job_title"] = client.get("title")
+        row["company"] = client.get("company")
+        row["company_name"] = client.get("company_name")
+    return rows
+
+
+@frappe.whitelist()
+def finance_income(date_from, date_to):
+    """Money actually collected in a range, by month and by client.
+
+    Cash basis: a milestone counts on the day it was recorded paid, not
+    the day it fell due and not the day the accountant issued the
+    invoice. Money in the bank is the only number a studio can spend, and
+    the finance screens say "cash basis" on their face.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    start, end = _finance_range(date_from, date_to)
+    permitted = _permitted_jobs()
+    rows = []
+    if permitted:
+        rows = frappe.get_all(
+            "Job Payment Milestone",
+            filters={
+                "parenttype": "Job",
+                "parent": ["in", permitted],
+                "status": MILESTONE_PAID,
+                "paid_on": ["between", [start, end]],
+            },
+            fields=MILESTONE_INCOME_FIELDS,
+            order_by="paid_on asc",
+        )
+        rows = _with_client(rows, _job_clients({row.parent for row in rows}))
+    return finance.income_report(rows, start, end)
+
+
+@frappe.whitelist()
+def finance_expenses(date_from, date_to):
+    """Money spent in a range, by month, by category and by whose money.
+
+    Every expense on every job this session may list - overhead has no
+    home in the model yet, so this is job spend and says so by carrying
+    the job on nothing but the query.
+    """
+    frappe.has_permission("Job Expense", "read", throw=True)
+    start, end = _finance_range(date_from, date_to)
+    permitted = _permitted_jobs()
+    rows = []
+    if permitted:
+        rows = frappe.get_all(
+            "Job Expense",
+            filters={
+                "job": ["in", permitted],
+                "spent_on": ["between", [start, end]],
+            },
+            fields=FINANCE_EXPENSE_FIELDS,
+            order_by="spent_on asc, creation asc",
+        )
+    return finance.expense_report(rows, start, end)
+
+
+@frappe.whitelist()
+def finance_receivables():
+    """What clients owe us right now, aged into buckets.
+
+    Not a range: what is owed is owed today. Everything uncollected
+    counts, not only what has run past the terms - overdue_milestones()
+    answers the nudge, this answers the ledger - and the lateness verdict
+    is the same one, read from auraos.lib.milestones through the same
+    payment terms.
+    """
+    frappe.has_permission("Job", "read", throw=True)
+    permitted = _permitted_jobs()
+    rows = []
+    if permitted:
+        rows = frappe.get_all(
+            "Job Payment Milestone",
+            filters={
+                "parenttype": "Job",
+                "parent": ["in", permitted],
+                "status": ["!=", MILESTONE_PAID],
+            },
+            fields=MILESTONE_RECEIVABLE_FIELDS,
+            order_by="due_on asc",
+        )
+        rows = _with_client(rows, _job_clients({row.parent for row in rows}))
+    return finance.receivables_report(
+        rows,
+        now=frappe.utils.now_datetime(),
+        terms_days=job_payment_milestone.payment_terms_days(),
+    )
+
+
+@frappe.whitelist()
+def finance_profit_and_loss(date_from, date_to):
+    """Money in against money out for a range, month by month.
+
+    Both sides through the two endpoints that already answer them, so
+    the profit and loss cannot print an income the income screen does
+    not, and the permission check on each side is the one that side
+    already carries: a session that may not list job expenses gets no
+    profit and loss, not a profit and loss with the cost side missing.
+
+    The subtraction is auraos.lib.finance's, not the browser's. A screen
+    holding two arrays of months and zipping them itself would be the
+    second place in this app that decides what a margin is when nothing
+    came in, and the two places would eventually disagree.
+    """
+    return finance.profit_and_loss(
+        finance_income(date_from, date_to),
+        finance_expenses(date_from, date_to),
+    )
+
+
+# -- what a job earned (the new UI's per-job profitability) --
+
+# Everything before Complete is still running and still worth watching.
+# The stage itself is named beside the list it ends, so this and the
+# expense freeze cannot drift apart.
+CLOSED_JOB_STAGE = JOB_CLOSED_STAGE
+
+
+def _job_profit(doc, client=None):
+    """One job's money, as far as it has gone.
+
+    Quoted-versus-actual is lib/settlement's - the same comparison
+    `job_money` renders per category, totalled here rather than computed
+    a second way. Money in is the milestones already collected, which is
+    producer-visible by the same decision that makes the milestone plan
+    producer-visible.
+    """
+    advances, expenses, settlements = _money_rows(doc.name)
+    categories = settlement.category_actuals(doc.packages, doc.cost_lines, expenses)
+    sums = settlement.totals(advances, expenses, categories)
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "company": doc.company,
+        "client": client,
+        "stage": doc.stage,
+        **reporting.profit_view(
+            quoted_total=doc.quote_total,
+            # Output VAT is the client's tax passing through us, so the
+            # margin base is what the company actually keeps - the same
+            # base lib/quote.quote_chain measures a deal's margin on.
+            revenue_ex_vat=to_decimal(doc.quote_subtotal or 0)
+            + to_decimal(doc.quote_mf_amount or 0),
+            quoted_cost=sums.quoted,
+            actual_cost=sums.spent,
+            milestones=[row.as_dict() for row in doc.payment_milestones],
+        ),
+    }
+
+
+@frappe.whitelist()
+def job_profitability(job=None, include_closed=0):
+    """What a job has earned so far - one job, or every open one.
+
+    Margin, deliberately, and not the founder profit chain. A producer
+    already sees the quoted total, the milestone plan and every đồng
+    spent; the difference between what was quoted and what the shoot is
+    costing is the number that tells them it is going wrong, and story
+    32 exists so they can act on it. Commission, CM, profit before tax,
+    TNDN and net profit stay behind `deal_profit`, and no code path here
+    reads them.
+
+    With no argument the answer is the whole board, scoped by get_list
+    so a producer sees only the jobs they may list.
+
+    `include_closed` widens that board to the jobs that have finished.
+    Off by default because the caller that has always asked this question
+    - the job list - is watching work in progress, and a delivered job is
+    not news. A margin report is the other reading: the only jobs whose
+    margin is final are the closed ones, and a ranking that showed none
+    of them would rank the studio on its unfinished work. Each row
+    carries its own `stage`, so the two are told apart on the answer
+    rather than by asking twice.
+    """
+    if job:
+        _check_job_permission(job, "read")
+        names = [job]
+    else:
+        frappe.has_permission("Job", "read", throw=True)
+        filters = {} if frappe.utils.cint(include_closed) else {
+            "stage": ["!=", CLOSED_JOB_STAGE]
+        }
+        names = frappe.get_list(
+            "Job",
+            filters=filters,
+            pluck="name",
+            order_by="modified desc",
+            limit_page_length=0,
+        )
+    docs = [frappe.get_doc("Job", name) for name in names]
+    clients = _company_names(doc.company for doc in docs)
+    return [_job_profit(doc, clients.get(doc.company)) for doc in docs]
+
+
 # -- paperwork (T11, issue #13) --
 
 
 PAPERWORK_TEMPLATE_FIELDS = [
     "name",
     "template_name",
+    # Which numbered document this is, so the screen knows whether to
+    # ask for a signing date and a number at all (#139).
+    "kind",
     "template_file",
     "template_source",
     "notes",
@@ -955,8 +1811,17 @@ def paperwork_library():
 
 
 @frappe.whitelist()
-def generate_job_paperwork(job, template, vendor=None, freelancer=None):
+def generate_job_paperwork(
+    job, template, vendor=None, freelancer=None, contract_number=None, terms=None,
+    parent_number=None, settled=None,
+):
     """Fill a template for this job and attach the result to it.
+
+    `contract_number` is what the dialog showed and the founder
+    accepted or corrected, passed back rather than re-derived here.
+    Deriving it twice - once to show and once to store - is two
+    derivations of one fact, and they would agree until the moment
+    another paper took the suffix between the two calls.
 
     Write permission on the job, not read: generating leaves a document
     hanging off the job, and whoever may not change a job may not add
@@ -970,34 +1835,120 @@ def generate_job_paperwork(job, template, vendor=None, freelancer=None):
     _check_job_permission(job, "write")
     frappe.has_permission("Paperwork Template", "read", throw=True)
     document, filled = paperwork_template.generate(
-        template, job, vendor=vendor, freelancer=freelancer
+        template, job, vendor=vendor, freelancer=freelancer,
+        contract_number=contract_number, terms=_terms(terms),
+        parent_number=parent_number,
+        acceptance_table=(
+            _acceptance_table(frappe.get_doc("Job", job), _terms(settled))
+            if settled
+            else None
+        ),
     )
-    _register_paper(job, template, vendor, freelancer, document)
+    _register_paper(
+        job, template, vendor, freelancer, document, contract_number=contract_number
+    )
     return {
         "name": document.name,
         "file_name": document.file_name,
         "file_url": document.file_url,
+        "contract_number": contract_number or None,
         "missing": list(filled.missing),
         "unknown": list(filled.unknown),
     }
 
 
+# What the status of a paper is made of, wherever a screen reads one.
+PAPER_STATUS_FIELDS = ["name", "status", "status_changed_by", "status_changed_on"]
+
+
+def _user_names(users):
+    """Full names for a set of user ids, in one query.
+
+    "Who told me this was signed" is answered with a person's name, so
+    the screen never has to turn a login into one.
+    """
+    users = {user for user in users if user}
+    if not users:
+        return {}
+    return {
+        row.name: row.full_name
+        for row in frappe.get_all(
+            "User", filters={"name": ["in", list(users)]}, fields=["name", "full_name"]
+        )
+    }
+
+
+def _attach_paper_status(row, paper, names):
+    """Write one file row's signing status onto it, structured.
+
+    Three fields and never a sentence: the screen decides how "Signed by
+    Trần Minh Anh on Tuesday" reads, and papers older than the field
+    read as Draft rather than as a blank.
+    """
+    row["paper"] = paper.name if paper else None
+    row["status"] = paper_status.status_or_draft(paper.status) if paper else None
+    row["status_changed_by"] = paper.status_changed_by if paper else None
+    row["status_changed_by_label"] = names.get(paper.status_changed_by) if paper else None
+    row["status_changed_on"] = paper.status_changed_on if paper else None
+    return row
+
+
 @frappe.whitelist()
 def job_paperwork(job):
-    """Documents hanging off this job, newest first."""
+    """Documents hanging off this job, newest first, each with the
+    registry row that says whether it has been signed.
+
+    The status lives on Generated Paper, not on the File, so the two are
+    joined here rather than on the screen: the job's paperwork tab shows
+    and changes a paper's status without a second round trip, and a file
+    that reached the job some other way simply has no registry row and
+    so no status.
+    """
     _check_job_permission(job, "read")
-    return frappe.get_all(
+    rows = frappe.get_all(
         "File",
         filters={"attached_to_doctype": "Job", "attached_to_name": job},
         fields=["name", "file_name", "file_url", "file_size", "owner", "creation"],
         order_by="creation desc",
     )
+    registry = frappe.get_all(
+        "Generated Paper",
+        filters={"job": job},
+        fields=PAPER_STATUS_FIELDS + ["file_name", "file_url"],
+        order_by="creation desc",
+    )
+    # Matched on the file's own name first: generating the same paper twice
+    # produces two registry rows, and Frappe hands identical bytes back the
+    # same file_url, so the url alone would tie both rows to one status. The
+    # url is the fallback for anything stored without a name.
+    by_name = {}
+    by_url = {}
+    for paper in registry:
+        if paper.file_name:
+            by_name.setdefault(paper.file_name, paper)
+        if paper.file_url:
+            by_url.setdefault(paper.file_url, paper)
+    names = _user_names({paper.status_changed_by for paper in registry})
+    for row in rows:
+        paper = by_name.get(row.file_name) or by_url.get(row.file_url)
+        _attach_paper_status(row, paper, names)
+    return rows
 
 
-def _register_paper(job, template, vendor, freelancer, document):
+def _register_paper(job, template, vendor, freelancer, document, contract_number=None):
     """The registry row (A5 round 2): every paper ever generated, in
     one place, with who it was for - the file alone hangs off its job
-    and is invisible from anywhere else."""
+    and is invisible from anywhere else.
+
+    **The contract number is frozen here and never re-derived** (#139).
+    What is written is what the caller confirmed in the dialog, not what
+    the rule would produce now: a number is an identity, and the inputs
+    behind it can all move afterwards. The client's short code can be
+    corrected, the template's `kind` can be changed, another contract
+    can take the next suffix. None of that may rename a paper that has
+    already been printed and signed. The field is read-only on the
+    doctype for the same reason.
+    """
     frappe.get_doc(
         {
             "doctype": "Generated Paper",
@@ -1008,6 +1959,7 @@ def _register_paper(job, template, vendor, freelancer, document):
             ),
             "vendor": vendor or None,
             "freelancer": freelancer or None,
+            "contract_number": contract_number or None,
             "file_name": document.file_name,
             "file_url": document.file_url,
         }
@@ -1100,6 +2052,9 @@ def generated_papers():
             "file_url",
             "owner",
             "creation",
+            "status",
+            "status_changed_by",
+            "status_changed_on",
         ],
         order_by="creation desc",
         limit_page_length=0,
@@ -1131,10 +2086,46 @@ def generated_papers():
         if freelancers
         else {}
     )
+    changers = _user_names({row.status_changed_by for row in rows})
     for row in rows:
         row["vendor_label"] = vendor_names.get(row.vendor)
         row["freelancer_label"] = freelancer_names.get(row.freelancer)
+        # Papers generated before the status existed read as Draft, so
+        # "what is still unsigned" is one filter rather than two.
+        row["status"] = paper_status.status_or_draft(row.status)
+        row["status_changed_by_label"] = changers.get(row.status_changed_by)
     return rows
+
+
+@frappe.whitelist()
+def set_paper_status(paper, status):
+    """Move one generated paper between Draft, Awaiting signature and Signed.
+
+    Read on the job, not write: marking a contract signed is operational
+    bookkeeping rather than privileged information, so anyone who can see
+    the job can record it (#106). The Generated Paper permission the save
+    itself checks was widened to match - a producer posts contracts too.
+
+    Nothing enforces an order. A paper can be moved back to Draft,
+    because a real document sometimes has to be redone, and a status set
+    by mistake must not be a one-way door.
+    """
+    doc = frappe.get_doc("Generated Paper", paper)
+    _check_job_permission(doc.job, "read")
+    try:
+        doc.status = paper_status.validated(status)
+    except ValueError:
+        frappe.throw(
+            _("{0} is not a status a paper can be in").format(status),
+            frappe.ValidationError,
+        )
+    # Who and when are the controller's to write, not the caller's.
+    doc.save()
+    return _attach_paper_status(
+        {"name": doc.name, "file_url": doc.file_url},
+        doc,
+        _user_names({doc.status_changed_by}),
+    )
 
 
 @frappe.whitelist()
@@ -1159,6 +2150,155 @@ def job_parties(job):
     )
     by_name = {row.name: row for row in rows}
     return {"freelancers": [by_name[name] for name in contacts if name in by_name]}
+
+
+# -- the Library: knowledge the company keeps --
+#
+# The Documents screen has two tabs and they share nothing but a roof.
+# Everything above fills a template from a job's own records and leaves
+# a document belonging to that job. A Library document is written by
+# hand, belongs to nobody and generates nothing, so none of the
+# placeholder machinery reaches down here and none of it should.
+
+
+def _library_attachment_counts(names):
+    """How many files hang off each document, in one query.
+
+    Counted rather than listed: the card shows a number, and the list
+    of every file in the library would be the larger half of the
+    response for something nobody has asked to see yet.
+
+    Counted in Python rather than with a `count(*)` and a `group_by`,
+    which is the obvious way to write this and is what Frappe's own
+    listview does. Two reasons not to. Frappe qualifies its group_by
+    with a backticked table prefix and passes `count(*)` rather than
+    `count(name)`, and whether the plain forms survive its field
+    validation is a question this can simply not ask. And the library is
+    SOPs - tens of rows, not thousands - so the aggregate buys nothing
+    measurable and costs a behaviour nobody here can run yet. If this
+    table ever grows, the group_by is the right change and this comment
+    is the reason it was not the first one.
+    """
+    if not names:
+        return {}
+    rows = frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "Library Document",
+            "attached_to_name": ["in", names],
+        },
+        fields=["attached_to_name"],
+        limit_page_length=0,
+    )
+    counts = {}
+    for row in rows:
+        counts[row.attached_to_name] = counts.get(row.attached_to_name, 0) + 1
+    return counts
+
+
+@frappe.whitelist()
+def library_documents():
+    """Every Library document, for the table and card views.
+
+    **The body is deliberately not in this response.** A card shows one
+    line of the document's prose, and `lib.library.snippet` cuts that
+    line on this side, so listing the library does not ship every SOP in
+    full and the browser is never handed markup it only meant to
+    summarise. One document in full is `library_document_detail`.
+    """
+    frappe.has_permission("Library Document", "read", throw=True)
+    rows = frappe.get_all(
+        "Library Document",
+        fields=["name", "title", "category", "body", "modified"],
+        order_by="modified desc",
+    )
+    counts = _library_attachment_counts([row.name for row in rows])
+    return {
+        # Everyone reads, the founder writes. The server refuses either
+        # way - this only decides whether the screen offers a control
+        # that would be refused, the way paperwork_library does.
+        "can_manage": bool(frappe.has_permission("Library Document", "create")),
+        "categories": [row.name for row in frappe.get_all("Library Category", order_by="name")],
+        "documents": [
+            {
+                "name": row.name,
+                "title": row.title,
+                "category": row.category,
+                "snippet": library.snippet(row.body),
+                # Spec #81: stamps cross the wire as ISO strings.
+                "modified": reporting.iso(row.modified),
+                "attachment_count": counts.get(row.name, 0),
+            }
+            for row in rows
+        ],
+    }
+
+
+@frappe.whitelist()
+def library_document_detail(name):
+    """One document in full: its body, and the files hanging off it.
+
+    Named apart from `library_documents` rather than differing from it
+    by one trailing letter. The two return different shapes, so a typo
+    between them hands a caller a list where it expected a record, and
+    that fails somewhere other than where the mistake is.
+    """
+    frappe.has_permission("Library Document", "read", throw=True)
+    doc = frappe.get_doc("Library Document", name)
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "category": doc.category,
+        "body": doc.body or "",
+        "modified": reporting.iso(doc.modified),
+        "attachments": frappe.get_all(
+            "File",
+            filters={
+                "attached_to_doctype": "Library Document",
+                "attached_to_name": doc.name,
+            },
+            fields=["name", "file_name", "file_url"],
+            order_by="creation",
+        ),
+    }
+
+
+@frappe.whitelist()
+def save_library_document(title, body="", category=None, name=None):
+    """Write a document, creating its category if that word is new.
+
+    **The side effect is the feature.** Category is a Link to a small
+    doctype so the filter list stays a fixed set of words rather than a
+    field of near-duplicates, but #66 exists so that maintaining an SOP
+    stops needing a deploy - and a category the founder had to file a
+    ticket for would put the deploy back one level up. So a category
+    typed here that does not exist yet is created here. A reader who
+    finds a save endpoint inserting a second doctype should see this
+    paragraph before they conclude it is a mistake.
+
+    No `name` means a new document, which Frappe names.
+    """
+    if name:
+        frappe.has_permission("Library Document", "write", doc=name, throw=True)
+    else:
+        frappe.has_permission("Library Document", "create", throw=True)
+
+    heading = (title or "").strip()
+    if not heading:
+        # The doctype would refuse this anyway; saying so in words beats
+        # a mandatory-field traceback arriving in a dialog.
+        frappe.throw(_("A document needs a title."))
+
+    label = (category or "").strip()
+    if label and not frappe.db.exists("Library Category", label):
+        frappe.get_doc({"doctype": "Library Category", "category_name": label}).insert()
+
+    doc = frappe.get_doc("Library Document", name) if name else frappe.new_doc("Library Document")
+    doc.title = heading
+    doc.category = label or None
+    doc.body = body or ""
+    doc.save()
+    return {"name": doc.name}
 
 
 @frappe.whitelist()
@@ -1355,6 +2495,935 @@ def set_company_identity(values):
     settings.update(values)
     settings.save()
     return get_company_identity()
+
+
+# -- cash accounts: what the company actually holds (#101) --
+#
+# The first time the cash ledger is visible. Two reads, both derived:
+# a balance is `sum(amount)` over an account's entries and nothing else,
+# computed by auraos.lib.ledger and never stored, never defaulted and
+# never accepted from a caller. There is no setter down here on purpose
+# - a figure somebody can type over is an opinion, and the point of this
+# pair of endpoints is that the number is a fact.
+#
+# Founder-only, decided by the server: the permission asked for is read
+# on Cash Ledger Entry, which #99 granted to Founder and System Manager
+# and to no operating role beyond them. A producer reads a job's own
+# money through job_money(); what the company holds across every job is
+# not their question, and the refusal is the doctype's, not this
+# module's opinion of it.
+#
+# The imports are local to keep this section additive - see
+# get_tier_thresholds() for the same shape.
+
+
+@frappe.whitelist()
+def cash_accounts():
+    """Every cash account with what the ledger says it holds.
+
+    The total comes down computed, like every balance under it. Nothing
+    here is a list for a screen to add up: the frontend formats money
+    and never works it out.
+
+    A company that has named no account gets an empty list and a total
+    of 0 - the same silence #99 chose when a collection has nowhere to
+    post to, rather than an error about a company that simply has not
+    said where it keeps its money yet.
+    """
+    from auraos.auraos.doctype.cash_account.cash_account import default_account
+    from auraos.lib import ledger
+
+    frappe.has_permission("Cash Ledger Entry", "read", throw=True)
+    accounts = frappe.get_all(
+        "Cash Account",
+        fields=["name", "account_name", "note"],
+        order_by="account_name asc",
+    )
+    entries = frappe.get_all("Cash Ledger Entry", fields=["account", "amount"])
+    held = ledger.holdings([account.name for account in accounts], entries)
+    by_account = {holding.account: holding for holding in held}
+    default = default_account()
+    return {
+        "accounts": [
+            {
+                "name": account.name,
+                "account_name": account.account_name,
+                "note": account.note or None,
+                "balance": by_account[account.name].balance,
+                "count": by_account[account.name].count,
+                # Where a collection lands when nobody says otherwise.
+                "is_default": account.name == default,
+            }
+            for account in accounts
+        ],
+        "total": ledger.total_held(held),
+        "count": sum(holding.count for holding in held),
+    }
+
+
+@frappe.whitelist()
+def cash_account_entries(account):
+    """One account's movements, newest first, each with its source.
+
+    The source is what the origin calls itself, not the pair it is
+    stored as: auraos.lib.ledger.source_of turns a doctype and a name
+    into the milestone, expense or float a founder recognises, and the
+    job it happened on is resolved to its title here because that is the
+    one part of it a fetch can answer and arithmetic cannot.
+
+    An account nothing has ever been posted against answers with an
+    empty list and a balance of 0.
+    """
+    from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+    from auraos.lib import ledger
+
+    frappe.has_permission("Cash Ledger Entry", "read", throw=True)
+    if not frappe.db.exists("Cash Account", account):
+        frappe.throw(
+            _("{0} is not a cash account").format(account), frappe.DoesNotExistError
+        )
+    rows = cash_ledger_entry.entries_for(account)
+    titles = _cash_job_titles({row.job for row in rows if row.job})
+    (held,) = ledger.holdings([account], rows)
+    return {
+        "account": account,
+        "account_name": frappe.db.get_value("Cash Account", account, "account_name"),
+        "balance": held.balance,
+        "count": held.count,
+        "entries": [ledger.entry_view(row, titles.get(row.job)) for row in rows],
+    }
+
+
+def _cash_job_titles(names):
+    """{job: title} for the jobs a set of entries came from.
+
+    Read with get_all rather than get_list: this endpoint has already
+    refused anybody who may not read the ledger, and a founder filtering
+    their own cash by which jobs they happen to own would report a
+    balance that is not the account's.
+    """
+    if not names:
+        return {}
+    return dict(
+        frappe.get_all(
+            "Job",
+            filters={"name": ["in", list(names)]},
+            fields=["name", "title"],
+            as_list=True,
+        )
+    )
+
+
+# -- no-invoice exposure (T9, issue #11) --
+
+
+@frappe.whitelist()
+def no_invoice_exposure():
+    """Money paid out with no invoice, and the TNDN it exposes us to.
+
+    Founder-only, and refused outright rather than blanked: this is the
+    company's tax position, which sits behind the same boundary as the
+    profit chain.
+
+    **Read off the expenses, not off the quote.** An earlier version of
+    this endpoint totalled `Không hoá đơn` cost lines, which taxed money
+    that had been priced and never spent and missed money that had been
+    spent and never priced (#123). A liability arises when the company
+    pays out something it cannot deduct, so the source is the payment.
+
+    The tax treatment still lives on the quoted line - it is the only
+    record that carries it - and reaches the money through the line the
+    expense says it spends against. Spending that names no line counts
+    as exposed until somebody says otherwise: the founder chose the safe
+    direction, because understating is the error that costs money at an
+    audit. The payload keeps the two apart so the screen can show what
+    is established beside what is assumed.
+
+    Not a range. An uncovered payment is carried from the day it was
+    made until an invoice is obtained, so the question is what the
+    company is carrying now.
+
+    Every job, not only the open ones. A finished shoot's missing
+    invoice is still missing.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may see the no-invoice tax exposure"),
+            frappe.PermissionError,
+        )
+
+    jobs = dict(
+        frappe.get_all("Job", fields=["name", "title"], as_list=True, limit_page_length=0)
+    )
+    if not jobs:
+        return exposure.exposure_report([])
+
+    expenses = frappe.get_all(
+        "Job Expense",
+        filters={"job": ["in", list(jobs)]},
+        fields=["name", "job", "amount", "spent_on", "category", "description",
+                "cost_line", "invoice_no"],
+        order_by="spent_on desc",
+        limit_page_length=0,
+    )
+    named = {row.cost_line for row in expenses if row.cost_line}
+    lines = {}
+    if named:
+        lines = {
+            row.name: row
+            for row in frappe.get_all(
+                "Deal Cost Line",
+                filters={"name": ["in", list(named)]},
+                fields=["name", "description", "tax_type"],
+                limit_page_length=0,
+            )
+        }
+    return exposure.exposure_report(exposure.exposure_rows(expenses, lines, jobs=jobs))
+
+
+@frappe.whitelist()
+def backup_status():
+    """When a backup last proved itself, and whether that was lately.
+
+    Founder-only: it says how exposed the company is, which is the same
+    class of question as the tax position beside it.
+
+    **Answers absence, not failure** (#152). `scripts/backup.sh` already
+    logs and exits non-zero when a run goes wrong; the failure nobody
+    catches is the one that writes nothing at all - a cron never
+    installed, a container renamed, a host rebooted into a state where
+    the job quietly stopped. **A quiet month and a healthy month read
+    the same in a log nobody opens.** So a successful run writes a
+    marker into the site's own private directory and this reads its age.
+    Missing and stale get the same verdict because they mean the same
+    thing to whoever has to act.
+
+    **`recorded: false` is not "the backup failed".** It is "nothing has
+    said otherwise here", which is also what an older `backup.sh` that
+    does not yet write the marker looks like. The screen says that in
+    those words rather than raising an alarm it cannot support - a
+    monitor that cries wolf about a backup that is running is a monitor
+    the founder turns off.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may see the backup status"), frappe.PermissionError
+        )
+
+    path = frappe.get_site_path("private", "last-backup")
+    try:
+        with open(path, encoding="utf8") as marker:
+            recorded = marker.read().strip()
+    except OSError:
+        recorded = ""
+
+    if not recorded:
+        return {"recorded": False, "at": None, "age_hours": None, "stale": True}
+
+    # `<iso8601> <archive> <size>` - written by mark_success in one printf,
+    # so the shape is fixed at the only place that writes it.
+    parts = recorded.split()
+    at = parts[0] if parts else ""
+    when = frappe.utils.get_datetime(at) if at else None
+    if when is None:
+        return {"recorded": False, "at": None, "age_hours": None, "stale": True}
+
+    age = frappe.utils.now_datetime() - when
+    hours = int(age.total_seconds() // 3600)
+    return {
+        "recorded": True,
+        "at": reporting.iso(when),
+        "age_hours": hours,
+        # The same 26 hours the check script uses, and for the same
+        # reason: a nightly plus drift plus a slow run is still healthy.
+        "stale": hours > 26,
+        "archive": parts[1] if len(parts) > 1 else None,
+        "size": parts[2] if len(parts) > 2 else None,
+    }
+
+
+@frappe.whitelist()
+def period_tax_position(date_from, date_to):
+    """What the company owes for a period, and what it cannot yet know.
+
+    Founder-only and refused outright, behind the same boundary as the
+    profit chain and the exposure tile - `reporting.py` names VAT
+    payable and TNDN as the founder's, and `finance.reports.tsx` is
+    documented as producer-safe by construction, which is a promise in
+    the walkthrough guidebook rather than a preference.
+
+    **This returns half a tax position on purpose.** VAT is here; TNDN
+    for the period is not, and `auraos.lib.tax` carries the reason:
+    every expense in AuraOS belongs to a job, so a TNDN figure computed
+    from these tables omits every overhead and overstates the tax. The
+    gap travels in the payload as `not_computed`, because a screen that
+    has to invent the words for an absence is the one most likely to
+    get them wrong.
+
+    **Dated by the invoice, not by the money.** Output VAT falls due
+    when the invoice is issued, so this is the one figure in Finance
+    that is not on the cash basis the rest of these screens announce -
+    and `basis` says so in the payload so the tile can say so on its
+    face. A reader who tries to reconcile this against Income should be
+    told why it will not match before they try.
+
+    **Every job, because tax is not scoped to what a session may list.**
+    The founder is the only caller, and a return covers the company.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may see the period tax position"),
+            frappe.PermissionError,
+        )
+    start, end = _finance_range(date_from, date_to)
+
+    jobs = dict(
+        frappe.get_all("Job", fields=["name", "title"], as_list=True, limit_page_length=0)
+    )
+    rows = []
+    if jobs:
+        rows = frappe.get_all(
+            "Job Payment Milestone",
+            filters={
+                "parenttype": "Job",
+                "parent": ["in", list(jobs)],
+                # Filtered here for the query's sake and applied again in
+                # the module, which owns the boundary. Two statements of
+                # one rule is the drift shape - but the module's is the
+                # one that decides, and this only avoids reading every
+                # milestone the company has ever had.
+                "invoiced_on": ["between", [start, end]],
+            },
+            fields=[
+                "name", "parent", "title", "amount",
+                "invoiced_on", "invoice_no", "invoice_vat_pct",
+            ],
+            order_by="invoiced_on asc",
+            limit_page_length=0,
+        )
+        for row in rows:
+            row["job_title"] = jobs.get(row.parent)
+
+    vat = tax.output_vat(tax.invoiced_rows(rows, start, end))
+
+    # The company's own upkeep. **Two blocks come out of these rows and
+    # they are decided by different dates** - what was paid is dated by
+    # the day the money left, the VAT on it by the day the invoice was
+    # issued - so the query asks for either date in the window and the
+    # module applies its own boundary to each. A single SQL filter would
+    # have to pick one and would silently shorten the other block.
+    overhead_rows = frappe.get_all(
+        "Company Expense",
+        or_filters={
+            "spent_on": ["between", [start, end]],
+            "invoice_date": ["between", [start, end]],
+        },
+        fields=[
+            "name", "spent_on", "amount", "category", "description",
+            "for_depreciation", "invoice_no", "invoice_date",
+            "invoice_vat_amount", "supplier",
+        ],
+        order_by="spent_on asc",
+        limit_page_length=0,
+    )
+
+    # The standing exposure, through the endpoint that owns it rather
+    # than by repeating its query here - one place computes it, and #123
+    # is what happens when a second place computes it differently. The
+    # headline only: the full payload carries a line per uncovered
+    # expense, which belongs on the exposure tile and not in a tax
+    # summary.
+    standing = no_invoice_exposure()
+    component = {
+        key: standing[key]
+        for key in (
+            "basis", "rate_pct", "uncovered_total", "tndn_exposure",
+            "uncovered_count", "stated_total", "unattributed_total",
+        )
+    }
+    return tax.position(
+        vat,
+        component,
+        overhead=tax.overheads(overhead_rows, start, end),
+        inputs=tax.input_vat(overhead_rows, start, end),
+    )
+
+
+# -- what the pipeline is worth in the months ahead (#102) --
+#
+# A projection, and named like one at every level of the payload. The
+# weighted figure travels as `weighted_projection`, the unweighted
+# contrast as `open_pipeline`, and there is deliberately no key in here
+# called total, balance, amount or income - auraos.lib.forecast.CASH_WORDS
+# says which names are forbidden and `cash_shaped_keys` is what fails the
+# test when one appears. #101 put a cash balance and a receivables total
+# on the same dashboard; those are facts, provable against `sum(amount)`
+# in the database. This is an estimate multiplied by a guess, and the
+# next consumer of this endpoint must not be able to render it as money
+# the company has without renaming a field to do it.
+#
+# Nothing is stored and nothing is cached. The dials are read from the
+# settings rows on every call - not through frappe.get_cached_doc - so a
+# probability changed in Settings changes the forecast on the very next
+# read, with nothing in between that could hold a stale figure. There is
+# no forecast table, no month totals column, and no setter anywhere that
+# could write a weighted number.
+#
+# Founder-only, decided by the server: the permission asked for is read
+# on AuraOS Settings, which grants read to Founder and System Manager and
+# to no operating role. That is not squeamishness about the pipeline - a
+# producer already reads deal values on the deals board. It is that this
+# figure is the founder's own probability dials multiplied by values a
+# producer knows, and division would hand the dials straight back.
+#
+# The imports are local to keep this section additive - see
+# get_tier_thresholds() for the same shape.
+
+# Where the per-stage dials live: a child table on the settings Single.
+STAGE_FORECAST_TABLE = "Deal Stage Forecast"
+STAGE_FORECAST_FIELD = "stage_forecast"
+
+
+def _stored_stage_rules():
+    """The dials as stored, read from the rows rather than from a cache.
+
+    Read straight out of the child table on every call. A cached settings
+    document would be one more thing between a founder moving a slider
+    and the forecast moving with it, and "changing a probability changes
+    the forecast" is an acceptance criterion rather than a nicety.
+
+    An empty list is a real answer and not a failure: every stage falls
+    back to the house default in auraos.lib.forecast, which is the only
+    reading that does not turn an unconfigured site into an empty screen.
+    """
+    return frappe.get_all(
+        STAGE_FORECAST_TABLE,
+        filters={"parenttype": "AuraOS Settings", "parentfield": STAGE_FORECAST_FIELD},
+        fields=["stage", "win_probability_pct", "lead_days"],
+        order_by="idx asc",
+        limit_page_length=0,
+    )
+
+
+@frappe.whitelist()
+def stage_forecast_rules():
+    """The win probability and lead time in force for every deal stage.
+
+    Every stage of the Deal Select comes back, configured or not, so the
+    settings screen renders the whole vocabulary. `configured` says
+    whether a row exists: it is the only thing that can distinguish a
+    founder who means 0% (Lost) from a stage nobody has been asked about,
+    because on a Single an unwritten Int reads back as 0 as well.
+    """
+    from auraos.lib import forecast
+
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    return {
+        "stages": [
+            {
+                "stage": rule.stage,
+                "win_probability_pct": rule.win_probability_pct,
+                "lead_days": rule.lead_days,
+                "configured": rule.configured,
+                "contributes": rule.stage not in forecast.RESOLVED,
+            }
+            for rule in forecast.stage_rules(_stored_stage_rules())
+        ]
+    }
+
+
+@frappe.whitelist()
+def set_stage_forecast_rules(rules):
+    """Store the founder's own dials, the whole table in one call.
+
+    The table is rewritten rather than patched row by row: the founder
+    edits every stage on one card, and a half-applied pair would forecast
+    with one stage's old probability and another's new one.
+
+    A probability of 0 is written and kept. That is the point of storing
+    rows at all - a 0 that somebody typed is a decision, and it is only
+    distinguishable from silence because the row exists to hold it.
+    """
+    from auraos.lib import forecast
+
+    frappe.has_permission("AuraOS Settings", "write", throw=True)
+    wanted = frappe.parse_json(rules) or []
+
+    settings = frappe.get_doc("AuraOS Settings")
+    settings.set(STAGE_FORECAST_FIELD, [])
+    for row in wanted:
+        stage = (row.get("stage") or "").strip()
+        if stage not in forecast.STAGES:
+            frappe.throw(
+                _("{0} is not a deal stage").format(stage or "?"),
+                frappe.ValidationError,
+            )
+        probability = int(row.get("win_probability_pct") or 0)
+        if not 0 <= probability <= 100:
+            frappe.throw(
+                _("A win probability is a percentage between 0 and 100, not {0}").format(
+                    probability
+                ),
+                frappe.ValidationError,
+            )
+        settings.append(
+            STAGE_FORECAST_FIELD,
+            {
+                "stage": stage,
+                "win_probability_pct": probability,
+                "lead_days": max(int(row.get("lead_days") or 0), 0),
+            },
+        )
+    settings.save()
+    return stage_forecast_rules()
+
+
+# What a deal needs for its value and its identity on the forecast. The
+# three value fields are the ladder auraos.lib.forecast.deal_value walks:
+# the quote the client holds, the deal's own pricing, the client's budget.
+FORECAST_DEAL_FIELDS = [
+    "name",
+    "title",
+    "stage",
+    "estimated_budget",
+    "quote_total",
+    "latest_quote",
+]
+
+
+@frappe.whitelist()
+def weighted_pipeline_forecast(months=6):
+    """The open pipeline weighted by stage probability, month by month.
+
+    Every figure is derived on this call out of the deals and the dials,
+    and stored nowhere. A studio with no open deals gets the horizon with
+    every month at zero and every stage at zero rather than an error -
+    the same silence #101 chose for a company that has named no account.
+
+    The value weighted is the best number written down for the deal: the
+    total on the quote the client is holding, then the deal's own priced
+    breakdown, then the client's stated budget. A published quote is a
+    better number than a budget, and weighting the worse one when the
+    better one exists would be wrong on purpose. Which one answered
+    travels with the row as `value_basis`.
+    """
+    from auraos.lib import forecast
+
+    frappe.has_permission("AuraOS Settings", "read", throw=True)
+    deals = frappe.get_all(
+        "Deal",
+        filters={"stage": ["not in", list(forecast.RESOLVED)]},
+        fields=FORECAST_DEAL_FIELDS,
+        order_by="modified desc",
+        limit_page_length=0,
+    )
+    quoted = _quoted_totals(deals)
+    for deal in deals:
+        # The frozen total off the quote the client was actually sent,
+        # which does not move when somebody edits a cost line afterwards.
+        deal["quoted_total"] = quoted.get(deal.get("latest_quote"))
+    return forecast.projection(
+        deals,
+        forecast.stage_rules(_stored_stage_rules()),
+        today=frappe.utils.today(),
+        months=_forecast_months(months),
+    )
+
+
+def _quoted_totals(deals):
+    """{quote: total} for the latest quote of each deal, frozen as sent."""
+    names = {deal.get("latest_quote") for deal in deals if deal.get("latest_quote")}
+    if not names:
+        return {}
+    return dict(
+        frappe.get_all(
+            "Deal Quote",
+            filters={"name": ["in", list(names)]},
+            fields=["name", "total"],
+            as_list=True,
+        )
+    )
+
+
+# How far ahead a forecast may be asked to look. A floor of one month
+# because a horizon of none is not a screen, and a ceiling because the
+# months come down as rows and a caller asking for a century would be
+# asking this endpoint to render one.
+MIN_FORECAST_MONTHS = 1
+MAX_FORECAST_MONTHS = 24
+
+
+def _forecast_months(months):
+    """The horizon a caller asked for, clamped to something renderable."""
+    try:
+        wanted = int(months or 6)
+    except (TypeError, ValueError):
+        wanted = 6
+    return max(MIN_FORECAST_MONTHS, min(wanted, MAX_FORECAST_MONTHS))
+
+
+# -- bank statements, and lining them up against the ledger (#150) --
+
+
+def _statement_line_references(row):
+    """Every reference a statement line's description carries."""
+    return statement.references(row.get("description") or "")
+
+
+def _entry_references(entry, contracts, invoices):
+    """What a ledger entry can be called on a bank line.
+
+    Two kinds, and both come from records the entry points at rather
+    than from the entry itself: the contract number of the job the money
+    belongs to, and - for a client payment - the invoice number recorded
+    on the milestone that was collected. **A ledger entry has no
+    reference of its own**, which is the honest position: the bank quotes
+    the paperwork, and the paperwork is what the job carries.
+    """
+    found = set()
+    number = contracts.get(entry.get("job"))
+    if number:
+        found.add(number.upper())
+    invoice = invoices.get(entry.get("source_name"))
+    if invoice:
+        found.add(f"HD:{invoice}")
+    return found
+
+
+def _ledger_for_matching(account, period_from, period_to, window_days):
+    """The entries a statement's lines could be, with their references.
+
+    Widened by the matcher's own window at both ends: an entry dated the
+    day before the statement's period can still be the first line on it,
+    because the bank posts when it posts.
+    """
+    edge = frappe.utils.add_days
+    rows = frappe.get_all(
+        "Cash Ledger Entry",
+        filters={
+            "account": account,
+            "entry_date": ["between", [edge(period_from, -window_days),
+                                       edge(period_to, window_days)]],
+        },
+        fields=["name", "entry_date", "amount", "direction", "flow", "job",
+                "source_doctype", "source_name", "description"],
+        order_by="entry_date asc",
+        limit_page_length=0,
+    )
+    jobs = {row.job for row in rows if row.job}
+    contracts = {job: _parent_contract_number(job) for job in jobs}
+    milestones = [row.source_name for row in rows
+                  if row.source_doctype == "Job Payment Milestone" and row.source_name]
+    invoices = {}
+    if milestones:
+        for row in frappe.get_all(
+            "Job Payment Milestone",
+            filters={"name": ["in", milestones], "invoice_no": ["is", "set"]},
+            fields=["name", "invoice_no"],
+        ):
+            number = (row.invoice_no or "").strip()
+            if number.isdigit():
+                invoices[row.name] = int(number)
+    return rows, contracts, invoices
+
+
+@frappe.whitelist()
+def import_bank_statement(file_url, account):
+    """Record a bank statement, if it agrees with itself.
+
+    Founder-only: this is the company's bank position, which sits behind
+    the same boundary as the profit chain and the tax exposure.
+
+    **The file is read, never trusted.** Its own totals are checked
+    against its own lines before anything is written - see
+    `Bank Statement.validate` - so an import either produces a statement
+    that adds up or produces a refusal naming where it does not.
+
+    The account is the caller's, not the file's, because a bank prints
+    an account *number* and AuraOS keeps accounts by name. The number is
+    read and handed back so the screen can show what the file said it
+    was and let a person see the two agree.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may import a bank statement"), frappe.PermissionError
+        )
+    if not frappe.db.exists("Cash Account", account):
+        frappe.throw(_("{0} is not a cash account").format(account), frappe.DoesNotExistError)
+
+    path = frappe.get_doc("File", {"file_url": file_url}).get_full_path()
+    try:
+        read = statements.read_file(path)
+    except ValueError as wrong:
+        frappe.throw(_("This file could not be read as a statement: {0}").format(wrong))
+
+    summary = statement.read_summary(read["summary"])
+    lines = statement.read_lines(read["lines"])
+    doc = frappe.get_doc(
+        {
+            "doctype": "Bank Statement",
+            "account": account,
+            "period_from": statement.to_day(read["period_from"]),
+            "period_to": statement.to_day(read["period_to"]),
+            "source_file": file_url,
+            "opening": summary["opening"],
+            "withdrawn": summary["withdrawn"],
+            "deposited": summary["deposited"],
+            "closing": summary["closing"],
+            "lines": [
+                {
+                    "effective_on": line["effective_on"],
+                    "transacted_at": line["transacted_at"],
+                    "sequence": line["sequence"],
+                    "description": line["description"],
+                    "withdrawn": line["withdrawn"],
+                    "deposited": line["deposited"],
+                    "running_balance": line["running_balance"],
+                }
+                for line in lines
+            ],
+        }
+    )
+    doc.insert()
+    return {
+        "name": doc.name,
+        "account_number": read["account_number"],
+        "lines": len(lines),
+    }
+
+
+@frappe.whitelist()
+def bank_statements():
+    """Every statement on file, newest period first."""
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may read bank statements"), frappe.PermissionError
+        )
+    return frappe.get_all(
+        "Bank Statement",
+        fields=["name", "account", "period_from", "period_to", "opening", "closing",
+                "withdrawn", "deposited"],
+        order_by="period_from desc",
+        limit_page_length=0,
+    )
+
+
+@frappe.whitelist()
+def bank_reconciliation(statement_name):
+    """One statement beside the ledger, with the differences named.
+
+    **The two lists are the product.** What the bank saw and AuraOS did
+    not, and what AuraOS recorded and the bank did not - a screen that
+    showed only the matches would be a screen that agreed with itself.
+
+    Nothing here writes. Suggestions are offered per line and a person
+    confirms them one at a time through `match_statement_line`.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may reconcile a bank statement"), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Bank Statement", statement_name)
+    entries, contracts, invoices = _ledger_for_matching(
+        doc.account, doc.period_from, doc.period_to, statement.WINDOW_DAYS
+    )
+    for entry in entries:
+        entry["references"] = _entry_references(entry, contracts, invoices)
+
+    claimed = {row.matched_entry for row in doc.lines if row.matched_entry}
+    free = [entry for entry in entries if entry["name"] not in claimed]
+
+    lines = []
+    for row in doc.lines:
+        read = {
+            "name": row.name,
+            "effective_on": row.effective_on,
+            "transacted_at": row.transacted_at,
+            "sequence": row.sequence,
+            "description": row.description,
+            "withdrawn": round_vnd(row.withdrawn or 0),
+            "deposited": round_vnd(row.deposited or 0),
+            "amount": round_vnd((row.deposited or 0) - (row.withdrawn or 0)),
+            "direction": statement.IN if row.deposited else statement.OUT,
+            "running_balance": round_vnd(row.running_balance or 0),
+            "matched_entry": row.matched_entry,
+            "matched_on": row.matched_on,
+            "matched_by": row.matched_by,
+            "unmodelled": statement.unmodelled(row.description or ""),
+            "candidates": [],
+            "suggestion": None,
+        }
+        if not row.matched_entry:
+            found = statement.candidates(
+                {
+                    "effective_on": row.effective_on,
+                    "description": row.description or "",
+                    "amount": (row.deposited or 0) - (row.withdrawn or 0),
+                    "direction": read["direction"],
+                },
+                free,
+            )
+            read["candidates"] = found
+            read["suggestion"] = statement.suggestion(found)
+        lines.append(read)
+
+    matched = {row.matched_entry for row in doc.lines if row.matched_entry}
+    return {
+        "statement": {
+            "name": doc.name,
+            "account": doc.account,
+            "period_from": doc.period_from,
+            "period_to": doc.period_to,
+            "opening": round_vnd(doc.opening or 0),
+            "withdrawn": round_vnd(doc.withdrawn or 0),
+            "deposited": round_vnd(doc.deposited or 0),
+            "closing": round_vnd(doc.closing or 0),
+        },
+        "lines": lines,
+        # The other half of the difference: entries AuraOS holds for this
+        # account and period that no line on this statement claims.
+        "unmatched_entries": [
+            {
+                "name": entry["name"],
+                "entry_date": entry["entry_date"],
+                "amount": round_vnd(entry["amount"]),
+                "flow": entry["flow"],
+                "job": entry["job"],
+                "description": entry["description"],
+            }
+            for entry in entries
+            if entry["name"] not in matched
+        ],
+    }
+
+
+def _statement_line(doc, line):
+    for row in doc.lines:
+        if row.name == line:
+            return row
+    frappe.throw(
+        _("Line {0} is not on statement {1}").format(line, doc.name),
+        frappe.DoesNotExistError,
+    )
+
+
+@frappe.whitelist()
+def match_statement_line(statement_name, line, entry):
+    """Confirm that this bank line is this ledger entry.
+
+    **A person decides.** The matcher ranks and suggests; nothing here
+    is reachable without somebody having looked at both.
+
+    One entry, one line: an entry already claimed elsewhere on the
+    statement is refused rather than silently moved, because two lines
+    pointing at one entry would say the company paid once and the bank
+    saw it twice.
+    """
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may reconcile a bank statement"), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Bank Statement", statement_name)
+    row = _statement_line(doc, line)
+    if not frappe.db.exists("Cash Ledger Entry", entry):
+        frappe.throw(_("{0} is not a ledger entry").format(entry), frappe.DoesNotExistError)
+    taken = [one for one in doc.lines if one.matched_entry == entry and one.name != line]
+    if taken:
+        frappe.throw(
+            _("Ledger entry {0} is already matched to line {1}").format(
+                entry, taken[0].sequence or taken[0].idx
+            ),
+            frappe.ValidationError,
+        )
+    row.matched_entry = entry
+    doc.save()
+    return {"line": row.name, "matched_entry": row.matched_entry,
+            "matched_on": row.matched_on, "matched_by": row.matched_by}
+
+
+@frappe.whitelist()
+def unmatch_statement_line(statement_name, line):
+    """Take a confirmation back. A match is a judgement, not a fact."""
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may reconcile a bank statement"), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Bank Statement", statement_name)
+    row = _statement_line(doc, line)
+    row.matched_entry = None
+    doc.save()
+    return {"line": row.name, "matched_entry": None}
+
+
+# -- money moving between our own accounts (#151) --
+
+
+@frappe.whitelist()
+def record_cash_transfer(from_account, to_account, amount, moved_on=None, note=None):
+    """Record money moved from one of our accounts to another.
+
+    Founder-only, on the Company Expense precedent - the other record of
+    money that belongs to no job - rather than on a founder ruling. See
+    the doctype's docstring, which is where a delegation decision should
+    start.
+
+    **Both ledger entries are written by the save**, not here: the
+    endpoint is the door a screen happens to use and a Desk edit walks
+    straight past it, so the pairing rule lives in `Cash Transfer` where
+    both paths meet it.
+
+    Returns both accounts' balances afterwards, because the only reason
+    to record a withdrawal is to make two figures right and the person
+    doing it wants to see them.
+    """
+    # Imported here, the way cash_account_entries does it: the ledger
+    # adapter pulls in the doctype layer, and api.py is imported by
+    # everything.
+    from auraos.auraos.doctype.cash_ledger_entry import cash_ledger_entry
+    from auraos.lib import ledger
+
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may move money between accounts"), frappe.PermissionError
+        )
+    doc = frappe.get_doc(
+        {
+            "doctype": "Cash Transfer",
+            "from_account": from_account,
+            "to_account": to_account,
+            "amount": amount,
+            "moved_on": moved_on or frappe.utils.today(),
+            "note": note,
+        }
+    )
+    doc.insert()
+    return {
+        "name": doc.name,
+        "amount": round_vnd(doc.amount),
+        "from_account": doc.from_account,
+        "to_account": doc.to_account,
+        "balances": {
+            doc.from_account: ledger.balance(
+                cash_ledger_entry.entries_for(doc.from_account)
+            ),
+            doc.to_account: ledger.balance(cash_ledger_entry.entries_for(doc.to_account)),
+        },
+    }
+
+
+@frappe.whitelist()
+def cash_transfers(limit=50):
+    """The company's own movements between its accounts, newest first."""
+    if not _is_founder():
+        frappe.throw(
+            _("Only the Founder may read cash transfers"), frappe.PermissionError
+        )
+    return frappe.get_all(
+        "Cash Transfer",
+        fields=["name", "moved_on", "amount", "from_account", "to_account", "note"],
+        order_by="moved_on desc, creation desc",
+        limit_page_length=frappe.utils.cint(limit) or 50,
+    )
 
 
 # -- job tasks, and the crew door onto a job (T7.1, issue #41) --

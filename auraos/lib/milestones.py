@@ -54,6 +54,13 @@ STAMP_FIELDS = {
     PAID: "paid_on",
 }
 
+# What the invoice itself said, kept beside the moment it was issued.
+# The number is the accountant's; the rate is the company's on the day -
+# and both belong to đã xuất HĐ, so both live and die with invoiced_on.
+INVOICE_NO_FIELD = "invoice_no"
+INVOICE_VAT_FIELD = "invoice_vat_pct"
+INVOICE_FIELDS = (INVOICE_NO_FIELD, INVOICE_VAT_FIELD)
+
 
 def status_index(status: str) -> int:
     """Position in the flow; unknown statuses are a programming error."""
@@ -184,8 +191,13 @@ def days_overdue(due_on: datetime | None, now: datetime, terms_days: int | None)
     return max(0, (now - due_on).days - (terms_days or 0))
 
 
-def stamps_for(status: str, current: Mapping[str, Any], now: datetime) -> dict:
-    """The collection timestamps a milestone should hold at `status`.
+def stamps_for(
+    status: str,
+    current: Mapping[str, Any],
+    now: datetime,
+    vat_pct: Any = None,
+) -> dict:
+    """The collection record a milestone should hold at `status`.
 
     Each stamp records when the milestone was actually marked at that
     step. The step it lands on is stamped now unless it already carries a
@@ -194,12 +206,36 @@ def stamps_for(status: str, current: Mapping[str, Any], now: datetime) -> dict:
     invoice, and writing a "đã xuất HĐ" time onto a payment nobody
     invoiced is a fiction in the record T9 has to read to find uncovered
     spend. Steps ahead are cleared, so a mis-click walks back clean.
+
+    đã xuất HĐ carries two more values than a time: the invoice number
+    and the VAT rate the invoice was written on. They are part of the
+    same stamp, not a second record - an invoice and the money it bills
+    are one row, and a milestone that has no issue date has no invoice
+    number either, whatever anyone typed. So walking back before đã xuất
+    HĐ clears all three together.
+
+    The rate is captured once, in the same save that first writes
+    invoiced_on, and never again: `vat_pct` is the company's rate today,
+    and today's rate must not restate an invoice the client is already
+    holding. Rows invoiced before the rate was recorded are filled in
+    once, deliberately, by a patch - never by drifting through a save.
     """
     reached = status_index(status)
-    return {
+    record = {
         field: _stamp(reached - status_index(step), current.get(field), now)
         for step, field in STAMP_FIELDS.items()
     }
+    issued_on = record[STAMP_FIELDS[INVOICED]]
+    # An invoice number without an issue date is a number nobody issued.
+    number = current.get(INVOICE_NO_FIELD) or None
+    record[INVOICE_NO_FIELD] = number if issued_on else None
+    record[INVOICE_VAT_FIELD] = _invoice_vat(
+        issued_on=issued_on,
+        already_issued=bool(current.get(STAMP_FIELDS[INVOICED])),
+        recorded=current.get(INVOICE_VAT_FIELD),
+        vat_pct=vat_pct,
+    )
+    return record
 
 
 def _stamp(distance: int, recorded: Any, now: datetime):
@@ -207,6 +243,31 @@ def _stamp(distance: int, recorded: Any, now: datetime):
     if distance < 0:
         return None
     return recorded if distance else (recorded or now)
+
+
+def _invoice_vat(issued_on, already_issued: bool, recorded: Any, vat_pct: Any):
+    """The rate to hold, given where the invoice stands after this save."""
+    if issued_on is None:
+        return None
+    if already_issued:
+        return recorded
+    return vat_pct
+
+
+def vat_basis(issued_on: Any, recorded: Any, current: Any):
+    """The VAT rate a milestone's invoice is written on.
+
+    An issued invoice is read at the rate recorded when it was issued,
+    for as long as it exists; only a milestone nobody has invoiced yet
+    is priced at the company's rate today. This is the one function that
+    decides it, so the Zalo text, the split and the payload cannot
+    answer the question three different ways.
+
+    Keyed on the issue date, not on the rate being blank: 0% is a rate
+    an export invoice is genuinely written at, and a stored rate cannot
+    be both a number and a way of saying "no invoice".
+    """
+    return recorded if issued_on else current
 
 
 # -- what the accountant is sent --

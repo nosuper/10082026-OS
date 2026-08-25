@@ -33,6 +33,22 @@ sed -i '/redis/d' ./Procfile
 # without this, git (and therefore bench get-app) refuses to read it.
 git config --global --add safe.directory '*'
 
+# Cloned once, and never updated after that - which has two consequences
+# worth knowing before trusting anything this bench says about the code.
+#
+# It drifts. The clone stays at whatever commit it was created or last
+# pulled to, so `bench run-tests` here answers for that commit and not
+# for the branch you happen to be reading. CI builds a fresh site per
+# branch and is the authority (ADR-0001).
+#
+# It also accumulates. A file copied in by hand to be run, or one that
+# was tracked when the clone was made and deleted upstream afterwards,
+# stays on disk as an untracked file and silently joins every later
+# `run-tests --app auraos`. Two of those - deleted upstream in a18f9a2
+# and b6c9d8b - were adding 18 failures to every full-suite run on this
+# box until 2026-08-24, against product code that no longer exists.
+# `git status` in apps/auraos is the whole check: a dirty tree means the
+# numbers are not about any commit at all.
 if [ ! -d "apps/auraos" ]; then
     bench get-app auraos /workspace/repo
 fi
@@ -45,19 +61,45 @@ if [ ! -d "sites/$SITE" ]; then
     bench --site "$SITE" install-app auraos
     if [ "$DEV_MODE" = "1" ]; then
         bench --site "$SITE" set-config developer_mode 1
+        # `bench run-tests` refuses outright on a site without this -
+        # "Testing is disabled for the site" - and every seam run against a
+        # disposable stack has met that wall and set it by hand first. Site
+        # state, so it belongs where a site is made rather than in an image,
+        # and gated on dev mode so production can never get it.
+        bench --site "$SITE" set-config allow_tests true
     fi
     bench --site "$SITE" clear-cache
 fi
 
 bench use "$SITE"
 
-# Build the frappe-ui page so /aura serves (skipped if already built).
-if [ ! -f "apps/auraos/auraos/www/aura.html" ]; then
-    (cd apps/auraos/frontend && npm install --no-audit --no-fund && npm run build)
-fi
+# Build a frontend only when its source is actually in the app clone.
+#
+# `bench get-app` clones once and init.sh never updates it, so a bench
+# created before a frontend existed has no directory to build from. The
+# `cd` then fails, `set -e` ends the script, and a container with a
+# restart policy crash-loops on every boot instead of serving the site
+# it already has. Skipping loudly is the honest behaviour: the page
+# 404s, the log says why, and the site stays up.
+build_frontend() {
+    local dir="$1" page="$2" route="$3"
+    if [ -f "apps/auraos/auraos/www/$page" ]; then
+        return 0
+    fi
+    if [ ! -d "apps/auraos/$dir" ]; then
+        echo "init.sh: apps/auraos has no $dir, so $route will not serve." >&2
+        echo "init.sh: update the app clone (git pull in apps/auraos) and restart to build it." >&2
+        return 0
+    fi
+    (cd "apps/auraos/$dir" && npm install --no-audit --no-fund && npm run build)
+}
+
+# The React SPA at /aura-next. There was a second build here for the
+# frappe-ui page at /aura, kept as the rollback path until #103 retired it.
+build_frontend frontend-react aura-next.html /aura-next
 
 # Ensure the app's assets symlink exists - without it the built
-# frontend 404s and /aura renders as a white page.
+# frontend 404s and /aura-next renders as a white page.
 mkdir -p sites/assets
 ln -sfn "$BENCH_DIR/apps/auraos/auraos/public" sites/assets/auraos
 

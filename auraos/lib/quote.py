@@ -50,6 +50,12 @@ CLIENT_QUOTE_FIELDS = (
     "vat_amount",
     "total",
     "notes",
+    # The protective half of a quote (playbook 3.1.7) and the promise it
+    # carries. All three are frozen on the version, so this whitelist reads
+    # the snapshot rather than the deal - which is the point of it.
+    "assumptions",
+    "exclusions",
+    "included_revision_rounds",
 )
 
 # ...and off each of its packages. Cost, variance and the override are

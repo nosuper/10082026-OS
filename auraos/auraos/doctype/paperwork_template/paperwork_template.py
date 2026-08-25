@@ -14,7 +14,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from auraos.lib import paperwork
+from auraos.lib import contracts, paperwork
 
 # The generated file's name: the job it belongs to, the paper it is, and
 # when it was made - so a regenerated contract sits beside the first one
@@ -86,6 +86,12 @@ def content(template) -> bytes:
     Templates are uploaded through the app, so the attachment is always
     a File row; a `template_file` pointing anywhere else is a template
     nobody can generate from, and saying so beats a stack trace.
+
+    Frappe hands back text, not bytes, for a stored file whose bytes
+    happen to decode - a small PDF, a renamed .txt - so the encode puts
+    those bytes back the way they were read and keeps the promise this
+    signature makes. What is wrong with such a file is then the one
+    thing that is wrong with it: it is not a docx.
     """
     name = frappe.db.get_value("File", {"file_url": template.template_file}, "name")
     if not name:
@@ -95,7 +101,8 @@ def content(template) -> bytes:
             ),
             frappe.DoesNotExistError,
         )
-    return frappe.get_doc("File", name).get_content()
+    data = frappe.get_doc("File", name).get_content()
+    return data.encode("utf-8") if isinstance(data, str) else data
 
 
 def party(doctype, name):
@@ -114,7 +121,10 @@ def party(doctype, name):
     return frappe.db.get_value(doctype, name, "*", as_dict=True)
 
 
-def values_for(job, vendor=None, freelancer=None):
+def values_for(
+    job, vendor=None, freelancer=None, contract_number=None, terms=None,
+    parent_number=None, acceptance_table=None,
+):
     """Everything a paper about this job may say - one builder, shared
     by the generated .docx and the on-screen preview so the two can
     never disagree about a value."""
@@ -125,6 +135,15 @@ def values_for(job, vendor=None, freelancer=None):
         vendor=party("Party Company", vendor),
         freelancer=party("Party Contact", freelancer),
         today=frappe.utils.getdate(),
+        contract_number=contract_number,
+        parent_number=parent_number,
+        terms=terms,
+        acceptance_table=acceptance_table,
+        # The plan the job actually carries, split by the rule rather
+        # than by this function - see contracts.payment_split.
+        plan=contracts.payment_split(
+            [row.as_dict() for row in job.get("payment_milestones") or []]
+        )[0],
     )
 
 
@@ -229,7 +248,11 @@ def attach_draft(template_name, job_name, html):
     ).insert()
 
 
-def generate(template_name, job_name, vendor=None, freelancer=None):
+def generate(
+    template_name, job_name, vendor=None, freelancer=None,
+    contract_number=None, terms=None, parent_number=None,
+    acceptance_table=None,
+):
     """Fill a template for a job and attach the result to that job.
 
     Returns the attached File alongside the report of what could not be
@@ -241,7 +264,11 @@ def generate(template_name, job_name, vendor=None, freelancer=None):
 
     filled = paperwork.fill_docx(
         content(template),
-        values_for(job, vendor=vendor, freelancer=freelancer),
+        values_for(
+            job, vendor=vendor, freelancer=freelancer,
+            contract_number=contract_number, terms=terms,
+            parent_number=parent_number, acceptance_table=acceptance_table,
+        ),
     )
 
     document = frappe.get_doc(

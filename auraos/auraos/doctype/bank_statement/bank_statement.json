@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-20 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "account",
+  "period_from",
+  "period_to",
+  "source_file",
+  "column_break_totals",
+  "opening",
+  "withdrawn",
+  "deposited",
+  "closing",
+  "lines_section",
+  "lines"
+ ],
+ "fields": [
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "label": "Account",
+   "options": "Cash Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "period_from",
+   "fieldtype": "Date",
+   "label": "From",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "period_to",
+   "fieldtype": "Date",
+   "label": "To",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Attach",
+   "label": "Statement file",
+   "description": "The file as it arrived from the bank, kept so a figure can always be taken back to the document it came from."
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "opening",
+   "fieldtype": "Currency",
+   "label": "Opening balance"
+  },
+  {
+   "fieldname": "withdrawn",
+   "fieldtype": "Currency",
+   "label": "Total withdrawn"
+  },
+  {
+   "fieldname": "deposited",
+   "fieldtype": "Currency",
+   "label": "Total deposited"
+  },
+  {
+   "fieldname": "closing",
+   "fieldtype": "Currency",
+   "label": "Closing balance",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "lines_section",
+   "fieldtype": "Section Break",
+   "label": "Transactions"
+  },
+  {
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Bank Statement Line"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-08-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "AuraOS",
+ "name": "Bank Statement",
+ "owner": "Administrator",
+ "states": [],
+ "track_changes": 1,
+ "autoname": "format:SK-{period_from}-{#####}",
+ "permissions": [
+  {
+   "role": "Founder",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "search_fields": "account,period_from,period_to",
+ "sort_field": "period_from",
+ "sort_order": "DESC"
+}

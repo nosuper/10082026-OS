@@ -1,0 +1,14 @@
+# Patches run once per site, recorded in the Patch Log. Both sections
+# must exist even when one is empty - Frappe reads this as a config file
+# and refuses a file that names only one of them.
+
+[pre_model_sync]
+auraos.patches.rename_covers_cost_line
+
+[post_model_sync]
+auraos.patches.backfill_generated_paper_status
+auraos.patches.record_invoice_vat_basis
+auraos.patches.backfill_cash_ledger
+auraos.patches.convert_deal_brief_to_html
+auraos.patches.seed_stage_forecast
+auraos.patches.seed_sop_deals_library_document

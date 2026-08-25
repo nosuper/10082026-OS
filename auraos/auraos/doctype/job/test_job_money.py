@@ -29,9 +29,11 @@ from auraos.api import (
     create_job_from_deal,
     job_expense_categories,
     job_money,
+    delete_job_expense,
     log_job_expense,
     record_job_advance,
     settle_job,
+    update_job_expense,
 )
 from auraos.auraos.doctype.deal.test_deal import FOUNDER, OUTSIDER, PRODUCER
 from auraos.auraos.doctype.job.test_job import won_deal
@@ -40,6 +42,11 @@ from auraos.tests.utils import make_test_user
 
 # The packages won_deal() carries, and the two lines it quotes on their
 # own - together, every category an expense on that job may name.
+# A second producer, who has nothing to do with the job below. Only
+# ADR-0003 needs one: every other test can ask what a producer may do
+# with one producer, because there is no per-job boundary to cross.
+OTHER_PRODUCER = "producer2@test.auraos.local"
+
 PACKAGES = ["Nhân sự", "Thiết bị"]
 STANDALONE = ["Studio", "Ăn uống đoàn"]
 
@@ -69,6 +76,7 @@ class MoneyTestCase(FrappeTestCase):
         super().setUpClass()
         make_test_user(FOUNDER, "Founder")
         make_test_user(PRODUCER, "Producer")
+        make_test_user(OTHER_PRODUCER, "Producer")
         make_test_user(OUTSIDER)
 
     def setUp(self):
@@ -435,3 +443,69 @@ class TestSettlement(MoneyTestCase):
 
         self.assertEqual(float_of(self.job, PRODUCER)["direction"], EVEN)
         self.assertEqual(float_of(self.job, FOUNDER)["amount"], -3_000_000)
+
+
+class TestWhoMayWriteAJobsMoney(MoneyTestCase):
+    """ADR-0003, asserted: there is no per-job boundary, on purpose.
+
+    #125's lane went to write "a producer on someone else's job is
+    refused" and found no such refusal to assert. The founder ruled on
+    #143 that this is the model rather than an oversight - a small
+    studio where everyone works everything - so the thing to pin is the
+    positive: a producer with no connection to a job may spend on it,
+    correct it and take it back out.
+
+    **These tests are meant to go red one day, on purpose.** The target
+    model is read for everyone, write for the job's assignee, and it has
+    to arrive at `_check_job_permission` covering every money endpoint at
+    once. This class is where that change announces itself; the day it
+    lands, these become the refusals #125 could not write.
+
+    Two neighbouring boundaries are *not* what this class documents and
+    do still hold: founder-only *figures* (permlevel 1 - proved in
+    test_job.py, three ways) and founder-only *floats* (Job Advance and
+    Job Settlement withhold create from the Producer role). Writing
+    every expense on a job has never meant reading what it earns.
+    """
+
+    def spend_as_a_stranger(self, amount=1_200_000):
+        frappe.set_user(OTHER_PRODUCER)
+        return log_job_expense(self.job, amount, category="Thiết bị")
+
+    def test_a_producer_may_spend_on_a_job_that_is_not_hers(self):
+        logged = self.spend_as_a_stranger()
+
+        expense = frappe.get_doc("Job Expense", logged["name"])
+        self.assertEqual(expense.paid_by, OTHER_PRODUCER)
+        self.assertEqual(category(self.job, "Thiết bị")["actual"], 1_200_000)
+
+    def test_a_producer_may_correct_a_payment_she_did_not_log(self):
+        frappe.set_user(PRODUCER)
+        logged = log_job_expense(self.job, 1_200_000, category="Thiết bị")
+
+        frappe.set_user(OTHER_PRODUCER)
+        update_job_expense(logged["name"], 900_000, category="Thiết bị")
+
+        self.assertEqual(frappe.get_doc("Job Expense", logged["name"]).amount, 900_000)
+
+    def test_a_producer_may_delete_a_payment_she_did_not_log(self):
+        """The sharpest of the three: deleting walks the ledger back."""
+        frappe.set_user(PRODUCER)
+        logged = log_job_expense(self.job, 1_200_000, category="Thiết bị")
+
+        frappe.set_user(OTHER_PRODUCER)
+        delete_job_expense(logged["name"])
+
+        self.assertFalse(frappe.db.exists("Job Expense", logged["name"]))
+        self.assertEqual(category(self.job, "Thiết bị")["actual"], 0)
+
+    def test_handing_out_a_float_is_still_the_founders_alone(self):
+        """The decision was about job money, not about every act on it.
+
+        Job Advance and Job Settlement withhold create from the Producer
+        role, so these two stay founder-only on every job - a narrower
+        gate than the one this class documents, and untouched by it.
+        """
+        frappe.set_user(OTHER_PRODUCER)
+        with self.assertRaises(frappe.PermissionError):
+            record_job_advance(self.job, OTHER_PRODUCER, 5_000_000)

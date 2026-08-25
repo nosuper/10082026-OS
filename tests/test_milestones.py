@@ -22,6 +22,8 @@ from decimal import Decimal as D
 import pytest
 
 from auraos.lib.milestones import (
+    INVOICE_FIELDS,
+    INVOICED,
     NOT_REQUESTED,
     PAID,
     REQUESTED,
@@ -36,6 +38,7 @@ from auraos.lib.milestones import (
     stage_reached,
     stamps_for,
     status_index,
+    vat_basis,
 )
 
 NOW = datetime(2026, 8, 10, 9, 30)
@@ -177,6 +180,112 @@ def test_the_first_state_stamps_nothing():
 
 def test_every_state_past_the_first_has_a_stamp_of_its_own():
     assert set(STAMP_FIELDS) == set(STATUS_FLOW[1:])
+
+
+# -- the invoice a milestone was billed under --
+
+
+def test_issuing_an_invoice_records_its_number_and_its_rate_with_its_date():
+    """One record: the number, the day and the basis are the same event,
+    so nothing can hold two of the three and disagree with itself."""
+    stamps = stamps_for(INVOICED, current={"invoice_no": "HD-2026-0142"}, now=NOW, vat_pct=8)
+    assert stamps["invoiced_on"] == NOW
+    assert stamps["invoice_no"] == "HD-2026-0142"
+    assert stamps["invoice_vat_pct"] == 8
+
+
+def test_a_rate_that_moves_later_does_not_restate_an_issued_invoice():
+    """The client is holding an 8% invoice. The company going to 10% next
+    quarter is news about the next invoice, not about that one."""
+    stamps = stamps_for(
+        INVOICED,
+        current={
+            "invoiced_on": NOW - timedelta(days=30),
+            "invoice_no": "HD-2026-0142",
+            "invoice_vat_pct": 8,
+        },
+        now=NOW,
+        vat_pct=10,
+    )
+    assert stamps["invoice_vat_pct"] == 8
+    assert stamps["invoiced_on"] == NOW - timedelta(days=30)
+
+
+def test_getting_paid_later_does_not_restate_the_invoice_either():
+    stamps = stamps_for(
+        PAID,
+        current={
+            "invoiced_on": NOW - timedelta(days=30),
+            "invoice_no": "HD-2026-0142",
+            "invoice_vat_pct": 8,
+        },
+        now=NOW,
+        vat_pct=10,
+    )
+    assert stamps["invoice_no"] == "HD-2026-0142"
+    assert stamps["invoice_vat_pct"] == 8
+
+
+def test_a_save_never_fills_in_the_basis_of_an_invoice_already_issued():
+    """An invoice issued before the app kept the rate was issued at some
+    rate. Whatever fills that in has to be a deliberate act - a save that
+    happened to run today must not decide it."""
+    stamps = stamps_for(
+        INVOICED,
+        current={"invoiced_on": NOW - timedelta(days=90)},
+        now=NOW,
+        vat_pct=10,
+    )
+    assert stamps["invoice_vat_pct"] is None
+    assert stamps["invoice_no"] is None
+
+
+def test_walking_back_before_the_invoice_takes_the_whole_invoice_with_it():
+    """A number and a rate left behind on a milestone nobody invoiced are
+    an invoice with no date - the disagreement this record cannot have."""
+    stamps = stamps_for(
+        REQUESTED,
+        current={
+            "requested_on": NOW - timedelta(days=2),
+            "invoiced_on": NOW - timedelta(days=1),
+            "invoice_no": "HD-2026-0142",
+            "invoice_vat_pct": 8,
+        },
+        now=NOW,
+        vat_pct=8,
+    )
+    assert stamps["invoiced_on"] is None
+    assert stamps["invoice_no"] is None
+    assert stamps["invoice_vat_pct"] is None
+
+
+def test_a_client_who_pays_before_any_invoice_carries_no_invoice_at_all():
+    stamps = stamps_for(PAID, current={"invoice_no": "HD-2026-0142"}, now=NOW, vat_pct=8)
+    assert stamps["invoiced_on"] is None
+    assert stamps["invoice_no"] is None
+    assert stamps["invoice_vat_pct"] is None
+
+
+def test_an_invoice_still_to_be_issued_is_read_at_the_rate_today():
+    assert vat_basis(issued_on=None, recorded=0, current=10) == 10
+
+
+def test_an_invoice_already_issued_is_read_at_the_rate_it_was_issued_at():
+    assert vat_basis(issued_on=NOW, recorded=8, current=10) == 8
+
+
+def test_an_invoice_issued_vat_free_stays_vat_free():
+    """0% is a rate an export invoice is written at, not a missing one -
+    which is why the issue date, not the number, says whether there is
+    an invoice to read at all."""
+    assert vat_basis(issued_on=NOW, recorded=0, current=10) == 0
+
+
+def test_the_invoice_travels_with_the_step_that_issues_it():
+    assert set(INVOICE_FIELDS) == {"invoice_no", "invoice_vat_pct"}
+    assert set(stamps_for(NOT_REQUESTED, current={}, now=NOW)) == set(
+        STAMP_FIELDS.values()
+    ) | set(INVOICE_FIELDS)
 
 
 # -- when a milestone becomes due, and when it is overdue --

@@ -21,8 +21,32 @@ own module globals, where `auraos` is not a name.)
 
 import frappe
 
+from auraos.lib.richtext import from_plain_text
+
 COMPANY = "Chungify Media"
 CONTACT = "Chị Hằng"
+
+# Two briefs that a plain textarea could not have held, because
+# `Deal.brief` is a Text Editor field as of #120 and a seed of
+# one-liners means the next person to touch that editor tests it
+# against one-liners too.
+#
+# Written as plain text and converted on the way in through
+# auraos.lib.richtext - the same function the migration patch uses - so
+# there is one answer to what a blank line meant, and so this does not
+# depend on whether that patch has already been logged against the site.
+# It has, on any site that has migrated, and Frappe runs a patch once.
+MULTI_PARAGRAPH_BRIEF = """Khách muốn một chuỗi 6 clip cho 3 cửa hàng mới.
+
+Mỗi clip 30 giây, quay trong 2 ngày, ưu tiên ánh sáng tự nhiên.
+Cần bản dọc cho TikTok và bản ngang cho YouTube.
+
+Deadline đợt 1: trước khai trương 2 tuần."""
+
+MARKUP_CHARACTER_BRIEF = """Ngân sách < 1.5 tỷ & đã duyệt sơ bộ.
+
+Hạng mục: sân khấu & âm thanh, 2 camera, livestream đa nền tảng.
+Điều kiện: nếu vượt < 10% thì báo trước, > 10% phải ký phụ lục."""
 
 # One deal per pipeline stage worth looking at, so the board is never
 # empty and drag-and-drop has somewhere to go. Budgets deliberately
@@ -50,7 +74,63 @@ DEALS = [
         "estimated_budget": 150_000_000,
         "positioning": "Cash",
     },
+    # -- the walkthrough rows (#122) ------------------------------------
+    #
+    # Every stage occupied, both ends included. A pipeline sitting
+    # entirely in Quote Sent is the most realistic shape for a busy week
+    # and the least useful one to check against: every row gets the same
+    # weighting, so a reader that ignored stage entirely would still
+    # draw a plausible screen.
+    #
+    # Values are round triệu on purpose. A job's costs can be messy
+    # because nobody adds those up by hand; a deal's value is the one
+    # figure somebody checks with their eyes, and 220 + 500 is
+    # checkable where 187.436.000 + 462.119.000 is an act of faith.
+    {
+        "title": "Viral clip - chuỗi cà phê",
+        "stage": "De-brief",
+        "project_type": "Social Video",
+        "estimated_budget": 500_000_000,
+        "positioning": "Bridge",
+        "brief": MULTI_PARAGRAPH_BRIEF,
+    },
+    {
+        "title": "Livestream sự kiện ra mắt",
+        "stage": "Quote Sent",
+        "project_type": "Event",
+        "estimated_budget": 1_200_000_000,
+        "positioning": "Cash",
+        "brief": MARKUP_CHARACTER_BRIEF,
+    },
+    # A real value that has to be weighted to nothing. Deliberately not
+    # an empty one: an empty Lost deal contributes zero because it has
+    # nothing to contribute, so a reader that had forgotten about Lost
+    # entirely would still show the right total. This one is only zero
+    # if the weighting is real.
+    {
+        "title": "Booking KOL - huỷ giữa chừng",
+        "stage": "Lost",
+        "project_type": "Social Video",
+        "estimated_budget": 300_000_000,
+        "positioning": "Cash",
+        # Not optional: Deal.validate_lost_reason throws without one, so
+        # a Lost row with no reason is a seed that dies rather than a
+        # deal that is quietly wrong. It also gives the lost-reason
+        # breakdown a row to count.
+        "lost_reason": "Price",
+        "lost_note": "Khách chốt với bên báo giá thấp hơn 20%.",
+    },
+    # No budget and no quote. It has to contribute nothing without
+    # breaking whatever it lands in - an unpriced enquiry is a normal
+    # thing for a studio to be carrying, not a malformed record.
+    {
+        "title": "Thư mời hợp tác - chưa rõ ngân sách",
+        "stage": "Brief Received",
+        "project_type": "TVC",
+        "estimated_budget": None,
+    },
 ]
+
 
 # The deal A1 ages past the weekly ritual's seven days, so the amber
 # badge is visible the moment the stack boots.
@@ -83,6 +163,17 @@ COST_LINES = [
         "package": "Equipment",
         "qty1": 10, "qty2": 3,
         "unit_price": 150_000, "tax_type": "Không hoá đơn", "markup_pct": 10,
+    },
+    # A second line with no invoice behind it, so the exposure tile can
+    # show both of its states at once: this one gets a replacement
+    # invoice recorded against it, the one above does not. With a single
+    # no-invoice line the screen can only ever show one of them, and a
+    # tile that has never rendered a covered row is a tile whose covered
+    # branch nobody has looked at.
+    {
+        "description": "Thuê bãi đỗ xe đoàn",
+        "qty1": 1, "qty1_unit": "ngày", "qty2": 2, "qty2_unit": "buổi",
+        "unit_price": 1_500_000, "tax_type": "Không hoá đơn",
     },
     {
         # Deliberately in no package: quoted as its own line.
@@ -141,6 +232,13 @@ DIRECT_PAYMENT = {
 def run():
     """Build the base data, then every registered feature seed."""
     ensure_founder_role()
+    # Before anything that moves money. Every posting in #99/#100 asks
+    # cash_account.default_account() where the money went, and that
+    # returns None until a Cash Account exists and Settings names one -
+    # at which point ledger.job_expense() returns None too and the
+    # advances, expenses and settlements below run and post *nothing*.
+    # The flows would look seeded and /finance/accounts would be empty.
+    ensure_cash_accounts()
     company = ensure_company()
     ensure_contact(company)
     deals = [ensure_deal(company, **deal) for deal in DEALS]
@@ -155,6 +253,58 @@ def run():
 
 
 # -- base --
+
+
+# Two, not one, because the accounts screen exists to tell them apart:
+# with a single account every posting lands in the same column and a
+# reader that ignored the account field would draw the same page.
+#
+# The bank account is FIRST on purpose. CashAccount.after_insert calls
+# adopt_as_default, so whichever account is created first becomes where
+# every flow posts - and that should be the account a client transfer
+# and a vendor payment both move through, not the petty cash box. Order
+# here is behaviour, not presentation.
+CASH_ACCOUNTS = [
+    {
+        "account_name": "Tài khoản VCB",
+        "note": "Seed data - tài khoản công ty, nơi tiền khách chuyển về.",
+    },
+    {
+        "account_name": "Quỹ tiền mặt",
+        "note": "Seed data - tiền mặt tại văn phòng.",
+    },
+]
+
+
+def ensure_cash_accounts():
+    """The accounts every money flow posts against, and the default.
+
+    The default is normally set for us: the first account inserted
+    adopts it. This still checks afterwards, because a site can reach a
+    state the insert path cannot fix - a stored default naming an
+    account somebody deleted - and in that state every posting resolves
+    to None and the flows run silently doing nothing.
+
+    Idempotent like the rest of the file.
+    """
+    from auraos.auraos.doctype.cash_account.cash_account import (
+        DEFAULT_FIELD,
+        default_account,
+    )
+
+    for row in CASH_ACCOUNTS:
+        if frappe.db.exists("Cash Account", {"account_name": row["account_name"]}):
+            continue
+        frappe.get_doc({"doctype": "Cash Account", **row}).insert(ignore_permissions=True)
+
+    # default_account() is the reader's own answer, dangling link check
+    # included, so this asks the same question the postings will ask.
+    if default_account():
+        return
+    fallback = frappe.db.get_value(
+        "Cash Account", {"account_name": CASH_ACCOUNTS[0]["account_name"]}
+    )
+    frappe.db.set_single_value("AuraOS Settings", DEFAULT_FIELD, fallback)
 
 
 def ensure_company():
@@ -223,6 +373,9 @@ def ensure_deal(
     project_type=None,
     estimated_budget=150_000_000,
     positioning=None,
+    brief=None,
+    lost_reason=None,
+    lost_note=None,
 ):
     existing = frappe.db.exists("Deal", {"title": title})
     if existing:
@@ -237,6 +390,15 @@ def ensure_deal(
             "project_type": project_type,
             "estimated_budget": estimated_budget,
             "positioning": positioning,
+            # Plain text in, HTML out, through the same converter the
+            # migration patch uses. Written here rather than left for
+            # the patch because Frappe runs a patch once per site and
+            # has already run this one anywhere that has migrated - a
+            # seeded brief would stay plain text in a Text Editor field
+            # and render its paragraphs as one line.
+            "brief": from_plain_text(brief) if brief else None,
+            "lost_reason": lost_reason,
+            "lost_note": lost_note,
         }
     ).insert(ignore_permissions=True).name
 
@@ -564,6 +726,44 @@ FREELANCER_CONTRACT_SOURCE = "".join(
 )
 
 
+HANDOVER_NOTE = "Biên bản nghiệm thu (mẫu)"
+
+# A third template exists for a reason that is not variety: a generated
+# file is named "{job} - {template} - {stamp}" and the stamp is minute
+# resolution, so two papers from one template inside the same minute
+# share a file name. auraos.api.job_paperwork matches a status to a file
+# by name, so the two would show one status between them - board rule 8
+# in a new costume. Three states need three templates.
+HANDOVER_NOTE_SOURCE = "".join(
+    [
+        '<h2 style="text-align: center">BIÊN BẢN NGHIỆM THU</h2>',
+        "<p>Hôm nay, ngày {{today.day}} tháng {{today.month}} năm "
+        "{{today.year}}, hai bên cùng xác nhận:</p>",
+        "<p><strong>BÊN A:</strong> {{client.company_name}}</p>",
+        "<p><strong>BÊN B:</strong> công ty sản xuất</p>",
+        "<p>Công việc: {{job.title}} ({{job.code}}).</p>",
+        "<ul>",
+        "<li>Bên B đã bàn giao đầy đủ sản phẩm theo hợp đồng.</li>",
+        "<li>Bên A xác nhận nghiệm thu và đồng ý thanh toán phần còn lại.</li>",
+        "</ul>",
+        "<p>Biên bản được lập thành 02 bản, mỗi bên giữ 01 bản.</p>",
+    ]
+)
+
+
+def seed_a5_handover_note(deal_name):
+    if frappe.db.exists("Paperwork Template", {"template_name": HANDOVER_NOTE}):
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Paperwork Template",
+            "template_name": HANDOVER_NOTE,
+            "template_source": HANDOVER_NOTE_SOURCE,
+            "notes": "Seed data - nghiệm thu, dùng khi đóng job.",
+        }
+    ).insert(ignore_permissions=True)
+
+
 def seed_a5_freelancer_contract(deal_name):
     if frappe.db.exists(
         "Paperwork Template", {"template_name": FREELANCER_CONTRACT}
@@ -577,6 +777,189 @@ def seed_a5_freelancer_contract(deal_name):
             "notes": "Written in the web editor - edit it on the Paperwork page.",
         }
     ).insert(ignore_permissions=True)
+
+
+def seed_123_no_invoice_exposure(deal_name):
+    """#123: the founder's tax tile with all three of its states showing.
+
+    Exposure is money that moved, so every row here is a real payment
+    rather than a quoted line. #11 seeded this by writing a second
+    expense to stand for the replacement invoice, which is what #123
+    removed: a covering expense adds its amount to the job's cost and
+    posts a ledger entry for money that never moved. The invoice is a
+    field on the payment now.
+
+    Three states, because a tile whose covered branch has never rendered
+    is a branch nobody has looked at:
+
+    1. **Stated and exposed** - paid against a Không hoá đơn line, no
+       invoice. This is the number the founder is meant to act on.
+    2. **Stated and covered** - the same, with an invoice number on it,
+       so it drops out of the exposure and into the covered total.
+    3. **Unattributed** - the float expenses seeded by T8 name no line
+       at all, so they count as at risk until somebody points them at
+       one. Nothing extra is needed for this; it is already true, and it
+       is the half the founder asked to be counted rather than hidden.
+
+    Deliberately smaller than the float spend beside it, so the tile's
+    two halves are told apart by eye rather than by arithmetic.
+    """
+    job = frappe.db.get_value("Job", {"title": WON_DEAL})
+    if not job or frappe.db.exists("Job Expense", {"cost_line": ["is", "set"]}):
+        return
+
+    doc = frappe.get_doc("Job", job)
+    lines = {
+        row.description: row
+        for row in doc.cost_lines
+        if row.tax_type == "Không hoá đơn"
+    }
+    exposed = lines.get("Ăn uống đoàn")
+    covered = lines.get("Thuê bãi đỗ xe đoàn")
+    if not exposed or not covered:
+        return
+
+    payments = [
+        {
+            "amount": 4_200_000,
+            "description": "Cơm đoàn 3 ngày quay",
+            "cost_line": exposed.name,
+            "invoice_no": None,
+        },
+        {
+            "amount": 3_000_000,
+            "description": "Bãi đỗ xe đoàn",
+            "cost_line": covered.name,
+            # The paper arrived. Recorded on the payment, not as a
+            # second one - the founder did not pay the bãi đỗ xe twice.
+            "invoice_no": "0001234",
+        },
+    ]
+    for offset, payment in enumerate(payments):
+        frappe.get_doc(
+            {
+                "doctype": "Job Expense",
+                "job": job,
+                "paid_by": founder(),
+                "paid_from": "Company",
+                "spent_on": frappe.utils.add_days(frappe.utils.today(), -4 - offset),
+                **payment,
+            }
+        ).insert(ignore_permissions=True)
+
+
+# Far enough back to be a different calendar month whatever day the seed
+# runs on. A month is the bucket every finance report counts in, and one
+# month of activity cannot tell a sum from a passthrough.
+LAST_MONTH_DAYS = 40
+
+
+def seed_108_a_second_month(deal_name):
+    """#108: activity in two months, and months with none between.
+
+    The profit and loss runs along whatever range is asked for, so a
+    site whose every record landed this week renders one populated row
+    and a column of zeros. That looks the same whether the report works
+    or whether it is quietly bucketing everything into today - and the
+    zeroed rows, with a dash where the margin cannot be measured, are
+    the case a founder should see working before they trust the screen.
+    """
+    job = frappe.db.get_value("Job", {"title": WON_DEAL})
+    if not job:
+        return
+    spent_on = frappe.utils.add_days(frappe.utils.today(), -LAST_MONTH_DAYS)
+    if frappe.db.exists("Job Expense", {"job": job, "spent_on": spent_on}):
+        return
+
+    frappe.get_doc(
+        {
+            "doctype": "Job Expense",
+            "job": job,
+            "paid_by": founder(),
+            "amount": 12_000_000,
+            "spent_on": spent_on,
+            "paid_from": "Company",
+            "category": "Equipment",
+            "description": "Đặt cọc thiết bị tháng trước",
+        }
+    ).insert(ignore_permissions=True)
+
+    # Money in that month too, so the row is a profit and not just a
+    # loss - a P&L whose only non-empty month is negative never shows a
+    # positive margin, and the margin pill has two tones.
+    paid = [
+        row for row in frappe.get_doc("Job", job).payment_milestones
+        if row.status == "Paid"
+    ]
+    if paid:
+        frappe.db.set_value(
+            "Job Payment Milestone", paid[0].name, "paid_on", spent_on,
+            update_modified=False,
+        )
+        # Re-save the job so the collection's ledger entry is restated to
+        # the date it now claims. set_value writes the column and nothing
+        # else, so without this the same 31.808.700 sits in July on the
+        # profit and loss - which buckets on paid_on - and in August in
+        # the cash ledger, which keeps the entry_date it was posted with.
+        # Two surfaces disagreeing about one đồng, introduced by the seed
+        # meant to make them checkable. Job.on_update posts collections
+        # and auraos.lib.ledger reconciles rather than duplicating, so a
+        # plain save is the whole fix.
+        frappe.get_doc("Job", job).save(ignore_permissions=True)
+
+
+def seed_106_paper_states(deal_name):
+    """#106: a paper in each status, including one walked back.
+
+    Draft, awaiting signature and signed are three different rows on the
+    paperwork screen, and the interesting one is the fourth case: a
+    paper that was Signed and is not any more. That is the transition
+    the status field exists to survive, and it cannot be seen on a site
+    where every paper has only ever moved forwards.
+
+    **It generates the papers it needs.** An earlier version read
+    whatever `Generated Paper` rows happened to exist and returned
+    quietly when there were fewer than three (#129). That worked on a
+    site with history and did nothing at all on a freshly wiped one -
+    silently, which is the worst way for a seed to fail: the walkthrough
+    simply had no paperwork and nothing said why.
+
+    Generated through auraos.api rather than by inserting registry rows,
+    for the same reason the money flows post through their own doors: a
+    paper that exists without the file behind it is a row, not a
+    document.
+    """
+    from auraos.api import generate_job_paperwork, set_paper_status
+    from auraos.lib.paper_status import AWAITING_SIGNATURE, DRAFT, SIGNED
+
+    job = frappe.db.get_value("Job", {"title": WON_DEAL})
+    if not job:
+        return
+    if frappe.db.count("Generated Paper", {"job": job}) >= 3:
+        return
+
+    for template_name in (STARTER_TEMPLATE, FREELANCER_CONTRACT, HANDOVER_NOTE):
+        template = frappe.db.get_value(
+            "Paperwork Template", {"template_name": template_name}
+        )
+        if template:
+            generate_job_paperwork(job, template)
+
+    papers = frappe.get_all(
+        "Generated Paper", filters={"job": job}, pluck="name", order_by="creation asc"
+    )
+    if len(papers) < 3:
+        return
+
+    # Through the endpoint, not through db.set_value. The doctype carries
+    # status_changed_by and status_changed_on, and a status written
+    # straight into the column leaves both empty - a paper that changed
+    # hands with no record of who or when.
+    set_paper_status(papers[0], SIGNED)
+    set_paper_status(papers[1], AWAITING_SIGNATURE)
+    # Walked back: signed, then not. The one a forwards-only seed hides.
+    set_paper_status(papers[2], SIGNED)
+    set_paper_status(papers[2], DRAFT)
 
 
 # T7.1: the job's own plan, and the two people who may see it and
@@ -697,4 +1080,10 @@ FEATURE_SEEDS = {
     "T11 paperwork templates": seed_t11_paperwork,
     "A1 stale deal": seed_a1_stale_deal,
     "A5 freelancer contract": seed_a5_freelancer_contract,
+    "A5 handover note": seed_a5_handover_note,
+    # Ordered after T8 and T10: both of these read records those seeds
+    # create, and a dict preserves insertion order.
+    "#123 no-invoice exposure": seed_123_no_invoice_exposure,
+    "#108 a second month": seed_108_a_second_month,
+    "#106 paper states": seed_106_paper_states,
 }

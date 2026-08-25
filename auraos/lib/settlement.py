@@ -223,12 +223,24 @@ def _quoted_costs(packages, cost_lines) -> dict[str, Decimal]:
     for line in cost_lines:
         title = line.get("package") or line.get("description") or ""
         costs.setdefault(title, Decimal(0))
-        costs[title] += _handed_over(line)
+        costs[title] += handed_over(line)
     return costs
 
 
-def _handed_over(line: Row) -> Decimal:
-    """What one cost line is expected to cost in cash paid out."""
+def handed_over(line: Row) -> Decimal:
+    """What one cost line is expected to cost in cash paid out.
+
+    Public because it is the answer to a question more than one report
+    asks. The quoted-versus-actual comparison above needs it per
+    category, and now that an expense names the line it spends against
+    (#123), per-line quoted-versus-actual is a question the app can ask
+    again.
+
+    It is deliberately *not* what the no-invoice exposure is measured
+    on. That was the defect #123 fixes: this is what a line was
+    *expected* to cost, and a tax liability arises from what was
+    actually paid.
+    """
     vendor_mf_rate = _d(line.get("vendor_mf_pct") or 0) / 100
     after_vendor_mf = _d(line.get("subtotal") or 0) * (1 + vendor_mf_rate)
     return after_vendor_mf + _d(line.get("input_vat") or 0)

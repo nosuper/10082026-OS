@@ -33,6 +33,14 @@ STAGES = [
     "Complete",
 ]
 
+# A job stops being open at the end of the production flow. Named here,
+# beside the list it is the end of, because more than one module needs
+# to know what closed means - the profitability board scopes on it and
+# Job Expense freezes on it - and two places deriving it positionally is
+# one more than can be kept in step. Append a stage after Complete and
+# every reader moves together.
+CLOSED_STAGE = STAGES[-1]
+
 # What a new job includes before a revision round becomes a chargeable
 # change order (spec #2, story 28). The standing house number only -
 # each job carries its own, negotiable count.
@@ -88,6 +96,12 @@ CARRIED_FIELDS = (
     "title",
     "company",
     "contact",
+    # The rounds the quote promised. Carried rather than defaulted, so the
+    # number the client was sold and the number included_rounds() charges
+    # after are one number. Without this a deal quoted at four free rounds
+    # would become a job that starts charging after two, and the mismatch
+    # would surface as an invoice argument rather than as a bug.
+    "included_revision_rounds",
     "quote_mf_pct",
     "vat_pct",
     "quote_subtotal",
@@ -258,6 +272,13 @@ class Job(Document):
     def before_save(self):
         # After validation, so a rejected transition is never logged.
         append_stage_change(self)
+
+    def on_update(self):
+        # After the save, because a milestone row has no name to post
+        # against until it has been written. The ledger sits beside the
+        # job rather than inside it: nothing here changes what a job is,
+        # and a company with no cash account posts nothing at all.
+        job_payment_milestone.post_collections(self)
 
     def log_revision(self, note):
         """Record a revision round and send the work back for the redo it asks for.

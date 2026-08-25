@@ -1,0 +1,85 @@
+// What the E2E fixture is called.
+//
+// `scripts/e2e-seed.py` is the single statement of what the disposable site
+// contains. This file exists because a spec cannot import a Python constant,
+// and the alternative - each spec spelling the names out itself - is how
+// cash-accounts.spec.js came to assert on `Tài khoản VCB` and `Quỹ tiền mặt`,
+// which are the *dev walkthrough* seed's accounts (auraos/setup/seed.py). The
+// E2E stack has never run that file. Four tests could not have passed, and
+// they would have come back as four reds belonging to nobody.
+//
+// The lesson underneath is worth more than the names: **stating in a header
+// that you depend on the fixture is not depending on it.** That spec said so,
+// in prose, correctly, and still read from the wrong file. Only a run proves
+// the dependency, and until one has happened the claim is an intention.
+//
+// So the mirror is guarded rather than trusted - fixture.spec.js reads the
+// seed and fails loudly if a name here has drifted from it. One legible red
+// at the rename, instead of four obscure ones a run later.
+//
+// Names only. Amounts and dates deliberately live in the seed alone: a spec
+// that hardcodes a figure asserts the seed's arithmetic rather than the
+// screen's, and the derivation tests here work on differences for that reason.
+
+/** Where the seeded company keeps its money. The first is the default, so
+ *  every posting flow lands there and the second stays empty on purpose. */
+export const BANK = "Playwright Bank";
+export const PETTY = "Playwright Petty Cash";
+
+/** The client every seeded deal belongs to. Seeded with a name and nothing
+ *  else - no tax code - which is the case the invoice request has to name
+ *  rather than leave blank. */
+export const COMPANY = "Playwright Client";
+
+/** The deal that becomes the open job. Not `Playwright Existing Deal`, which
+ *  the deals specs hold at Brief Received. */
+export const JOB_DEAL = "Playwright Job Deal";
+
+/** The deal behind the closed job. Named here so a spec can say which job it
+ *  means: #123 refuses spending against a job at its closing stage, and the
+ *  seed converts this one last, so "the most recently modified job" is the one
+ *  the product forbids writing to. */
+export const CLOSED_DEAL = "Playwright Closed Deal";
+
+/** The two paperwork templates. Two rather than one because a generated file
+ *  is named `{job} - {template} - {stamp}` at MINUTE resolution and a status is
+ *  tied to a file by that name - so two papers off one template inside a minute
+ *  share a name and show one status between them. A person never hits it; a
+ *  seed makes both at once, which is what a seed is for. */
+export const TEMPLATE = "Playwright Contract";
+export const HANDOVER_TEMPLATE = "Playwright Biên bản nghiệm thu";
+
+/** The two quoted lines the Company-paid spends attach to. The first carries
+ *  tax_type "Không hoá đơn", so anything against it is uncovered until an
+ *  invoice number arrives; the second came with paper, so attributing a spend
+ *  to it takes that spend out of the exposure. #125's editor is the only way
+ *  to move a spend between them. */
+export const NO_INVOICE_LINE = "Playwright location fees";
+export const INVOICED_LINE = "Playwright director";
+
+/** The four Company-paid spends behind the exposure tile, each seeded for one
+ *  of the four states #125's editor has to be able to reach. Named here rather
+ *  than in the spec that reads them so fixture.spec.js guards them too: a
+ *  description that drifts in the seed should fail by name, not as four
+ *  unexplained assertion failures on a screen. */
+export const EXPOSED_SPEND = "Playwright location cash";
+export const INVOICED_SPEND = "Playwright location cash, invoiced later";
+export const UNATTRIBUTED_SPEND = "Playwright uncategorised cash";
+export const COVERED_SPEND = "Playwright director fee";
+
+/** Every name above, for the guard in fixture.spec.js. */
+export const FIXTURE_NAMES = {
+  COMPANY,
+  BANK,
+  PETTY,
+  JOB_DEAL,
+  CLOSED_DEAL,
+  TEMPLATE,
+  HANDOVER_TEMPLATE,
+  NO_INVOICE_LINE,
+  INVOICED_LINE,
+  EXPOSED_SPEND,
+  INVOICED_SPEND,
+  UNATTRIBUTED_SPEND,
+  COVERED_SPEND,
+};
