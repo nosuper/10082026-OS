@@ -1,4 +1,15 @@
-# ADR 0003: Renaming a vocabulary value migrates; removing one in use is refused
+# Renaming a vocabulary value migrates; removing one in use is refused
+
+> **Renumbered from 0003 on 2026-08-25.** Two branches each took 0003
+> independently - this one and "Any producer may write any job's money" - and
+> both landed. That one keeps the number: it is four days older and seven
+> places in the code cite it by number, where this one was cited twice and
+> only from the glossary. A link to `docs/adr/0003-vocabulary-...` from before
+> that date is this file.
+>
+> The title also drops its `ADR 0003:` prefix, which no other ADR here carries.
+> A file named for its number does not need to say the number twice, and the
+> prefix is what made the clash easy to miss in a directory listing.
 
 - Status: accepted
 - Date: 2026-08-25
